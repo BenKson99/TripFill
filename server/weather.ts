@@ -22,7 +22,9 @@ export function stats(days: DayWeather[]) {
   const n = days.length || 1;
   return { avgHigh: r1(days.reduce((s, d) => s + d.tmax, 0) / n), avgLow: r1(days.reduce((s, d) => s + d.tmin, 0) / n), minLow: Math.min(...days.map(d => d.tmin)), maxHigh: Math.max(...days.map(d => d.tmax)), rainyDays: days.filter(isRainy).length };
 }
-export const isRainy = (d: DayWeather) => (d.precipProb ?? 0) >= 50 || d.precipMm >= 2;
+// Typical (historical) days: the mm figure is a multi-year mean that one stormy year can inflate,
+// so judge them by how often it was wet; forecast days use probability or amount.
+export const isRainy = (d: DayWeather) => (d.precipProb ?? 0) >= 50 || (!d.typical && d.precipMm >= 2);
 
 export async function getWeather(p: Place, start: string, end: string): Promise<WeatherResult> {
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);

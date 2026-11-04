@@ -208,6 +208,9 @@ export async function getPlaces(p: Place): Promise<{ highlights: Highlight[]; fo
     const smart = await getFood(p.country, countryInfo(p.countryCode).lang, [...cityFood, ...food].map(f => f.name));
     if (smart.length >= 5) food = smart;
   } catch (e) { console.warn("food lookup failed, using Wikivoyage terms", e); }
+  // Bold lowercase phrases in guides are usually tips/warnings ("raw shellfish"), not dish names
+  const named = food.filter(f => /^\p{Lu}/u.test(f.name));
+  food = named;
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(b.description.length > 40) - Number(a.description.length > 40));
   return { highlights: highlights.slice(0, 12), food: food.slice(0, 8), sources, guideUrl };

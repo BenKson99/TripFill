@@ -5,7 +5,7 @@ const WP = "https://en.wikipedia.org/w/api.php";
 const FOODY = /\b(dish|food|soup|pastry|pastries|sausage|dessert|cake|bread|cheese|noodle|sauce|snack|stew|confection|sweet|tart|dumpling|rice|porridge|pancake|salad|skewer|sandwich|cookie|biscuit|pie|custard|pudding|curry|meat|fish|seafood|beverage|drink|liqueur|spirit|wine|beer|tea|coffee|condiment|seasoning|pickle|omelette|egg|chicken|pork|beef|tofu|sushi|candy|delicacy|specialt)/i;
 // Generic ingredients / non-dish concepts we never want to list as "food to try"
 const GENERIC = /^(organic|biológico|chicken|frango|galinha|rice|white rice|tea|coffee|soup|bread|meat|fish|seafood|pork|beef|wine|beer|water|milk|cheese|salt|sugar|soy sauce|soybean|pickles?|noodles?|noodle bars?|vegetables?|fruit|spices?|vinegar|olive oil|butter|egg|eggs|chopsticks|cuisine|breakfast|lunch|dinner)$/i;
-const NOT_DISH = /cuisine of|cuisine$|list of|culture|etiquette|restaurant|chef|cookbook|cookware|utensil|kitchen|company|brand|chain|grape|cultivar|cattle|breed|moth|variety of|plant|species|genus|ingredient|technique|method|cooking|festival|market|region|city|country|person|people|film|magazine|tableware|style of|term|beverage company|museum|class of|type of restaurant|ware\b/i;
+const NOT_DISH = /cuisine of|cuisine$|list of|culture|etiquette|restaurant|chef|cookbook|cookware|utensil|kitchen|company|brand|chain|grape|cultivar|cattle|breed|moth|variety of|plant|species|genus|ingredient|technique|method|cooking|festival|market|region|city|country|person|people|film|magazine|tableware|style of|term|beverage company|museum|class of|type of restaurant|ware\b|\b1[0-9]{3}\s*[–-]\s*(1[0-9]{3}|20[0-9]{2})\b|politician|official|writer|viticulturist|explorer|businessm[ae]n|businesswoman|statesman|missionary/i;
 
 async function q(params: Record<string, string>) {
   const u = new URLSearchParams({ format: "json", formatversion: "2", ...params });
@@ -13,10 +13,24 @@ async function q(params: Record<string, string>) {
 }
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
-export async function getFood(country: string, lang: string, wvTerms: string[]): Promise<Food[]> {
+// Same-country legs of a multi-city trip share one lookup (consistent picks, fewer Wikipedia calls);
+// a failed or thin lookup is retried once and not cached.
+const foodCache = new Map<string, Promise<Food[]>>();
+export function getFood(country: string, lang: string, wvTerms: string[]): Promise<Food[]> {
+  const key = `${country}|${lang}`;
+  const hit = foodCache.get(key); if (hit) return hit;
+  const p = getFood1(country, lang, wvTerms).then(r => r.length >= 5 ? r : getFood1(country, lang, wvTerms), () => getFood1(country, lang, wvTerms));
+  foodCache.set(key, p);
+  p.then(r => { if (r.length < 5) foodCache.delete(key); }, () => foodCache.delete(key));
+  if (foodCache.size > 200) foodCache.delete(foodCache.keys().next().value!);
+  return p;
+}
+async function getFood1(country: string, lang: string, wvTerms: string[]): Promise<Food[]> {
   // 1. Find the "<X> cuisine" article for this country
   const sr = await q({ action: "query", list: "search", srsearch: `${country} cuisine intitle:cuisine`, srlimit: "3" });
-  const art = (sr.query?.search || []).map((x: any) => x.title as string).find((t: string) => /cuisine$/i.test(t) && !/^list/i.test(t));
+  const hits: string[] = (sr.query?.search || []).map((x: any) => x.title as string).filter((t: string) => /cuisine$/i.test(t) && !/^list/i.test(t));
+  // Prefer the article that names this country ("South African cuisine" over the broader "African cuisine")
+  const art = hits.find(t => norm(t).includes(norm(country))) || hits[0];
   // 2. Candidate dishes = pages linked from the cuisine article, plus Wikivoyage terms that have a Wikipedia article
   const titles = new Set<string>();
   if (art) {
@@ -69,6 +83,6 @@ export async function getFood(country: string, lang: string, wvTerms: string[]):
   const intro = new Map<string, string>(); for (const pg of ex?.query?.pages || []) intro.set(pg.title, (pg.extract || "").replace(/\s*\([^()]*(\([^()]*\)[^()]*)*\)/g, "").replace(/\s+([,.])/g, "$1"));
   return top.map(c => {
     const loc = local.get(c.title);
-    return { name: c.title, localName: loc && norm(loc) !== norm(c.title) ? loc : undefined, gloss: c.desc.charAt(0).toUpperCase() + c.desc.slice(1), description: (intro.get(c.title) || "").slice(0, 220), source: wvSet.has(norm(c.from)) || wvSet.has(norm(c.title)) ? "Wikivoyage + Wikipedia" : `Wikipedia (${art})`, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(c.title.replace(/ /g, "_"))}` };
+    return { name: c.title.replace(/\s*\((?:food|dish|drink|beverage|dessert|biscuit|cake|cookie|bread|sauce|soup|confectionery|sandwich|pastry)\)$/i, ""), localName: loc && norm(loc) !== norm(c.title) ? loc : undefined, gloss: c.desc.charAt(0).toUpperCase() + c.desc.slice(1), description: (intro.get(c.title) || "").slice(0, 220), source: wvSet.has(norm(c.from)) || wvSet.has(norm(c.title)) ? "Wikivoyage + Wikipedia" : `Wikipedia (${art})`, url: `https://en.wikipedia.org/wiki/${encodeURIComponent(c.title.replace(/ /g, "_"))}` };
   });
 }

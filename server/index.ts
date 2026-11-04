@@ -55,7 +55,9 @@ app.post("/api/generate", async (req, res) => {
       const matches = await geocode(inp.destination);
       if (!matches.length) return res.status(404).json({ error: `Couldn't find "${inp.destination}"` });
       const distinct = matches.filter(m => (m.population ?? 0) > 0 || matches.length === 1);
-      if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 10 * (distinct[1].population || 0))) return res.json({ needsChoice: true, matches });
+      // Ask unless the top match dwarfs EVERY other one (Queenstown ZA 119k vs Queenstown NZ 10k is not decisive)
+      const runnerUp = Math.max(0, ...distinct.slice(1).map(m => m.population || 0));
+      if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 20 * runnerUp)) return res.json({ needsChoice: true, matches });
       place = (distinct[0] || matches[0]); (inp as any)._matches = matches;
     }
     let home = inp.home as Place | undefined;

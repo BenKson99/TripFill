@@ -99,8 +99,9 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult)
     if (best) { used.add(best); best.morning = `🥾 Day hike (start early; driest day in the forecast)`; best.afternoon = `🥾 Hike continues — back by late afternoon; then ${best.afternoon}`; tag(best, "hiking"); }
   }
   if (ps.includes("beach")) {
-    const warm = (dry.length ? dry : mid).filter(d => (wx(d)?.tmax ?? 0) >= 22);
-    for (const d of (warm.length ? warm : dry).slice(0, Math.max(1, Math.ceil(mid.length / 2)))) { d.afternoon = `🏖 Beach time (avoid 12–3 pm sun)${warm.length ? "" : " — may be cool for swimming"}; ${d.afternoon}`; tag(d, "beach"); }
+    const free = (dry.length ? dry : mid).filter(d => !used.has(d)); // not the hike day
+    const warm = free.filter(d => (wx(d)?.tmax ?? 0) >= 22);
+    for (const d of (warm.length ? warm : free).slice(0, Math.max(1, Math.ceil(mid.length / 2)))) { d.afternoon = `🏖 Beach time (avoid 12–3 pm sun)${warm.length ? "" : " — may be cool for swimming"}; ${d.afternoon}`; tag(d, "beach"); }
   }
   if (ps.includes("roadtrip") && mid.length) {
     const pool = (dry.length ? dry : mid).filter(x => !used.has(x)); const d = pool[Math.min(1, pool.length - 1)] || mid.find(x => !used.has(x));
