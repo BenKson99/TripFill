@@ -142,6 +142,11 @@ export const MAX_DRIVE_MIN = 150;
 
 // Wikidata SPARQL (free, no key): museums, galleries, theatres, cinemas, aquariums, planetariums, market halls within 10 km,
 // including ones with no English Wikipedia article
+export const elsewhere = (f: { description?: string }, p: { name: string; admin1?: string; country?: string }) => {
+  const m = (f.description || "").match(/(?:originat\w*|originally|speciality|specialty|delicacy|typical)[^.]{0,30}?\b(?:from|of|in)\s+(?:the\s+)?(\p{Lu}[\p{L}-]+)/u);
+  if (!m) return false; const w = m[1].toLowerCase();
+  return ![p.name, p.admin1, p.country].some(x => x && x.toLowerCase().includes(w));
+};
 const wikidataIndoor = (p: Place) => cached(`wdIndoor|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, () => wikidataIndoor0(p));
 async function wikidataIndoor0(p: Place): Promise<Highlight[]> {
   const q = `SELECT ?i ?l ?cl ?c WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "10". } VALUES ?k { wd:Q33506 wd:Q1007870 wd:Q207694 wd:Q24354 wd:Q41253 wd:Q2281788 wd:Q57660343 wd:Q11315 wd:Q15206070 } ?i wdt:P31/wdt:P279? ?k. ?i rdfs:label ?l. FILTER(LANG(?l) IN ("en","mul")) OPTIONAL { ?k rdfs:label ?cl FILTER(LANG(?cl) = "en") } } LIMIT 80`;
@@ -257,7 +262,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; food: Food[]; drinks: Food[]; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v5|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.food.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
+  return cached(`places|v7|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.food.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -317,6 +322,8 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
   try {
     const smart = await getFood(p.country, countryInfo(p.countryCode).lang, [...cityFood, ...food].map(f => f.name));
     if (smart.length >= 5) food = smart;
+    // Same-country cities share the cuisine lookup; push other cities' signature dishes ("originally from Porto") to the back
+    food = [...food].sort((a, b) => Number(elsewhere(a, p)) - Number(elsewhere(b, p)));
   } catch (e) { console.warn("food lookup failed, using Wikivoyage terms", e); }
   // Bold lowercase phrases in guides are usually tips/warnings ("raw shellfish"), not dish names
   food = food.filter(f => /^\p{Lu}/u.test(f.name));

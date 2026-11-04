@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+- Fix: food didn't change when switching to another city in the same country (e.g. Porto → Lisbon showed Porto's list). The food lookup was cached per country only, so the first city's list was reused; it is now keyed by country + that city's guide dishes, and old caches are invalidated.
+- Dishes described as another city's speciality ("originally from Porto") move to the end of the list.
+- Added `npm test` regression check for the food cache key.
+
 ## 1.3.0
 - Three tabs: **Plan** (form, trip overview, weather, highlights, map, food, day by day), **Packing & Prep** (packing list, new "Before you leave" checklist, pre-trip timeline) and **Budget** (money/exchange-rate card, home currency picker, budget rows incl. flights estimate and totals).
 - Accessible tabs: role=tablist/tab/tabpanel, arrow keys / Home / End, roving focus; the active tab is remembered. Packing & Budget are disabled until a plan exists. Sticky, thumb-sized tab bar on mobile; printing includes all tabs.

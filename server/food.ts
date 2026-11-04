@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cached, getJSON } from "./fetchy.js";
 
 export interface Food { name: string; localName?: string; gloss: string; description: string; source: string; url?: string }
@@ -16,10 +17,14 @@ const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u
 // Same-country legs of a multi-city trip share one lookup (consistent picks, fewer Wikipedia calls);
 // a failed or thin lookup is retried once and not cached.
 const foodCache = new Map<string, Promise<Food[]>>();
+export const foodKey = (country: string, lang: string, wvTerms: string[]) =>
+  `${country}|${lang}|${createHash("sha1").update([...new Set(wvTerms.map(t => t.trim().toLowerCase()))].sort().join("\n")).digest("hex").slice(0, 12)}`;
 export function getFood(country: string, lang: string, wvTerms: string[]): Promise<Food[]> {
-  const key = `${country}|${lang}`;
+  // Key on the city's Wikivoyage terms too: they seed and rank the list, so keying on country alone
+  // made every city in a country reuse whichever city was looked up first (Lisbon showed Porto's food).
+  const key = foodKey(country, lang, wvTerms);
   const hit = foodCache.get(key); if (hit) return hit;
-  const p = cached(`food|v4|${key}`, () => getFood1(country, lang, wvTerms).then(r => r.length >= 5 ? r : getFood1(country, lang, wvTerms), () => getFood1(country, lang, wvTerms)).then(r => r.length >= 5 && r.filter(f => f.description).length * 2 >= r.length ? r : ([] as Food[]))); // thin or description-less (throttled) results are retried next time, not cached
+  const p = cached(`food|v5|${key}`, () => getFood1(country, lang, wvTerms).then(r => r.length >= 5 ? r : getFood1(country, lang, wvTerms), () => getFood1(country, lang, wvTerms)).then(r => r.length >= 5 && r.filter(f => f.description).length * 2 >= r.length ? r : ([] as Food[]))); // thin or description-less (throttled) results are retried next time, not cached
   foodCache.set(key, p);
   p.then(r => { if (r.length < 5) foodCache.delete(key); }, () => foodCache.delete(key));
   if (foodCache.size > 200) foodCache.delete(foodCache.keys().next().value!);
