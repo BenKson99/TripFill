@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 — 2026-11-04
+- Fix: food picks use the destination country's cuisine article; cleaner dish names; no people or guide warnings listed as dishes; same-country legs share one lookup.
+- Fix: ambiguous names such as Queenstown now ask which one is meant.
+- Fix: no beach time scheduled on the hike day.
+- Fix: typical-weather days no longer say "Usually dry" and "Rain likely" at the same time.
+- Fix: cross-border short hops note that the drive time is a straight-line estimate.
+- Fix: editing the budget total keeps exactly the typed amount.
+
 ## 1.1.0 — 2026-11-04
 ### Changed — visual design pass (no functional changes)
 - Design tokens (palette, spacing, radii, shadows) as CSS variables. Warm sand background, ink text, terracotta accent, teal secondary.
