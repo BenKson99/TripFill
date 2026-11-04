@@ -76,7 +76,7 @@ app.post("/api/generate", async (req, res) => {
     const aiPolished = await polish(places.highlights);
     const ps = presetsOf(inp);
     const pk = packing(inp, weather, place, nights, domestic); presetPacking(pk.groups, ps, weather, pk.leaveAtHome);
-    const it = itinerary(inp, weather, places.highlights, places.food); presetItinerary(it, ps, weather, places.highlights);
+    const it = itinerary(inp, weather, places.highlights, places.food, places.indoorExtra); presetItinerary(it, ps, weather, places.highlights);
     res.json({
       input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, food: places.food, sources: places.sources, guideUrl: places.guideUrl,

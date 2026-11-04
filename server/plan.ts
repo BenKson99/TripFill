@@ -86,13 +86,15 @@ export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: 
 }
 
 const dist = (a: { lat?: number; lon?: number }, b: { lat?: number; lon?: number }) => { const r = (x: number) => x * Math.PI / 180; const h = Math.sin(r(b.lat! - a.lat!) / 2) ** 2 + Math.cos(r(a.lat!)) * Math.cos(r(b.lat!)) * Math.sin(r(b.lon! - a.lon!) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
-export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Food[]): ItinDay[] {
+/** "~1h 20m drive" from OSRM, or "~1h 30m drive est." from the straight-line fallback */
+export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm?: number }) => { const m = h.driveMin ?? (h.distanceKm != null ? Math.round(h.distanceKm * 1.4) : undefined); if (m == null) return ""; const r5 = Math.round(m / 5) * 5, H = Math.floor(r5 / 60), M = r5 % 60; return `~${H ? `${H}h${M ? ` ${M}m` : ""}` : `${M || 5}m`} drive${h.driveSrc === "osrm" ? "" : " est."}`; };
+export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Food[], extraIndoor: Highlight[] = []): ItinDay[] {
   const style = inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? 3 : 2;
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
   hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
   const outdoorF = outdoor.filter(h => !h.ski);
   const queue = [...hl]; const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
-  const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (~${h.distanceKm} km)` : h.name;
+  const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
   return days.map((d, i) => {
     const rain = isRainy(d); const wx = `${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? (d.typical ? `, wet in ${d.precipProb}% of past years` : `, ${d.precipProb}% rain`) : ""}`.trim();
     if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `First taste: try ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
@@ -105,13 +107,14 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     const cityLeft = queue.filter(x => !x.dayTrip).length;
     if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); const near = trip.lat != null ? queue.find(x => x !== trip && x.lat != null && dist(x, trip) < 15) : undefined;
       if (near) queue.splice(queue.indexOf(near), 1);
-      const back = trip.distanceKm ? ` (~${Math.max(1, Math.round(trip.distanceKm * 2 / 60))} h round-trip drive)` : "";
+      const back = driveLabel(trip) ? ` (${driveLabel(trip)} back)` : "";
       slots.push(label(trip), near ? `Also nearby: ${near.name}, then head back${back}` : `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`); }
     else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
     const eats = food.filter(x => !/wine|drink|beverage|liqueur|spirit|beer|\btea\b|coffee/i.test((x as any).gloss || "")); const f = eats.length ? eats[i % eats.length] : food[i % Math.max(1, food.length)];
     // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again
-    const bh = rain ? undefined : indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name));
-    if (bh) { usedBackup.add(bh.name); queue.splice(queue.indexOf(bh), 1); }
+    // Prefer extra indoor venues (not on the highlight list), then unscheduled indoor highlights
+    const bh = rain ? undefined : extraIndoor.find(h => !usedBackup.has(h.name)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name));
+    if (bh) { usedBackup.add(bh.name); if (queue.includes(bh)) queue.splice(queue.indexOf(bh), 1); }
     const backup = bh?.name;
     return {
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,

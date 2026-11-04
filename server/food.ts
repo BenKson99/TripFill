@@ -77,7 +77,7 @@ async function getFood1(country: string, lang: string, wvTerms: string[]): Promi
   const isLocal = (d: string) => { const n = norm(d); return ids.some(x => n.includes(x)); };
   const FOREIGN = /\b(french|italian|indonesian|indian|malay|malaysian|chinese|japanese|korean|thai|vietnamese|spanish|portuguese|german|british|english|scottish|irish|(?<!south |latin |north )american|mexican|turkish|greek|dutch|polish|russian|swiss|belgian|austrian|hungarian|middle eastern|arab|levantine|persian|lebanese|moroccan|peruvian|brazilian|argentine|argentinian|chilean|south african|australian|new zealand|filipino|caribbean|jamaican|cuban|ethiopian|nigerian|south asian|east asian|european|asian|african|latin american|mediterranean|scandinavian|swedish|norwegian|danish|finnish|uruguayan|colombian|venezuelan)\b/i;
   const foreign = (d: string) => { const m = d.match(new RegExp(FOREIGN.source, "gi")) || []; return m.some(x => !isLocal(x)); }; // any other cuisine named, first or jointly ("Italian and Portuguese")
-  const NOT_DISH2 = /\bcheese\b|wine ?making|\bwine\b|ingredient|\bflour\b|\bvariety\b|\bcultivar\b/i;
+  const NOT_DISH2 = /\bcheese\b|wine ?making|\bwine\b|\bliqueur\b|\bspirits?\b|\bvodka\b|\bgin\b|\bbrandy\b|ingredient|\bflour\b|\bvariety\b|\bcultivar\b/i;
   cands = cands.filter(c => !foreign(c.desc) && !(NOT_DISH2.test(c.desc) && !/dish|dessert|pastry|soup|stew|sandwich|snack|cake|tart|pie|bread|liqueur|drink|cocktail/i.test(c.desc)));
   const localC = cands.filter(c => isLocal(c.desc));
   if (localC.length >= 5) cands = localC;

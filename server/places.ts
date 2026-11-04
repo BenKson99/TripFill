@@ -1,9 +1,9 @@
-import { getJSON } from "./fetchy.js";
+import { getJSON, UA } from "./fetchy.js";
 import type { Place } from "./weather.js";
 import { getFood, type Food } from "./food.js";
 import { countryInfo } from "./countries.js";
 
-export interface Highlight { name: string; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number }
+export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number }
 
 const WV = "https://en.wikivoyage.org/w/api.php";
 async function wikitext(title: string): Promise<{ title: string; text: string } | null> {
@@ -100,7 +100,7 @@ const NOT_SIGHT = /railway station|metro station|subway station|school|universit
 
 export type Setting = "indoor" | "outdoor" | "mixed";
 // Classes (Wikidata instance-of labels) that are not visitor attractions
-const BAD_CLASS = /stock exchange|skyscraper|office building|office|headquarters|bank|ministry|government|embassy|consulate|company|business|enterprise|corporation|university|college|school|hospital|hotel|railway station|metro station|train station|station|stadium|sports venue|arena|diocese|archdiocese|courthouse|prison|police|parliament building|legislative|city hall|residential|apartment|shopping|department store|organization|broadcaster|research|military|port|airport|interchange|road|street|highway|line|human settlement|administrative|ward|district of|neighborhood|quarter|commercial building|high-rise|tower block|destroyed|demolished|former|trade fair|convention center/i;
+const BAD_CLASS = /massacre|attack|incident|disaster|battle|event|fire\b|riot|stock exchange|skyscraper|office building|office|headquarters|bank|ministry|government|embassy|consulate|company|business|enterprise|corporation|university|college|school|hospital|hotel|railway station|metro station|train station|station|stadium|sports venue|arena|diocese|archdiocese|courthouse|prison|police|parliament building|legislative|city hall|residential|apartment|shopping|department store|organization|broadcaster|research|military|port|airport|interchange|road|street|highway|line|human settlement|administrative|ward|district of|neighborhood|quarter|commercial building|high-rise|tower block|destroyed|demolished|former|trade fair|convention center/i;
 const NAME_BAD = /stock exchange|headquarters|\bHQ\b|ministry|embassy|bank\b|office|university|station|stadium|hotel/i;
 const INDOOR_C = /museum|gallery|theatre|theater|opera house|concert hall|aquarium|oceanarium|library|cinema|planetarium|exhibition|church|cathedral|basilica|chapel|mosque|synagogue|indoor|market hall|arcade/i;
 const MIXED_C = /winery|vineyard|wine estate|palace|castle|monastery|abbey|temple|shrine|fortress|fort\b|citadel|zoo|botanical garden|tower|observation|complex|market|historic site|world heritage|ruins|mausoleum|imperial|royal residence|lift|elevator/i;
@@ -125,7 +125,56 @@ async function pageviews(titles: string[]): Promise<Map<string, number>> {
   return out;
 }
 
-async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide: Set<string> = new Set(), ski: Set<string> = new Set(), want = 14): Promise<Highlight[]> {
+// Real drive times from the public OSRM demo router (free, no key); straight-line × 1.4 road factor at 60 km/h as fallback
+async function driveMinutes(p: Place, dests: { lat: number; lon: number }[]): Promise<{ min: number; src: "osrm" | "estimate" }[]> {
+  const est = dests.map(d => ({ min: Math.round(haversine(p, d) * 1.4), src: "estimate" as const }));
+  if (!dests.length) return est;
+  try {
+    const coords = [p, ...dests].map(c => `${c.lon.toFixed(5)},${c.lat.toFixed(5)}`).join(";");
+    const d = await getJSON<any>(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=duration`, 12000);
+    const row: (number | null)[] = d?.durations?.[0] || [];
+    // If OSRM had to snap a point >2 km to reach a road (mountain ranges, parks), its time is for the wrong place — use the estimate
+    return dests.map((_, i) => row[i + 1] != null && (d.destinations?.[i + 1]?.distance ?? 0) <= 2000 ? { min: Math.round(row[i + 1]! / 60), src: "osrm" as const } : est[i]);
+  } catch { return est; }
+}
+export const MAX_DRIVE_MIN = 150;
+
+// Wikidata SPARQL (free, no key): museums, galleries, theatres, cinemas, aquariums, planetariums, market halls within 10 km,
+// including ones with no English Wikipedia article
+async function wikidataIndoor(p: Place): Promise<Highlight[]> {
+  const q = `SELECT ?i ?l ?cl ?c WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "10". } VALUES ?k { wd:Q33506 wd:Q1007870 wd:Q207694 wd:Q24354 wd:Q41253 wd:Q2281788 wd:Q57660343 wd:Q11315 wd:Q15206070 } ?i wdt:P31/wdt:P279? ?k. ?i rdfs:label ?l. FILTER(LANG(?l) IN ("en","mul")) OPTIONAL { ?k rdfs:label ?cl FILTER(LANG(?cl) = "en") } } LIMIT 80`;
+  try {
+    const r = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(q)}`, { headers: { "User-Agent": UA, Accept: "application/sparql-results+json" }, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return [];
+    const j: any = await r.json(); const seen = new Set<string>();
+    const rank = (c: string) => /art museum|gallery/.test(c) ? 0 : /museum/.test(c) ? 1 : /aquarium|planetarium/.test(c) ? 2 : /theat|performing/.test(c) ? 3 : /market/.test(c) ? 4 : 5;
+    return j.results.bindings.filter((b: any) => !/shopping/i.test(b.cl?.value || "") && !seen.has(b.l.value) && seen.add(b.l.value))
+      .map((b: any) => { const m = /Point\(([-\d.]+) ([-\d.]+)\)/.exec(b.c?.value || ""); const cl = b.cl?.value || "indoor venue"; return { name: b.l.value as string, description: cl, setting: "indoor" as const, indoor: true, type: cl, source: "Wikidata", url: b.i.value, lat: m ? +m[2] : undefined, lon: m ? +m[1] : undefined, _r: rank(cl) }; })
+      .sort((a: any, b: any) => a._r - b._r).map(({ _r, ...h }: any) => h as Highlight);
+  } catch { return []; }
+}
+
+// OpenStreetMap (Overpass, free, no key): named museums, galleries, aquariums, theatres, cinemas near the centre
+async function osmIndoor(p: Place): Promise<Highlight[]> {
+  const q = `[out:json][timeout:20];(nwr(around:10000,${p.lat},${p.lon})["tourism"~"^(museum|gallery|aquarium)$"]["name"];nwr(around:10000,${p.lat},${p.lon})["amenity"~"^(theatre|cinema|arts_centre|planetarium)$"]["name"];);out center 60;`;
+  // Public Overpass instances are busy: POST (GET gets 406), retry briefly, then try a mirror
+  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]) {
+    try {
+      const r = await fetch(host, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: AbortSignal.timeout(15000) });
+      if (!r.ok) { await new Promise(res => setTimeout(res, 1500)); continue; }
+      const d: any = await r.json();
+      const rank = (k: string) => ["museum", "gallery", "aquarium", "planetarium", "arts_centre", "theatre", "cinema"].indexOf(k);
+      const seen = new Set<string>();
+      return (d.elements || []).map((e: any) => ({ e, kind: e.tags.tourism || e.tags.amenity, name: (e.tags["name:en"] || e.tags.name) as string }))
+        .filter((x: any) => x.name && x.name.length > 3 && /^\p{Lu}|^\d/u.test(x.name) && !seen.has(x.name) && seen.add(x.name))
+        .sort((a: any, b: any) => rank(a.kind) - rank(b.kind))
+        .map((x: any) => ({ name: x.name, description: `${x.kind.replace("_", " ")} (OpenStreetMap)`, setting: "indoor" as const, indoor: true, type: x.kind.replace("_", " "), source: "OpenStreetMap", lat: x.e.lat ?? x.e.center?.lat, lon: x.e.lon ?? x.e.center?.lon }));
+    } catch { /* try the mirror */ }
+  }
+  return [];
+}
+
+async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide: Set<string> = new Set(), ski: Set<string> = new Set(), want = 14): Promise<{ top: Highlight[]; extras: Highlight[] }> {
   const uniq = [...new Set(qids)];
   const ents: any[] = [];
   for (let i = 0; i < uniq.length; i += 50) {
@@ -160,7 +209,12 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   rows = rows.filter(isSight);
   rows.sort((a, b) => b.sl - a.sl);
   const km = (r: typeof rows[number]) => r.lat != null ? haversine(p, { lat: r.lat, lon: r.lon }) : 0;
-  rows = rows.filter(r => km(r) <= 120); // beyond ~2 h each way is not a day trip (and river/region centroids can be far off)
+  rows = rows.filter(r => km(r) <= 160); // beyond ~2 h each way is not a day trip (and river/region centroids can be far off)
+  // Drive times for anything outside the city; drop places more than ~2.5 h each way by road
+  const far = rows.filter(r => km(r) > 15 && r.lat != null).slice(0, 80);
+  const dm = await driveMinutes(p, far.map(r => ({ lat: r.lat, lon: r.lon })));
+  const drive = new Map(far.map((r, i) => [r.id, dm[i]]));
+  rows = rows.filter(r => !(drive.get(r.id)?.min! > MAX_DRIVE_MIN));
   const pool = rows.slice(0, 50);
   const pv = await pageviews(pool.map(r => r.title));
   // Popularity: log pageviews + log sitelinks, small boost for guide-curated sights
@@ -179,11 +233,16 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   const byTitle = new Map<string, string>();
   for (const pg of ex?.query?.pages || []) byTitle.set(pg.title, pg.extract || "");
   for (const r of ex?.query?.redirects || []) byTitle.set(r.from, byTitle.get(r.to) || "");
-  return top.map(t => {
+  // Extra indoor venues (not shown as highlights) so rainy-day backups can name real places
+  const worship = /church|cathedral|basilica|chapel|mosque|synagogue|temple|shrine/i;
+  const ext0 = rows.filter(r => !top.includes(r) && !(km(r) > 15) && !isSki(r) && /indoor|mixed/.test(setting(r.classes.join("; ") || r.desc + " " + r.name)) && INDOOR_C.test(r.classes.join("; ") + " " + r.desc + " " + r.name)).sort((a, b) => Number(worship.test(a.classes.join(" "))) - Number(worship.test(b.classes.join(" "))));
+  let w = 0; const extras: Highlight[] = ext0.filter(r => !worship.test(r.classes.join(" ")) || w++ < 1).slice(0, 12)
+    .map(t => ({ name: t.name, description: t.desc, setting: "indoor" as const, indoor: true, type: t.classes.slice(0, 2).join(", "), source: "Wikipedia/Wikidata", url: `https://en.wikipedia.org/wiki/${encodeURIComponent(t.title.replace(/ /g, "_"))}`, lat: t.lat, lon: t.lon }));
+  return { extras, top: top.map(t => {
     const raw = (byTitle.get(t.title) || t.desc).replace(/\s*\([^()]*(\([^()]*\)[^()]*)*\)/g, "").replace(/\s+([,.])/g, "$1");
     const st = setting(t.classes.join("; ") || t.desc + " " + t.name);
-    return { name: t.name, description: firstSentences(raw, 240) || t.desc, setting: st, indoor: st === "indoor", type: t.classes.slice(0, 2).join(", "), views30d: pv.get(t.title) || 0, source: "Wikipedia/Wikidata", url: `https://en.wikipedia.org/wiki/${encodeURIComponent(t.title.replace(/ /g, "_"))}`, lat: t.lat, lon: t.lon, ...(km(t) > 15 ? { dayTrip: true, distanceKm: Math.round(km(t)) } : {}), ...(isSki(t) ? { ski: true } : {}) };
-  });
+    return { name: t.name, description: firstSentences(raw, 240) || t.desc, setting: st, indoor: st === "indoor", type: t.classes.slice(0, 2).join(", "), views30d: pv.get(t.title) || 0, source: "Wikipedia/Wikidata", url: `https://en.wikipedia.org/wiki/${encodeURIComponent(t.title.replace(/ /g, "_"))}`, lat: t.lat, lon: t.lon, ...(km(t) > 15 ? { dayTrip: true, distanceKm: Math.round(km(t)) } : {}), ...(isSki(t) ? { ski: true } : {}), ...(drive.get(t.id) ? { driveMin: drive.get(t.id)!.min, driveSrc: drive.get(t.id)!.src } : {}) };
+  }) };
 }
 
 function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
@@ -192,10 +251,10 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<{ highlights: Highlight[]; food: Food[]; sources: string[]; guideUrl?: string }> {
+export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<{ highlights: Highlight[]; indoorExtra: Highlight[]; food: Food[]; sources: string[]; guideUrl?: string }> {
   const sources: string[] = [];
   const page = await wikitext(p.name) ;
-  let highlights: Highlight[] = []; let food: Food[] = []; let cityFood: Food[] = []; let guideUrl: string | undefined;
+  let highlights: Highlight[] = []; let indoorExtra: Highlight[] = []; let food: Food[] = []; let cityFood: Food[] = []; let guideUrl: string | undefined;
   const curated = new Set<string>(); const extra = new Set<string>();
   if (page && !/^#REDIRECT/i.test(page.text) && !/\{\{disamb/i.test(page.text)) {
     guideUrl = `https://en.wikivoyage.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`;
@@ -212,10 +271,21 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
     cityFood = boldTerms(section(page.text, "Eat")).filter(f => !districts.has(f.name.toLowerCase()) && !/district|neighbo|bairro|street|rua |area/i.test(f.name));
   }
   try {
-    const [near, wideL, skiL] = await Promise.all([nearbyQids(p), Promise.all([searchQids(p, "tourist attraction", 70, 30), searchQids(p, "museum OR park OR plaza OR church OR winery OR monument OR beach", 40, 30), searchQids(p, "national park OR mountain OR lake OR waterfall OR glacier OR vineyard", 120, 15)]).then(a => [...new Set(a.flat())]), opts.ski ? searchQids(p, "ski area", 80, 15) : Promise.resolve([] as string[])]);
+    const [near, wideL, skiL] = await Promise.all([nearbyQids(p), Promise.all([searchQids(p, "tourist attraction", 70, 30), searchQids(p, "museum OR park OR plaza OR church OR winery OR monument OR beach", 40, 30), searchQids(p, "museum OR gallery OR aquarium OR theatre OR market OR library OR planetarium", 12, 40), searchQids(p, "national park OR mountain OR lake OR waterfall OR glacier OR vineyard", 120, 15)]).then(a => [...new Set(a.flat())]), opts.ski ? searchQids(p, "ski area", 80, 15) : Promise.resolve([] as string[])]);
     const want = opts.want || 14;
     const qids = [...curated, ...extra, ...near, ...wideL, ...skiL];
-    highlights = await wikidataRank(qids, curated, p, new Set(wideL.filter(q => !near.includes(q))), new Set(skiL), want);
+    const rk = await wikidataRank(qids, curated, p, new Set(wideL.filter(q => !near.includes(q))), new Set(skiL), want);
+    highlights = rk.top; indoorExtra = rk.extras;
+    if (indoorExtra.length < 8) {
+      const have = new Set([...highlights, ...indoorExtra].map(h => h.name.toLowerCase()));
+      const osmP = osmIndoor(p); // in parallel; Overpass is often slow
+      const wd = (await wikidataIndoor(p)).filter(h => !have.has(h.name.toLowerCase()) && (have.add(h.name.toLowerCase()), true));
+      if (wd.length) { indoorExtra = [...indoorExtra, ...wd].slice(0, 12); sources.push("Wikidata (indoor venues nearby)"); }
+      if (indoorExtra.length < 8) {
+        const osm = (await osmP).filter(h => !have.has(h.name.toLowerCase()));
+        if (osm.length) { indoorExtra = [...indoorExtra, ...osm].slice(0, 12); sources.push("OpenStreetMap (Overpass) indoor venues"); }
+      }
+    }
     sources.push("Wikidata + Wikipedia (nearby, ranked by notability)");
   } catch (e) { console.warn("highlights failed", e); }
   const merge = (list: Food[], src: string) => { const have = new Set(food.map(f => f.name.toLowerCase())); for (const f of list) if (!have.has(f.name.toLowerCase()) && !/^[A-Z]/.test(f.name)) { have.add(f.name.toLowerCase()); food.push({ ...f, source: src }); } };
@@ -244,5 +314,5 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
   food = named;
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));
-  return { highlights: highlights.slice(0, Math.max(12, opts.want || 0)), food: food.slice(0, 8), sources, guideUrl };
+  return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), food: food.slice(0, 8), sources, guideUrl };
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.2
+- Real drive times from OSRM (free, no key); falls back to straight-line x1.4 estimate labelled "est." when a point snaps >2 km from a road.
+- Day trips over ~2.5 h each way are dropped; labels show "~Xh Ym drive each way".
+- Rainy-day backups pull extra indoor venues from Wikipedia nearcoord, Wikidata SPARQL and OSM Overpass (best-effort); no repeats, max one place of worship; generic text only when none exist.
+- Filtered event-type entries (e.g. massacres), border checkpoints; wineries count as mixed indoor/outdoor.
+- Beach/hike presets no longer overwrite day-trip days.
+- Fixed "1h 60m" rounding.
+
 ## 1.2.1 — 2026-11-04
 - Day-trip afternoons are specific: a named sight nearby, or a suggestion that fits the place (shore walk, viewpoint, tasting lunch), plus a round-trip drive estimate.
 - Ski rest-day options name a real unscheduled sight or day trip instead of "Explore a market or local street".

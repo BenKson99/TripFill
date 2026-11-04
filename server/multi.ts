@@ -36,7 +36,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
     const rot = pl.food.length ? prior % pl.food.length : 0;
     const legFood = [...pl.food.slice(rot), ...pl.food.slice(0, rot)];
-    const it = itinerary(inp, weather, pl.highlights, legFood); presetItinerary(it, ps, weather, pl.highlights);
+    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); presetItinerary(it, ps, weather, pl.highlights);
     const b = await budget(l.place.countryCode, nights, travelers, inp.style || "Mix", fxForce);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start) : null;
     return { ...l, nights, weather, places: pl, it, budget: b, fromPrev };
