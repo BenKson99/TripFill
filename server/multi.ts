@@ -29,10 +29,14 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const legs = places.map((place, k) => ({ place, start: starts[k], end: k < places.length - 1 ? starts[k + 1] : tripEnd })).filter(l => l.start <= tripEnd).map(l => ({ ...l, end: l.end > tripEnd ? tripEnd : l.end }));
   const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp);
   const built = await Promise.all(legs.map(async (l, k) => {
-    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place)]);
+    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" ? 20 : 14 })]);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.food.forEach(f => (f as any).leg = l.place.name);
-    const it = itinerary(inp, weather, pl.highlights, pl.food); presetItinerary(it, ps, weather);
+    // Same-country legs share one food list: rotate it so the next city doesn't repeat the same dinners
+    const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
+    const rot = pl.food.length ? prior % pl.food.length : 0;
+    const legFood = [...pl.food.slice(rot), ...pl.food.slice(0, rot)];
+    const it = itinerary(inp, weather, pl.highlights, legFood); presetItinerary(it, ps, weather, pl.highlights);
     const b = await budget(l.place.countryCode, nights, travelers, inp.style || "Mix", fxForce);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start) : null;
     return { ...l, nights, weather, places: pl, it, budget: b, fromPrev };

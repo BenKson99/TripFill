@@ -20,12 +20,30 @@ export function localeCurrency(lang = navigator.language || "en-US"): string {
 }
 const names = (() => { try { return new Intl.DisplayNames(["en"], { type: "currency" }); } catch { return null; } })();
 export const curName = (c: string) => names?.of(c) || c;
+const narrow = (c: string) => { try { return new Intl.NumberFormat("en", { style: "currency", currency: c, currencyDisplay: "narrowSymbol" }).formatToParts(0).find(p => p.type === "currency")?.value || c; } catch { return c; } };
+const wide = (c: string) => { try { return new Intl.NumberFormat("en", { style: "currency", currency: c, currencyDisplay: "symbol" }).formatToParts(0).find(p => p.type === "currency")?.value || c; } catch { return c; } };
+// Shared symbols and the currency that "owns" the bare form
+const OWNER: Record<string, string> = { "$": "USD", "£": "GBP", "¥": "JPY", "R": "ZAR", "₱": "PHP" };
+let homeCur = "";
+/** Tell the formatter the home currency so a bare "$" is only used when it can't be confused (e.g. USD for a US user). */
+export const setHomeCurrencyContext = (c: string) => { homeCur = c; };
+/** Disambiguated symbol: ARS → "ARS$", CLP → "CLP$", NZD → "NZ$"; USD stays "$" unless home is another $ currency. */
 export function curSymbol(c: string) {
-  try { return new Intl.NumberFormat("en", { style: "currency", currency: c, currencyDisplay: "narrowSymbol" }).formatToParts(0).find(p => p.type === "currency")?.value || c; } catch { return c; }
+  const s = narrow(c);
+  if (!(s in OWNER)) return s;
+  const clash = homeCur && homeCur !== c && narrow(homeCur) === s;
+  if (OWNER[s] === c && !clash) return s;
+  const w = wide(c);
+  if (w !== s && w !== c && w.includes(s)) return w;          // NZ$, A$, CA$, HK$, CN¥, US$
+  if (c === "USD") return "US$";
+  return s === "$" ? `${c}$` : `${c} ${s}`.trim();            // ARS$, CLP$, SEK kr
 }
 const decimals = (c: string) => { try { return new Intl.NumberFormat("en", { style: "currency", currency: c }).resolvedOptions().maximumFractionDigits ?? 2; } catch { return 2; } };
 export function money(n: number, c: string, whole = true) {
-  try { return new Intl.NumberFormat(undefined, { style: "currency", currency: c, currencyDisplay: "narrowSymbol", maximumFractionDigits: whole ? 0 : decimals(c) }).format(n); } catch { return `${Math.round(n)} ${c}`; }
+  try {
+    const sym = curSymbol(c);
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: c, currencyDisplay: "narrowSymbol", maximumFractionDigits: whole ? 0 : decimals(c) }).formatToParts(n).map(p => p.type === "currency" ? sym : p.value).join("");
+  } catch { return `${Math.round(n)} ${c}`; }
 }
 // Rate with ~4 significant digits, more for tiny values
 export const fmtRate = (r: number) => r >= 100 ? r.toFixed(1) : r >= 1 ? r.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") : Number(r.toPrecision(3)).toString();
@@ -34,7 +52,8 @@ export const fmtRate = (r: number) => r >= 100 ? r.toFixed(1) : r >= 1 ? r.toFix
 export function useHomeCurrency(homeCountry?: string): [string, (c: string) => void, boolean] {
   const [c, set] = useState<string | null>(() => localStorage.getItem(HOME_KEY));
   const choose = (x: string) => { localStorage.setItem(HOME_KEY, x); set(x); };
-  return [c || curForRegion(homeCountry) || localeCurrency(), choose, !!c];
+  const cur = c || curForRegion(homeCountry) || localeCurrency(); setHomeCurrencyContext(cur);
+  return [cur, choose, !!c];
 }
 
 export function useFx() {

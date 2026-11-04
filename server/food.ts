@@ -70,7 +70,17 @@ async function getFood1(country: string, lang: string, wvTerms: string[]): Promi
       if (!d?.continue) break; cont = d.continue;
     }
   }
-  const demonymish = norm(art || country).split(" ")[0];
+  // Local identity: the cuisine demonym ("south african", "argentine") or country name; stems catch "Argentinian"/"Chilean"
+  const demonym = norm((art || country).replace(/cuisine$/i, ""));
+  const stem = (x: string) => x.length > 6 ? x.slice(0, Math.max(5, x.length - 3)) : x;
+  const ids = [demonym, norm(country), stem(demonym), stem(norm(country))].filter(x => x.length >= 4);
+  const isLocal = (d: string) => { const n = norm(d); return ids.some(x => n.includes(x)); };
+  const FOREIGN = /\b(french|italian|indonesian|indian|malay|malaysian|chinese|japanese|korean|thai|vietnamese|spanish|portuguese|german|british|english|scottish|irish|(?<!south |latin |north )american|mexican|turkish|greek|dutch|polish|russian|swiss|belgian|austrian|hungarian|middle eastern|arab|levantine|persian|lebanese|moroccan|peruvian|brazilian|argentine|argentinian|chilean|south african|australian|new zealand|filipino|caribbean|jamaican|cuban|ethiopian|nigerian|south asian|east asian|european|asian|african|latin american|mediterranean|scandinavian|swedish|norwegian|danish|finnish|uruguayan|colombian|venezuelan)\b/i;
+  const foreign = (d: string) => { const m = d.match(new RegExp(FOREIGN.source, "gi")) || []; return m.some(x => !isLocal(x)) && !isLocal(d); };
+  cands = cands.filter(c => !foreign(c.desc));
+  const localC = cands.filter(c => isLocal(c.desc));
+  if (localC.length >= 5) cands = localC;
+  const demonymish = demonym;
   const score = (c: { title: string; desc: string; from: string }) => Math.log10((pv.get(c.title) || 0) + 10) + (wvSet.has(norm(c.from)) || wvSet.has(norm(c.title)) ? 1.5 : 0) + (norm(c.desc).includes(demonymish) || norm(c.desc).includes(norm(country)) ? 1 : -1.5) + (/dish|pastry|dessert|soup|stew|sausage|noodle|dumpling|tart|cake|snack|sweet|confection|skewer|sushi|curry/i.test(c.desc) ? 0.5 : 0);
   cands.sort((a, b) => score(b) - score(a));
   const top = cands.slice(0, 8);

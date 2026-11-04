@@ -84,7 +84,7 @@ export function presetPacking(groups: PackGroup[], ps: Preset[], w: WeatherResul
 }
 
 /** Itinerary tweaks driven by presets. Mutates days. */
-export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult) {
+export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult, hl: { name: string; ski?: boolean; distanceKm?: number }[] = []) {
   if (!ps.length || days.length < 2) return;
   const mid = days.slice(1, days.length - 1); // full days (not arrive/depart)
   const wx = (d: ItinDay) => w.days.find(x => x.date === d.date);
@@ -93,7 +93,8 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult)
   const used = new Set<ItinDay>();
   if (ps.includes("business") && ps.includes("ski")) { for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = "⛷ Afternoon skiing (lifts usually close ~4 pm), then après-ski"; tag(d, "business + ski"); } return; }
   if (ps.includes("business")) for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = d.afternoon.startsWith("💼") ? d.afternoon : `💼 Work, then if time: ${d.afternoon}`; tag(d, "business"); }
-  if (ps.includes("ski")) for (const d of mid) { d.morning = "⛷ On the slopes (first lifts are quietest)"; d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${d.afternoon ? `; or: ${d.afternoon}` : ""}`; tag(d, "ski"); }
+  const fields = hl.filter(h => h.ski);
+  if (ps.includes("ski")) for (const [j, d] of mid.entries()) { const f = fields[j % Math.max(1, fields.length)]; const m0 = d.morning; d.morning = f ? `⛷ Ski ${f.name}${f.distanceKm ? ` (~${f.distanceKm} km away)` : ""} — first lifts are quietest` : "⛷ On the slopes (first lifts are quietest)"; const alt = m0 && !/^Free morning/.test(m0) ? m0 : d.afternoon; d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${alt ? `; or a rest day: ${alt}` : ""}`; tag(d, "ski"); }
   if (ps.includes("hiking")) {
     const best = [...(dry.length ? dry : mid)].sort((a, b) => (wx(a)?.precipProb ?? 0) - (wx(b)?.precipProb ?? 0))[0];
     if (best) { used.add(best); best.morning = `🥾 Day hike (start early; driest day in the forecast)`; best.afternoon = `🥾 Hike continues — back by late afternoon; then ${best.afternoon}`; tag(best, "hiking"); }

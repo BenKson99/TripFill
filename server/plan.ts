@@ -88,16 +88,27 @@ export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: 
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Food[]): ItinDay[] {
   const style = inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? 3 : 2;
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
-  const queue = [...hl]; const days = w.days.slice(0, 14);
+  hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
+  const outdoorF = outdoor.filter(h => !h.ski);
+  const queue = [...hl]; const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
+  const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (~${h.distanceKm} km)` : h.name;
   return days.map((d, i) => {
     const rain = isRainy(d); const wx = `${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? (d.typical ? `, wet in ${d.precipProb}% of past years` : `, ${d.precipProb}% rain`) : ""}`.trim();
     if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `First taste: try ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: "Last souvenir/coffee stop, then head to the airport/station", evening: "Travel home", notes: "" };
-    const pick = (pool: Highlight[]) => { const h = pool.find(x => queue.includes(x)) || queue[0]; if (h) queue.splice(queue.indexOf(h), 1); return h; };
+    const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && !(noTrip && x.dayTrip)) || queue.find(x => !(noTrip && x.dayTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
     const slots: string[] = [];
-    for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl) : pick(outdoor.length ? outdoor : hl); if (h) slots.push(h.name); }
+    // A day trip fills the day on dry days; never on rainy days
+    const trip = !rain && style !== "Slow" ? queue.find(x => x.dayTrip) : undefined;
+    const fullDays = days.length - 2;
+    const cityLeft = queue.filter(x => !x.dayTrip).length;
+    if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); slots.push(label(trip), "Explore the area & head back for sunset"); }
+    else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
     const eats = food.filter(x => !/wine|drink|beverage|liqueur|spirit|beer|\btea\b|coffee/i.test((x as any).gloss || "")); const f = eats.length ? eats[i % eats.length] : food[i % Math.max(1, food.length)];
-    const backup = rain ? undefined : indoor.find(h => queue.includes(h))?.name;
+    // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again
+    const bh = rain ? undefined : indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name));
+    if (bh) { usedBackup.add(bh.name); queue.splice(queue.indexOf(bh), 1); }
+    const backup = bh?.name;
     return {
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,
       morning: slots[0] || "Free morning — wander a new neighbourhood",

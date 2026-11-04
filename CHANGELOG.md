@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0 — 2026-11-04
+- Highlights: suburbs, localities, towns and border checkpoints are filtered out; a wider (up to 120 km) Wikipedia nearcoord search adds day-trip attractions, labelled "🚐 Day trip (~N km)".
+- Ski preset: nearby ski fields (e.g. The Remarkables, Coronet Peak, Cardrona, Treble Cone) are listed first and each ski day names a field.
+- Packed pace: up to 20 highlights; day trips fill a day when city sights run out, so no filler days.
+- Food: picks must be described as local to the destination country; dishes tied to other cuisines are dropped. Same-country legs rotate dinners instead of repeating.
+- Rainy-day backups are unique venues and are never scheduled again elsewhere.
+- Money: shared symbols are disambiguated (ARS$, CLP$, NZ$, CA$; USD shows US$ when home uses another $ currency).
+
 ## 1.1.1 — 2026-11-04
 - Fix: food picks use the destination country's cuisine article; cleaner dish names; no people or guide warnings listed as dishes; same-country legs share one lookup.
 - Fix: ambiguous names such as Queenstown now ask which one is meant.
