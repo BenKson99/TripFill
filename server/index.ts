@@ -1,3 +1,5 @@
+import { readFileSync as __rf } from "node:fs";
+const APP_VERSION: string = JSON.parse(__rf(new URL("../package.json", import.meta.url), "utf8")).version;
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -88,7 +90,7 @@ app.post("/api/generate", async (req, res) => {
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }
 });
 
-app.get("/healthz", (_q, r) => r.json({ ok: true, version: process.env.npm_package_version || "1.1.0", uptime: Math.round(process.uptime()), shareStore: shareStore() }));
+app.get("/healthz", (_q, r) => r.json({ ok: true, version: APP_VERSION, uptime: Math.round(process.uptime()), shareStore: shareStore() }));
 
 if (process.env.NODE_ENV === "production") {
   const dist = path.resolve("dist");

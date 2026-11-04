@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+- Three tabs: **Plan** (form, trip overview, weather, highlights, map, food, day by day), **Packing & Prep** (packing list, new "Before you leave" checklist, pre-trip timeline) and **Budget** (money/exchange-rate card, home currency picker, budget rows incl. flights estimate and totals).
+- Accessible tabs: role=tablist/tab/tabpanel, arrow keys / Home / End, roving focus; the active tab is remembered. Packing & Budget are disabled until a plan exists. Sticky, thumb-sized tab bar on mobile; printing includes all tabs.
+- "Before you leave" checklist: passport/visa, insurance, bank notice, eSIM, plug adapter for the destination's socket types, offline maps, home prep (mail, plants/pets, fridge, thermostat). Checkable, editable, saved with the plan; older saved/shared plans get it automatically.
+- /healthz reads the version from package.json.
+
 ## 1.2.3
 - Speed: Wikipedia/Wikidata/OSRM answers cached in memory + on disk for 24 h (`.cache/http`, `TRIPFILL_CACHE_DIR`); whole-place and per-country food results cached too. Throttled or partial results are never cached. Lookups run in parallel (food alongside sights, batched wbgetentities, drive times alongside pageviews), with Overpass capped at ~4 s (mirrors raced, optional), SPARQL at 7 s, and per-host concurrency limits. A 429 with a short Retry-After is retried; a long one fails fast.
 - Drive times: still one batched OSRM table call; the estimate fallback uses a 2.0 mountain-road factor for ski fields, peaks and parks.

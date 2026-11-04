@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { ThemeToggle } from "./Theme";
 import { LayoutBar, SectionList, useLayout } from "./Sections";
@@ -7,9 +7,13 @@ import { downloadIcs } from "./ics";
 import { DAY_COLORS, MapView, pinsFor } from "./MapView";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity } from "./Home";
+import { defaultPrep } from "./Prep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
 
-const TITLES: Record<string, string> = { weather: "Weather", highlights: "Local highlights", map: "Map", food: "Food to try", packing: "Packing list", itinerary: "Day by day", timeline: "Pre-trip timeline", budget: "Budget (estimate)" };
+const TITLES: Record<string, string> = { weather: "Weather", highlights: "Local highlights", map: "Map", food: "Food to try", packing: "Packing list", prep: "Before you leave", itinerary: "Day by day", timeline: "Pre-trip timeline", budget: "Budget (estimate)" };
+const TABS = [{ id: "plan", label: "Plan", icon: "🗺", secs: ["weather", "highlights", "map", "food", "itinerary"] }, { id: "pack", label: "Packing & Prep", icon: "🧳", secs: ["packing", "prep", "timeline"] }, { id: "money", label: "Budget", icon: "💰", secs: ["budget"] }] as const;
+type TabId = typeof TABS[number]["id"];
+const TAB_KEY = "tripfill:tab";
 function WxIcon({ s }: { s: string }) {
   const t = (s || "").toLowerCase();
   const [I, c] = /thunder|storm/.test(t) ? [CloudLightning, "rain"] : /snow|sleet/.test(t) ? [CloudSnow, "cloud"] : /rain|shower|drizzle|wet/.test(t) ? [CloudRain, "rain"] : /fog|mist/.test(t) ? [CloudFog, "cloud"] : /overcast|cloud/.test(t) ? (/part|some|mostly clear/.test(t) ? [CloudSun, ""] : [Cloud, "cloud"]) : [Sun, ""];
@@ -51,6 +55,14 @@ export default function App() {
   const [home, setHome, homeExplicit] = useHomeCurrency(homeCity?.countryCode || plan?.trip?.home?.countryCode);
   const { fx, busy: fxBusy, refresh: fxRefresh } = useFx();
   const online = useOnline() && !(fx as Any)?.offline;
+  const [tab, setTabRaw] = useState<TabId>(() => (TABS.find(t => t.id === localStorage.getItem(TAB_KEY))?.id) || "plan");
+  const setTab = (t: TabId) => { setTabRaw(t); localStorage.setItem(TAB_KEY, t); };
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const onTabKey = (e: React.KeyboardEvent, i: number) => {
+    const en = TABS.filter(t => plan || t.id === "plan"); const cur = en.findIndex(t => t.id === TABS[i].id);
+    const j = e.key === "ArrowRight" ? (cur + 1) % en.length : e.key === "ArrowLeft" ? (cur - 1 + en.length) % en.length : e.key === "Home" ? 0 : e.key === "End" ? en.length - 1 : -1;
+    if (j < 0) return; e.preventDefault(); setTab(en[j].id); tabRefs.current[en[j].id]?.focus();
+  };
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
@@ -86,6 +98,7 @@ export default function App() {
       if (j.needsChoice) setMatches(j.matches); else setPlan(j);
     } catch (e: Any) { setErr(e.message); } finally { setLoading(false); }
   }
+  const activeTab: TabId = plan ? tab : "plan";
   const upd = (fn: (p: Any) => void) => readOnly ? undefined : setPlan((p: Any) => { const c = structuredClone(p); fn(c); return c; });
   const download = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" })); a.download = `tripfill-${plan.place.name}-${plan.input.start}.json`.replace(/\s+/g, "_"); a.click(); };
   const importJson = (f: File) => f.text().then(t => setPlan(JSON.parse(t))).catch(() => setErr("Invalid JSON file"));
@@ -101,6 +114,7 @@ export default function App() {
     food: `${plan.food.length} dishes · ${plan.food.slice(0, 3).map((f: Any) => f.name).join(", ")}…`,
     packing: `${packItems.length} items, ${packItems.filter((i: Any) => i.checked).length} packed`,
     itinerary: `${plan.itinerary.length} days · ${plan.input.style} pace`,
+    prep: (() => { const pr = plan.prep || defaultPrep(plan); return `${pr.length} tasks, ${pr.filter((t: Any) => t.done).length} done`; })(),
     timeline: `${plan.timeline.length} tasks, ${plan.timeline.filter((t: Any) => t.done).length} done · next: ${(plan.timeline.find((t: Any) => !t.done) || {}).task || "all done"}`,
     budget: plan.legs?.length > 1 ? (() => { const parts = plan.legs.map((lg: Any) => { const L = lg.budget.currency; const t = lg.budget.lines.reduce((s: number, l: Any) => s + (Number(l.total) || 0), 0); const x = crossRate(fx, home, L); return { s: money(t, L), h: L === home ? t : x ? t / x : null }; }); const all = parts.every((p: Any) => p.h != null); return `${parts.map((p: Any) => '~' + p.s).join(' + ')}${all ? ` ≈ ${money(parts.reduce((a: number, p: Any) => a + p.h, 0), home)} total` : ''} estimate`; })() : (() => { const L = plan.budget.currency; const tot = plan.budget.lines.reduce((s: number, l: Any) => s + (Number(l.total) || 0), 0); const x = crossRate(fx, home, L); return `~${money(tot, L)}${x && home !== L ? ` ≈ ${money(tot / x, home)}` : ""} estimate`; })(),
   } : {};
@@ -153,6 +167,11 @@ export default function App() {
             <div className="slot"><span>notes</span><Editable value={d.notes} onChange={v => upd(p => { p.itinerary[i].notes = v; })} /></div>
           </div>)}
     </>,
+    prep: <>
+          <p className="muted small">Tick these off in the days before you go — saved with this plan.</p>
+          {(plan.prep || defaultPrep(plan)).map((t: Any, i: number) => <div key={t.id} className="pk" data-testid="prep-item"><input type="checkbox" aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].done = e.target.checked; })} /><Editable value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.splice(i, 1); })}>×</button></div>)}
+          <button className="add noprint" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.push({ id: crypto.randomUUID(), task: "New task", done: false }); })}>+ add</button>
+    </>,
     timeline: <>
           {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><input type="checkbox" checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><Editable value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /></div>)}
     </>,
@@ -167,11 +186,32 @@ export default function App() {
         </> : budgetTable(plan.budget, (p: Any) => p.budget),
   } : {};
 
+  const roBodies = readOnly ? Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, <fieldset key={k} className="ro" disabled>{v}</fieldset>])) : bodies;
+  const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => roBodies[k]).map(k => [k, roBodies[k]]));
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
       <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><ThemeToggle /></div>
       <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Plan the trip, <em>not the spreadsheet.</em></h1><p>Destination and dates in — weather, highlights, food, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
+      {plan && <>
+        {readOnly && <div className="card shared noprint" data-testid="shared-banner"><b>👀 Shared plan (read-only)</b> — {readOnly === "server" ? "loaded from this TripFill server" : "decoded from the link itself"}. Your own saved plan is untouched.
+          <div className="chips"><button onClick={importShared}><Download size={16} />Import as my plan</button><button className="ghost" onClick={closeShared}>Close</button></div></div>}
+        <div className="toolbar noprint">
+          {!readOnly && <button data-testid="share" onClick={share}><Link2 size={16} />Copy share link</button>}
+          <button onClick={() => window.print()}><Printer size={16} />Print / PDF</button>
+          <button onClick={download}><Download size={16} />Download JSON</button>
+          <InstallButton />
+          <button data-testid="ics" onClick={() => downloadIcs(plan, T)} title="All-day events for each itinerary day + open checklist items. Imports into Google Calendar (Settings → Import), Apple Calendar and Outlook."><CalendarPlus size={16} />Calendar (.ics)</button>
+          <div className="seg" role="group" aria-label="Temperature unit">{(["F", "C"] as const).map(u => <button key={u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>°{u}</button>)}</div>
+          <label className="btn"><Upload size={16} />Import JSON<input type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && importJson(e.target.files[0])} /></label>
+          <button className="ghost" onClick={() => { if (confirm("Clear this plan?")) setPlan(null); }}>Clear</button>
+        </div>
+
+        {shareMsg && !readOnly && <div className="card noprint small" data-testid="share-msg">{shareMsg}{shareUrl && <input id="share-url" readOnly value={shareUrl} onFocus={e => e.target.select()} />}<span className="muted"> Anyone with the link can view a snapshot; edits aren't synced (no live collaboration).</span></div>}
+      </>}
+      <div className="tabs noprint" role="tablist" aria-label="TripFill sections">{TABS.map((t, i) => { const dis = !plan && t.id !== "plan"; return <button key={t.id} role="tab" id={`tab-${t.id}`} ref={el => { tabRefs.current[t.id] = el; }} aria-selected={activeTab === t.id} aria-controls={`panel-${t.id}`} aria-disabled={dis || undefined} tabIndex={activeTab === t.id ? 0 : -1} disabled={dis} title={dis ? "Generate a plan first" : undefined} className={activeTab === t.id ? "on" : ""} onClick={() => setTab(t.id)} onKeyDown={e => onTabKey(e, i)}><span aria-hidden>{t.icon}</span> {t.label}</button>; })}</div>
+      {!plan && <p className="muted small tabs-hint noprint">Packing & Prep and Budget unlock once you generate a plan.</p>}
+      <div role="tabpanel" id="panel-plan" aria-labelledby="tab-plan" hidden={activeTab !== "plan"}>
       {!online && <div className="card warn noprint" data-testid="offline">📴 You're offline — showing your last saved plan. Editing works and is saved in this browser; generating a new plan, the map tiles and live rates need a connection.</div>}
       <form className="card form noprint" onSubmit={e => { e.preventDefault(); generate(); }}>
         <label className="wide">Destination<input required placeholder="e.g. Lisbon" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} /></label>
@@ -200,19 +240,6 @@ export default function App() {
       {matches && <div className="card noprint"><b>Which one did you mean?</b><div className="chips">{matches.map(m => <button key={m.id} onClick={() => generate(m)}>{placeLabel(m)}</button>)}</div></div>}
 
       {plan && <>
-        {readOnly && <div className="card shared noprint" data-testid="shared-banner"><b>👀 Shared plan (read-only)</b> — {readOnly === "server" ? "loaded from this TripFill server" : "decoded from the link itself"}. Your own saved plan is untouched.
-          <div className="chips"><button onClick={importShared}><Download size={16} />Import as my plan</button><button className="ghost" onClick={closeShared}>Close</button></div></div>}
-        <div className="toolbar noprint">
-          {!readOnly && <button data-testid="share" onClick={share}><Link2 size={16} />Copy share link</button>}
-          <button onClick={() => window.print()}><Printer size={16} />Print / PDF</button>
-          <button onClick={download}><Download size={16} />Download JSON</button>
-          <InstallButton />
-          <button data-testid="ics" onClick={() => downloadIcs(plan, T)} title="All-day events for each itinerary day + open checklist items. Imports into Google Calendar (Settings → Import), Apple Calendar and Outlook."><CalendarPlus size={16} />Calendar (.ics)</button>
-          <div className="seg" role="group" aria-label="Temperature unit">{(["F", "C"] as const).map(u => <button key={u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>°{u}</button>)}</div>
-          <label className="btn"><Upload size={16} />Import JSON<input type="file" accept=".json" hidden onChange={e => e.target.files?.[0] && importJson(e.target.files[0])} /></label>
-          <button className="ghost" onClick={() => { if (confirm("Clear this plan?")) setPlan(null); }}>Clear</button>
-        </div>
-
         <section className="card trip-head">
           <div className="kicker"><MapPin size={14} />{plan.legs?.length > 1 ? `${plan.legs.length}-city trip` : plan.trip?.domestic === false ? "International trip" : plan.trip?.domestic ? "Domestic trip" : "Your trip"}</div>
           <h2>{plan.legs?.length > 1 ? plan.title : placeLabel(plan.place)}</h2>
@@ -227,14 +254,24 @@ export default function App() {
           </div>
           {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <small className="muted noprint"> · not it? {lg.alternatives.slice(0, 3).map((a: Any, ai: number) => <a key={ai} href="#" onClick={e => { e.preventDefault(); const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }}>{a.name}, {a.country}</a>).reduce((acc: Any[], x: Any, i: number) => i ? [...acc, " · ", x] : [x], [])}</small>}</span>)}</div>}
           <Snapshot trip={plan.trip} dest={plan.place} />
-          <div className="moneycard" data-testid="money-card"><b>Money</b>{(plan.legs?.length > 1 ? [...new Set(plan.legs.map((l: Any) => l.budget.currency))] as string[] : [plan.budget?.localCurrency || plan.budget?.currency || home]).map((c: string, i: number) => <RateLine key={c} compact fx={fx} home={home} local={c} shownIn={i === 0 && !(plan.legs?.length > 1) ? plan.budget?.currency : c} busy={fxBusy} onRefresh={fxRefresh} />)}<span className="noprint"><CurrencyPicker value={home} onChange={setHome} hint={homeExplicit ? "your choice" : homeCity ? `from ${homeCity.country}` : "from browser locale"} /></span></div>
           {plan.capped && <p className="warn">Trips longer than 14 days: weather & itinerary cover the first 14 days.</p>}
         </section>
 
         <LayoutBar layout={layout} setLayout={setLayout} titles={TITLES} />
-        {shareMsg && !readOnly && <div className="card noprint small" data-testid="share-msg">{shareMsg}{shareUrl && <input id="share-url" readOnly value={shareUrl} onFocus={e => e.target.select()} />}<span className="muted"> Anyone with the link can view a snapshot; edits aren't synced (no live collaboration).</span></div>}
-        <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={readOnly ? Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, <fieldset key={k} className="ro" disabled>{v}</fieldset>])) : bodies} />
+        <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("plan")} />
         <p className="muted small">Weather: Open-Meteo · Places: Wikivoyage / Wikipedia / Wikidata (CC BY-SA). Generated {new Date(plan.generatedAt).toLocaleString()}.</p>
+      </>}
+      </div>
+      {plan && <>
+        <div role="tabpanel" id="panel-pack" aria-labelledby="tab-pack" hidden={activeTab !== "pack"}>
+          <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("pack")} />
+        </div>
+        <div role="tabpanel" id="panel-money" aria-labelledby="tab-money" hidden={activeTab !== "money"}>
+          <section className="card">
+            <div className="moneycard" data-testid="money-card"><b>Money</b>{(plan.legs?.length > 1 ? [...new Set(plan.legs.map((l: Any) => l.budget.currency))] as string[] : [plan.budget?.localCurrency || plan.budget?.currency || home]).map((c: string, i: number) => <RateLine key={c} compact fx={fx} home={home} local={c} shownIn={i === 0 && !(plan.legs?.length > 1) ? plan.budget?.currency : c} busy={fxBusy} onRefresh={fxRefresh} />)}<span className="noprint"><CurrencyPicker value={home} onChange={setHome} hint={homeExplicit ? "your choice" : homeCity ? `from ${homeCity.country}` : "from browser locale"} /></span></div>
+          </section>
+          <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("money")} />
+        </div>
       </>}
     </div>
   );

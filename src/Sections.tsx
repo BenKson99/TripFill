@@ -43,7 +43,7 @@ export function LayoutBar({ layout, setLayout, titles }: { layout: Layout; setLa
   );
 }
 
-const ICONS: Record<string, JSX.Element> = { weather: <CloudSun size={20} />, highlights: <MapPin size={20} />, map: <MapIcon size={20} />, food: <UtensilsCrossed size={20} />, packing: <Luggage size={20} />, itinerary: <CalendarDays size={20} />, timeline: <ListChecks size={20} />, budget: <Wallet size={20} /> };
+const ICONS: Record<string, JSX.Element> = { weather: <CloudSun size={20} />, highlights: <MapPin size={20} />, map: <MapIcon size={20} />, food: <UtensilsCrossed size={20} />, packing: <Luggage size={20} />, itinerary: <CalendarDays size={20} />, prep: <ListChecks size={20} />, timeline: <ListChecks size={20} />, budget: <Wallet size={20} /> };
 
 function Section({ id, title, summary, collapsed, idx, count, onToggle, onMove, onHide, children }: { id: string; title: string; summary: string; collapsed: boolean; idx: number; count: number; onToggle: () => void; onMove: (d: -1 | 1) => void; onHide: () => void; children: React.ReactNode }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
@@ -91,7 +91,7 @@ export function SectionList({ layout, setLayout, titles, summaries, bodies }: { 
   const live = useRef<HTMLDivElement>(null);
   const announce = (m: string) => { if (live.current) live.current.textContent = m; };
   const move = (id: string, d: -1 | 1) => setLayout(l => {
-    const vis = l.order.filter(x => !l.hidden.includes(x)); const i = vis.indexOf(id); const j = i + d;
+    const vis = l.order.filter(x => !l.hidden.includes(x) && bodies[x]); const i = vis.indexOf(id); const j = i + d;
     if (j < 0 || j >= vis.length) return l;
     const a = l.order.indexOf(id), b = l.order.indexOf(vis[j]);
     announce(`${titles[id]} moved ${d < 0 ? "up" : "down"}`);
