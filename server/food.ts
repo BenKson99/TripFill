@@ -1,4 +1,4 @@
-import { getJSON } from "./fetchy.js";
+import { cached, getJSON } from "./fetchy.js";
 
 export interface Food { name: string; localName?: string; gloss: string; description: string; source: string; url?: string }
 const WP = "https://en.wikipedia.org/w/api.php";
@@ -19,7 +19,7 @@ const foodCache = new Map<string, Promise<Food[]>>();
 export function getFood(country: string, lang: string, wvTerms: string[]): Promise<Food[]> {
   const key = `${country}|${lang}`;
   const hit = foodCache.get(key); if (hit) return hit;
-  const p = getFood1(country, lang, wvTerms).then(r => r.length >= 5 ? r : getFood1(country, lang, wvTerms), () => getFood1(country, lang, wvTerms));
+  const p = cached(`food|v4|${key}`, () => getFood1(country, lang, wvTerms).then(r => r.length >= 5 ? r : getFood1(country, lang, wvTerms), () => getFood1(country, lang, wvTerms)).then(r => r.length >= 5 && r.filter(f => f.description).length * 2 >= r.length ? r : ([] as Food[]))); // thin or description-less (throttled) results are retried next time, not cached
   foodCache.set(key, p);
   p.then(r => { if (r.length < 5) foodCache.delete(key); }, () => foodCache.delete(key));
   if (foodCache.size > 200) foodCache.delete(foodCache.keys().next().value!);
@@ -65,7 +65,7 @@ async function getFood1(country: string, lang: string, wvTerms: string[]): Promi
   for (let i = 0; i < cands.length; i += 50) {
     let cont: any = {};
     for (let k = 0; k < 10; k++) {
-      const d = await q({ action: "query", titles: cands.slice(i, i + 50).map(c => c.title).join("|"), prop: "pageviews", pvipdays: "30", ...cont }).catch(() => null);
+      const d = await q({ action: "query", titles: cands.slice(i, i + 50).map(c => c.title).join("|"), prop: "pageviews", pvipdays: "14", ...cont }).catch(() => null);
       for (const pg of d?.query?.pages || []) if (pg.pageviews) pv.set(pg.title, Object.values(pg.pageviews).reduce((s: number, x: any) => s + (x || 0), 0) as number);
       if (!d?.continue) break; cont = d.continue;
     }
@@ -75,12 +75,14 @@ async function getFood1(country: string, lang: string, wvTerms: string[]): Promi
   const stem = (x: string) => x.length > 6 ? x.slice(0, Math.max(5, x.length - 3)) : x;
   const ids = [demonym, norm(country), stem(demonym), stem(norm(country))].filter(x => x.length >= 4);
   const isLocal = (d: string) => { const n = norm(d); return ids.some(x => n.includes(x)); };
-  const FOREIGN = /\b(french|italian|indonesian|indian|malay|malaysian|chinese|japanese|korean|thai|vietnamese|spanish|portuguese|german|british|english|scottish|irish|(?<!south |latin |north )american|mexican|turkish|greek|dutch|polish|russian|swiss|belgian|austrian|hungarian|middle eastern|arab|levantine|persian|lebanese|moroccan|peruvian|brazilian|argentine|argentinian|chilean|south african|australian|new zealand|filipino|caribbean|jamaican|cuban|ethiopian|nigerian|south asian|east asian|european|asian|african|latin american|mediterranean|scandinavian|swedish|norwegian|danish|finnish|uruguayan|colombian|venezuelan)\b/i;
+  const FOREIGN = /\b(french|italian|indonesian|indian|malay|malaysian|chinese|japanese|korean|thai|vietnamese|spanish|portuguese|german|british|english|scottish|irish|(?<!south |latin |north )american|mexican|turkish|greek|dutch|polish|russian|swiss|belgian|austrian|hungarian|middle eastern|arab|levantine|persian|lebanese|moroccan|peruvian|brazilian|argentine|argentinian|chilean|south african|australian|new zealand|filipino|caribbean|jamaican|cuban|ethiopian|nigerian|south asian|east asian|european|asian|african|latin american|mediterranean|scandinavian|swedish|norwegian|danish|finnish|uruguayan|colombian|venezuelan|paraguayan|bolivian|iberian|hispanic|ecuadorian)\b/i;
   const foreign = (d: string) => { const m = d.match(new RegExp(FOREIGN.source, "gi")) || []; return m.some(x => !isLocal(x)); }; // any other cuisine named, first or jointly ("Italian and Portuguese")
   const NOT_DISH2 = /\bcheese\b|wine ?making|\bwine\b|\bliqueur\b|\bspirits?\b|\bvodka\b|\bgin\b|\bbrandy\b|ingredient|\bflour\b|\bvariety\b|\bcultivar\b/i;
   cands = cands.filter(c => !foreign(c.desc) && !(NOT_DISH2.test(c.desc) && !/dish|dessert|pastry|soup|stew|sandwich|snack|cake|tart|pie|bread|liqueur|drink|cocktail/i.test(c.desc)));
   const localC = cands.filter(c => isLocal(c.desc));
+  // Thin local list: keep local items plus ones the Wikivoyage guide names, not generic international foods (cheesecake)
   if (localC.length >= 5) cands = localC;
+  else if (localC.length >= 3) cands = cands.filter(c => localC.includes(c) || wvSet.has(norm(c.from)) || wvSet.has(norm(c.title)));
   const demonymish = demonym;
   const score = (c: { title: string; desc: string; from: string }) => Math.log10((pv.get(c.title) || 0) + 10) + (wvSet.has(norm(c.from)) || wvSet.has(norm(c.title)) ? 1.5 : 0) + (norm(c.desc).includes(demonymish) || norm(c.desc).includes(norm(country)) ? 1 : -1.5) + (/dish|pastry|dessert|soup|stew|sausage|noodle|dumpling|tart|cake|snack|sweet|confection|skewer|sushi|curry/i.test(c.desc) ? 0.5 : 0);
   cands.sort((a, b) => score(b) - score(a));

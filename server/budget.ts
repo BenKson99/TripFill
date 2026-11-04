@@ -18,7 +18,14 @@ const STYLE: Record<string, Record<string, number>> = {
   Packed: { "Activities & entry fees": 1.5, "Local transport": 1.4 },
 };
 
-export async function budget(countryCode: string, nights: number, travelers: number, style: string, fxForce?: string): Promise<Budget> {
+// Rough economy fare per person (USD) by great-circle distance; ground travel under 300 km
+function fareUsd(km: number, roundTrip: boolean): [number, number] {
+  const b: [number, number, number][] = [[300, 30, 80], [800, 150, 350], [2000, 250, 550], [5000, 450, 900], [9000, 800, 1500], [Infinity, 1100, 2000]];
+  const [, lo, hi] = b.find(x => km < x[0])!; const f = roundTrip ? 1 : 0.6;
+  return [lo * f, hi * f];
+}
+export interface TravelLeg { km: number; roundTrip: boolean; from: string }
+export async function budget(countryCode: string, nights: number, travelers: number, style: string, fxForce?: string, travel?: TravelLeg): Promise<Budget> {
   const ci = countryInfo(countryCode); const days = nights + 1; const P = Math.max(1, travelers);
   const scale = ci.pli / 100; const rooms = Math.ceil(P / 2);
   const fx = await getFx({ force: fxForce }); const rate = fx.ok ? (fx.rates[ci.cur] ?? null) : null;
@@ -31,7 +38,12 @@ export async function budget(countryCode: string, nights: number, travelers: num
     const low = round(lowUsd * k), high = round(highUsd * k);
     return { category, basis: b.basis + (f !== 1 ? ` (×${f} for ${style} pace)` : ""), lowUsd, highUsd, low, high, total: round((low + high) / 2) };
   });
-  lines.push({ category: "Flights / long-distance travel", basis: "enter your actual fare", lowUsd: 0, highUsd: 0, low: 0, high: 0, total: 0 });
+  if (travel && travel.km > 0) {
+    const [lo, hi] = fareUsd(travel.km, travel.roundTrip); const lowUsd = round(lo * P), highUsd = round(hi * P);
+    const low = round(lowUsd * k), high = round(highUsd * k);
+    const mode = travel.km < 300 ? "bus/train/car" : "economy flight";
+    lines.push({ category: "Flights / long-distance travel", basis: `rough estimate, editable — ${travel.roundTrip ? "round-trip" : "one-way"} ${mode} from ${travel.from} (~${travel.km.toLocaleString("en-US")} km), ${P} traveler(s); check real fares`, lowUsd, highUsd, low, high, total: round((low + high) / 2) });
+  } else lines.push({ category: "Flights / long-distance travel", basis: "add a home city for a rough estimate, or enter your actual fare", lowUsd: 0, highUsd: 0, low: 0, high: 0, total: 0 });
   return {
     lines, currency, localCurrency: ci.cur, usdRate: rate, pli: ci.pli,
     fxNote: rate ? `Converted from a USD baseline at 1 USD ≈ ${Number(rate.toPrecision(4))} ${ci.cur} (${fx.source})` : (ci.cur === "USD" ? "Prices in USD" : `Exchange rate unavailable — shown in USD instead of ${ci.cur}`),

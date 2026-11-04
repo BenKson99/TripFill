@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.3
+- Speed: Wikipedia/Wikidata/OSRM answers cached in memory + on disk for 24 h (`.cache/http`, `TRIPFILL_CACHE_DIR`); whole-place and per-country food results cached too. Throttled or partial results are never cached. Lookups run in parallel (food alongside sights, batched wbgetentities, drive times alongside pageviews), with Overpass capped at ~4 s (mirrors raced, optional), SPARQL at 7 s, and per-host concurrency limits. A 429 with a short Retry-After is retried; a long one fails fast.
+- Drive times: still one batched OSRM table call; the estimate fallback uses a 2.0 mountain-road factor for ski fields, peaks and parks.
+- Alcoholic drinks moved out of the dishes and dinners into a "🍷 Local drinks" line.
+- Near-duplicates (e.g. Table Mountain vs Table Mountain National Park) deduped; the shorter landmark name is kept.
+- Budget: rough flight/long-distance estimate from home (distance bands, round-trip; multi-city legs get one-way hops), labelled "rough estimate, editable".
+- Food: thin local lists no longer padded with generic international foods; more neighbouring cuisines filtered.
+- Budget inputs widen to fit 5+ digit amounts.
+
 ## 1.2.2
 - Real drive times from OSRM (free, no key); falls back to straight-line x1.4 estimate labelled "est." when a point snaps >2 km from a road.
 - Day trips over ~2.5 h each way are dropped; labels show "~Xh Ym drive each way".

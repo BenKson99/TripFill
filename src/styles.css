@@ -214,7 +214,7 @@ tbody tr:last-child td{border-bottom:0;background:var(--surface-2)}
 .rate{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;background:var(--teal-soft);color:var(--ink);border-radius:var(--r-pill);padding:6px 14px;font-size:13.5px}.rate.same{background:var(--surface-2)}.warn-inline{background:var(--sun-soft)!important}
 .linkbtn{background:none!important;color:var(--link);padding:0 6px;font-size:15px}
 .moneycard{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:var(--s3)}
-.dual{display:flex;gap:6px;align-items:center}.dual input{max-width:110px}.dual small{color:var(--muted)}
+.dual{display:flex;gap:6px;align-items:center}.dual input.num{max-width:none;min-width:0}.dual small{color:var(--muted)}
 .snap{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:var(--s3);margin:var(--s3) 0}
 .snap>div{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:10px 14px;display:flex;flex-direction:column;gap:2px}
 .snap small{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:700}

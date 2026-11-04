@@ -1,4 +1,4 @@
-import { getJSON, UA } from "./fetchy.js";
+import { getJSON, UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
 import { getFood, type Food } from "./food.js";
 import { countryInfo } from "./countries.js";
@@ -116,7 +116,7 @@ async function pageviews(titles: string[]): Promise<Map<string, number>> {
   for (let i = 0; i < titles.length; i += 50) {
     let cont = "";
     for (let k = 0; k < 10; k++) {
-      const d = await getJSON<any>(`https://en.wikipedia.org/w/api.php?action=query&prop=pageviews&pvipdays=30&redirects=1&titles=${titles.slice(i, i + 50).map(encodeURIComponent).join("|")}&format=json&formatversion=2${cont}`).catch(() => null);
+      const d = await getJSON<any>(`https://en.wikipedia.org/w/api.php?action=query&prop=pageviews&pvipdays=14&redirects=1&titles=${titles.slice(i, i + 50).map(encodeURIComponent).join("|")}&format=json&formatversion=2${cont}`).catch(() => null);
       const redir = new Map<string, string>((d?.query?.redirects || []).map((r: any) => [r.to, r.from]));
       for (const pg of d?.query?.pages || []) if (pg.pageviews) { const v = Object.values(pg.pageviews).reduce((s: number, x: any) => s + (x || 0), 0) as number; out.set(pg.title, v); if (redir.has(pg.title)) out.set(redir.get(pg.title)!, v); }
       if (!d?.continue) break; cont = "&" + new URLSearchParams(d.continue).toString();
@@ -126,8 +126,9 @@ async function pageviews(titles: string[]): Promise<Map<string, number>> {
 }
 
 // Real drive times from the public OSRM demo router (free, no key); straight-line × 1.4 road factor at 60 km/h as fallback
-async function driveMinutes(p: Place, dests: { lat: number; lon: number }[]): Promise<{ min: number; src: "osrm" | "estimate" }[]> {
-  const est = dests.map(d => ({ min: Math.round(haversine(p, d) * 1.4), src: "estimate" as const }));
+async function driveMinutes(p: Place, dests: { lat: number; lon: number; factor?: number }[]): Promise<{ min: number; src: "osrm" | "estimate" }[]> {
+  // one batched OSRM table request for all destinations; minutes = km × road factor at 60 km/h
+  const est = dests.map(d => ({ min: Math.round(haversine(p, d) * (d.factor ?? 1.4)), src: "estimate" as const }));
   if (!dests.length) return est;
   try {
     const coords = [p, ...dests].map(c => `${c.lon.toFixed(5)},${c.lat.toFixed(5)}`).join(";");
@@ -141,10 +142,11 @@ export const MAX_DRIVE_MIN = 150;
 
 // Wikidata SPARQL (free, no key): museums, galleries, theatres, cinemas, aquariums, planetariums, market halls within 10 km,
 // including ones with no English Wikipedia article
-async function wikidataIndoor(p: Place): Promise<Highlight[]> {
+const wikidataIndoor = (p: Place) => cached(`wdIndoor|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, () => wikidataIndoor0(p));
+async function wikidataIndoor0(p: Place): Promise<Highlight[]> {
   const q = `SELECT ?i ?l ?cl ?c WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "10". } VALUES ?k { wd:Q33506 wd:Q1007870 wd:Q207694 wd:Q24354 wd:Q41253 wd:Q2281788 wd:Q57660343 wd:Q11315 wd:Q15206070 } ?i wdt:P31/wdt:P279? ?k. ?i rdfs:label ?l. FILTER(LANG(?l) IN ("en","mul")) OPTIONAL { ?k rdfs:label ?cl FILTER(LANG(?cl) = "en") } } LIMIT 80`;
   try {
-    const r = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(q)}`, { headers: { "User-Agent": UA, Accept: "application/sparql-results+json" }, signal: AbortSignal.timeout(20000) });
+    const r = await fetch(`https://query.wikidata.org/sparql?format=json&query=${encodeURIComponent(q)}`, { headers: { "User-Agent": UA, Accept: "application/sparql-results+json" }, signal: AbortSignal.timeout(7000) });
     if (!r.ok) return [];
     const j: any = await r.json(); const seen = new Set<string>();
     const rank = (c: string) => /art museum|gallery/.test(c) ? 0 : /museum/.test(c) ? 1 : /aquarium|planetarium/.test(c) ? 2 : /theat|performing/.test(c) ? 3 : /market/.test(c) ? 4 : 5;
@@ -155,13 +157,14 @@ async function wikidataIndoor(p: Place): Promise<Highlight[]> {
 }
 
 // OpenStreetMap (Overpass, free, no key): named museums, galleries, aquariums, theatres, cinemas near the centre
-async function osmIndoor(p: Place): Promise<Highlight[]> {
-  const q = `[out:json][timeout:20];(nwr(around:10000,${p.lat},${p.lon})["tourism"~"^(museum|gallery|aquarium)$"]["name"];nwr(around:10000,${p.lat},${p.lon})["amenity"~"^(theatre|cinema|arts_centre|planetarium)$"]["name"];);out center 60;`;
+const osmIndoor = (p: Place) => cached(`osmIndoor|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, () => osmIndoor0(p));
+async function osmIndoor0(p: Place): Promise<Highlight[]> {
+  const q = `[out:json][timeout:4];(nwr(around:10000,${p.lat},${p.lon})["tourism"~"^(museum|gallery|aquarium)$"]["name"];nwr(around:10000,${p.lat},${p.lon})["amenity"~"^(theatre|cinema|arts_centre|planetarium)$"]["name"];);out center 60;`;
   // Public Overpass instances are busy: POST (GET gets 406), retry briefly, then try a mirror
-  for (const host of ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"]) {
-    try {
-      const r = await fetch(host, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: AbortSignal.timeout(15000) });
-      if (!r.ok) { await new Promise(res => setTimeout(res, 1500)); continue; }
+  // Optional extra: one ~4 s attempt per mirror, raced, never blocks generation for long
+  const one = async (host: string): Promise<Highlight[]> => {
+      const r = await fetch(host, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: AbortSignal.timeout(4000) });
+      if (!r.ok) throw new Error("overpass " + r.status);
       const d: any = await r.json();
       const rank = (k: string) => ["museum", "gallery", "aquarium", "planetarium", "arts_centre", "theatre", "cinema"].indexOf(k);
       const seen = new Set<string>();
@@ -169,26 +172,22 @@ async function osmIndoor(p: Place): Promise<Highlight[]> {
         .filter((x: any) => x.name && x.name.length > 3 && /^\p{Lu}|^\d/u.test(x.name) && !seen.has(x.name) && seen.add(x.name))
         .sort((a: any, b: any) => rank(a.kind) - rank(b.kind))
         .map((x: any) => ({ name: x.name, description: `${x.kind.replace("_", " ")} (OpenStreetMap)`, setting: "indoor" as const, indoor: true, type: x.kind.replace("_", " "), source: "OpenStreetMap", lat: x.e.lat ?? x.e.center?.lat, lon: x.e.lon ?? x.e.center?.lon }));
-    } catch { /* try the mirror */ }
-  }
-  return [];
+  };
+  return Promise.any(["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"].map(one)).catch(() => []);
 }
 
 async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide: Set<string> = new Set(), ski: Set<string> = new Set(), want = 14): Promise<{ top: Highlight[]; extras: Highlight[] }> {
   const uniq = [...new Set(qids)];
   const ents: any[] = [];
-  for (let i = 0; i < uniq.length; i += 50) {
-    const d = await getJSON<any>(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${uniq.slice(i, i + 50).join("|")}&props=sitelinks|descriptions|labels|claims&languages=en&format=json`, 25000).catch(() => null);
+  const chunks = (a: string[]) => Array.from({ length: Math.ceil(a.length / 50) }, (_, i) => a.slice(i * 50, i * 50 + 50));
+  for (const d of await Promise.all(chunks(uniq).map(c => getJSON<any>(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${c.join("|")}&props=sitelinks|descriptions|labels|claims&languages=en&format=json`, 12000).catch(() => null))))
     if (d?.entities) ents.push(...Object.values(d.entities));
-  }
   // Resolve instance-of (P31) class labels
   const p31 = (e: any): string[] => (e.claims?.P31 || []).map((c: any) => c.mainsnak?.datavalue?.value?.id).filter(Boolean);
   const classIds = [...new Set(ents.flatMap(p31))];
   const classLabel = new Map<string, string>();
-  for (let i = 0; i < classIds.length; i += 50) {
-    const d = await getJSON<any>(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${classIds.slice(i, i + 50).join("|")}&props=labels&languages=en&format=json`).catch(() => null);
+  for (const d of await Promise.all(chunks(classIds).map(c => getJSON<any>(`https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${c.join("|")}&props=labels&languages=en&format=json`, 10000).catch(() => null))))
     for (const [k, v] of Object.entries<any>(d?.entities || {})) classLabel.set(k, v.labels?.en?.value || "");
-  }
   let rows = ents.filter(e => e.labels?.en && e.sitelinks?.enwiki).map(e => {
     const classes = p31(e).map(c => classLabel.get(c) || "").filter(Boolean);
     const desc = e.descriptions?.en?.value || "";
@@ -212,11 +211,15 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   rows = rows.filter(r => km(r) <= 160); // beyond ~2 h each way is not a day trip (and river/region centroids can be far off)
   // Drive times for anything outside the city; drop places more than ~2.5 h each way by road
   const far = rows.filter(r => km(r) > 15 && r.lat != null).slice(0, 80);
-  const dm = await driveMinutes(p, far.map(r => ({ lat: r.lat, lon: r.lon })));
+  // Mountain access roads (ski fields, parks, peaks) wind far more than city roads: road factor 2.0 instead of 1.4
+  const MOUNT = /ski|mountain|peak|range|national park|glacier|summit|volcano|pass\b/i;
+  const [dm, pv] = await Promise.all([
+    driveMinutes(p, far.map(r => ({ lat: r.lat, lon: r.lon, factor: MOUNT.test(r.classes.join(" ") + " " + r.desc) || ski.has(r.id) ? 2.0 : 1.4 }))),
+    pageviews(rows.slice(0, 60).map(r => r.title)),
+  ]);
   const drive = new Map(far.map((r, i) => [r.id, dm[i]]));
   rows = rows.filter(r => !(drive.get(r.id)?.min! > MAX_DRIVE_MIN));
   const pool = rows.slice(0, 50);
-  const pv = await pageviews(pool.map(r => r.title));
   // Popularity: log pageviews + log sitelinks, small boost for guide-curated sights
   const score = (r: typeof rows[number]) => Math.log10((pv.get(r.title) || 0) + 10) * 2 + Math.log10(r.sl + 1) + (curated.has(r.id) ? 1 : 0) - (wide.has(r.id) && km(r) > 15 ? 1.5 : 0);
   const skiOrder = [...ski];
@@ -251,8 +254,14 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<{ highlights: Highlight[]; indoorExtra: Highlight[]; food: Food[]; sources: string[]; guideUrl?: string }> {
+type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; food: Food[]; drinks: Food[]; sources: string[]; guideUrl?: string };
+/** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
+export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
+  return cached(`places|v5|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.food.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
+}
+async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
+  const countryP = wikitext(p.country); const wdIndoorP = wikidataIndoor(p); const osmP = osmIndoor(p); // start slow optional lookups now
   const page = await wikitext(p.name) ;
   let highlights: Highlight[] = []; let indoorExtra: Highlight[] = []; let food: Food[] = []; let cityFood: Food[] = []; let guideUrl: string | undefined;
   const curated = new Set<string>(); const extra = new Set<string>();
@@ -270,7 +279,7 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
     const districts = new Set([...page.text.matchAll(/\[\[[^|\]#]+\/[^|\]#]+\|([^\]]+)\]\]/g)].map(m => clean(m[1]).toLowerCase()));
     cityFood = boldTerms(section(page.text, "Eat")).filter(f => !districts.has(f.name.toLowerCase()) && !/district|neighbo|bairro|street|rua |area/i.test(f.name));
   }
-  try {
+  const hlTask = (async () => { try {
     const [near, wideL, skiL] = await Promise.all([nearbyQids(p), Promise.all([searchQids(p, "tourist attraction", 70, 30), searchQids(p, "museum OR park OR plaza OR church OR winery OR monument OR beach", 40, 30), searchQids(p, "museum OR gallery OR aquarium OR theatre OR market OR library OR planetarium", 12, 40), searchQids(p, "national park OR mountain OR lake OR waterfall OR glacier OR vineyard", 120, 15)]).then(a => [...new Set(a.flat())]), opts.ski ? searchQids(p, "ski area", 80, 15) : Promise.resolve([] as string[])]);
     const want = opts.want || 14;
     const qids = [...curated, ...extra, ...near, ...wideL, ...skiL];
@@ -278,8 +287,7 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
     highlights = rk.top; indoorExtra = rk.extras;
     if (indoorExtra.length < 8) {
       const have = new Set([...highlights, ...indoorExtra].map(h => h.name.toLowerCase()));
-      const osmP = osmIndoor(p); // in parallel; Overpass is often slow
-      const wd = (await wikidataIndoor(p)).filter(h => !have.has(h.name.toLowerCase()) && (have.add(h.name.toLowerCase()), true));
+      const wd = (await wdIndoorP).filter(h => !have.has(h.name.toLowerCase()) && (have.add(h.name.toLowerCase()), true));
       if (wd.length) { indoorExtra = [...indoorExtra, ...wd].slice(0, 12); sources.push("Wikidata (indoor venues nearby)"); }
       if (indoorExtra.length < 8) {
         const osm = (await osmP).filter(h => !have.has(h.name.toLowerCase()));
@@ -287,10 +295,11 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
       }
     }
     sources.push("Wikidata + Wikipedia (nearby, ranked by notability)");
-  } catch (e) { console.warn("highlights failed", e); }
+  } catch (e) { console.warn("highlights failed", e); } })();
+  const foodTask = (async () => {
   const merge = (list: Food[], src: string) => { const have = new Set(food.map(f => f.name.toLowerCase())); for (const f of list) if (!have.has(f.name.toLowerCase()) && !/^[A-Z]/.test(f.name)) { have.add(f.name.toLowerCase()); food.push({ ...f, source: src }); } };
   merge(cityFood, "Wikivoyage");
-  const c = await wikitext(p.country);
+  const c = await countryP;
   if (c) { sources.push(`https://en.wikivoyage.org/wiki/${encodeURIComponent(c.title.replace(/ /g, "_"))}`); merge(boldTerms(section(c.text, "Eat")), `Wikivoyage (${c.title})`); }
   if (food.length < 8) try {
     const sr = await getJSON<any>(`${WV}?action=query&list=search&srsearch=${encodeURIComponent(p.country + " cuisine")}&srlimit=1&format=json`);
@@ -310,9 +319,19 @@ export async function getPlaces(p: Place, opts: { ski?: boolean; want?: number }
     if (smart.length >= 5) food = smart;
   } catch (e) { console.warn("food lookup failed, using Wikivoyage terms", e); }
   // Bold lowercase phrases in guides are usually tips/warnings ("raw shellfish"), not dish names
-  const named = food.filter(f => /^\p{Lu}/u.test(f.name));
-  food = named;
+  food = food.filter(f => /^\p{Lu}/u.test(f.name));
+  })();
+  await Promise.all([hlTask, foodTask]);
+  // Alcoholic drinks get their own "Local drinks" line instead of sitting among dishes / dinner suggestions
+  const ALC = /liqueur|\bwine\b|\bbeer\b|\bale\b|lager|spirit|brandy|vodka|\bgin\b|\brum\b|whisk|cocktail|aperitif|apéritif|alcoholic|cider|pisco|grappa|schnapps|mead\b|sake\b|port wine/i;
+  const drinks = food.filter(f => ALC.test(`${f.gloss || ""} ${f.description}`) && !/dish|soup|stew|cake|dessert|sauce/i.test(f.gloss || ""));
+  food = food.filter(f => !drinks.includes(f));
+  // Near-duplicates: "Table Mountain" vs "Table Mountain National Park" within a few km — keep the higher-ranked one
+  const near5 = (a: Highlight, b: Highlight) => a.lat == null || b.lat == null || haversine(a as any, b as any) < 40; // park centroids sit far from the landmark
+  const nm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^the /, "");
+  // keep the shorter, landmark name ("Table Mountain"), drop the longer umbrella entry
+  highlights = highlights.filter(h => !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));
-  return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), food: food.slice(0, 8), sources, guideUrl };
+  return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), food: food.slice(0, 8), drinks: drinks.slice(0, 4), sources, guideUrl };
 }

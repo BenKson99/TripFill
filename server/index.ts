@@ -79,11 +79,11 @@ app.post("/api/generate", async (req, res) => {
     const it = itinerary(inp, weather, places.highlights, places.food, places.indoorExtra); presetItinerary(it, ps, weather, places.highlights);
     res.json({
       input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
-      weather, highlights: places.highlights, food: places.food, sources: places.sources, guideUrl: places.guideUrl,
+      weather, highlights: places.highlights, food: places.food, drinks: places.drinks, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
       timeline: timeline(inp.start, !domestic),
-      budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce),
+      budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }
 });
