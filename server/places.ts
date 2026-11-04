@@ -167,7 +167,8 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   const score = (r: typeof rows[number]) => Math.log10((pv.get(r.title) || 0) + 10) * 2 + Math.log10(r.sl + 1) + (curated.has(r.id) ? 1 : 0) - (wide.has(r.id) && km(r) > 15 ? 1.5 : 0);
   const skiOrder = [...ski];
   // Ski fields: classed as ski resorts, or a top search hit for "ski area" that is a mountain/range (Coronet Peak, The Remarkables)
-  const isSki = (r: typeof rows[number]) => ski.has(r.id) && (SKI_C.test(r.classes.join("; ")) || /ski/i.test(r.desc) || (skiOrder.indexOf(r.id) < 5 && /mountain|range|peak|snowfield/i.test(r.classes.join("; ") + r.desc)));
+  const NOT_ALPINE = /cross-country|nordic|terrain park|snow ?park|snow ?farm|heli-?ski|snowfields?\b|tubing|hillclimb|road\b/i;
+  const isSki = (r: typeof rows[number]) => ski.has(r.id) && !NOT_ALPINE.test(r.name + " " + r.desc + " " + r.classes.join(" ")) && (SKI_C.test(r.classes.join("; ")) || /ski/i.test(r.desc) || (skiOrder.indexOf(r.id) < 5 && /mountain|range|peak|snowfield/i.test(r.classes.join("; ") + r.desc)));
   pool.sort((a, b) => score(b) - score(a));
   // Ski areas first when skiing, then the rest; max 4 day trips so the city still leads
   const skis = rows.filter(isSki).sort((a, b) => (score(b) - skiOrder.indexOf(b.id) * 0.4) - (score(a) - skiOrder.indexOf(a.id) * 0.4)).slice(0, 4);

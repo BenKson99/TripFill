@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-11-04
+- Day-trip afternoons are specific: a named sight nearby, or a suggestion that fits the place (shore walk, viewpoint, tasting lunch), plus a round-trip drive estimate.
+- Ski rest-day options name a real unscheduled sight or day trip instead of "Explore a market or local street".
+- Food: cheeses, wines and other ingredients that aren't dishes are dropped (e.g. Reggianito); so are dishes that name another cuisine first or jointly (e.g. Chocolate salami, Migas).
+- Ski fields: only alpine resorts and fields; cross-country, terrain-park, heli-ski and snowfield entries are excluded (e.g. Snow Farm, Snow Park).
+
 ## 1.2.0 — 2026-11-04
 - Highlights: suburbs, localities, towns and border checkpoints are filtered out; a wider (up to 120 km) Wikipedia nearcoord search adds day-trip attractions, labelled "🚐 Day trip (~N km)".
 - Ski preset: nearby ski fields (e.g. The Remarkables, Coronet Peak, Cardrona, Treble Cone) are listed first and each ski day names a field.

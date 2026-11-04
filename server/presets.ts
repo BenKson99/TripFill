@@ -94,7 +94,10 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
   if (ps.includes("business") && ps.includes("ski")) { for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = "⛷ Afternoon skiing (lifts usually close ~4 pm), then après-ski"; tag(d, "business + ski"); } return; }
   if (ps.includes("business")) for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = d.afternoon.startsWith("💼") ? d.afternoon : `💼 Work, then if time: ${d.afternoon}`; tag(d, "business"); }
   const fields = hl.filter(h => h.ski);
-  if (ps.includes("ski")) for (const [j, d] of mid.entries()) { const f = fields[j % Math.max(1, fields.length)]; const m0 = d.morning; d.morning = f ? `⛷ Ski ${f.name}${f.distanceKm ? ` (~${f.distanceKm} km away)` : ""} — first lifts are quietest` : "⛷ On the slopes (first lifts are quietest)"; const alt = m0 && !/^Free morning/.test(m0) ? m0 : d.afternoon; d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${alt ? `; or a rest day: ${alt}` : ""}`; tag(d, "ski"); }
+  const mentioned = (n: string) => days.some(x => (x.morning + x.afternoon + (x.rainyBackup || "")).includes(n));
+  const spare = hl.filter(h => !h.ski && !mentioned(h.name)); const spareUsed = new Set<string>();
+  if (ps.includes("ski")) for (const [j, d] of mid.entries()) { const f = fields[j % Math.max(1, fields.length)]; const m0 = d.morning; d.morning = f ? `⛷ Ski ${f.name}${f.distanceKm ? ` (~${f.distanceKm} km away)` : ""} — first lifts are quietest` : "⛷ On the slopes (first lifts are quietest)"; let alt = m0 && !/^Free morning/.test(m0) ? m0 : d.afternoon;
+    if (!alt || /^(Explore a market|Long lunch)/.test(alt)) { const s2 = spare.find(h => !spareUsed.has(h.name)); if (s2) { spareUsed.add(s2.name); alt = (s2 as any).dayTrip ? `🚐 Day trip: ${s2.name} (~${s2.distanceKm} km)` : s2.name; } } d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${alt ? `; or a rest day: ${alt}` : ""}`; tag(d, "ski"); }
   if (ps.includes("hiking")) {
     const best = [...(dry.length ? dry : mid)].sort((a, b) => (wx(a)?.precipProb ?? 0) - (wx(b)?.precipProb ?? 0))[0];
     if (best) { used.add(best); best.morning = `🥾 Day hike (start early; driest day in the forecast)`; best.afternoon = `🥾 Hike continues — back by late afternoon; then ${best.afternoon}`; tag(best, "hiking"); }

@@ -71,7 +71,7 @@ app.post("/api/generate", async (req, res) => {
       if (m.highlights.length) await polish(m.highlights);
       return res.json({ input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
     }
-    const [weather, places] = await Promise.all([getWeather(place, inp.start, end), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" ? 20 : 14 })]);
+    const [weather, places] = await Promise.all([getWeather(place, inp.start, end), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
     const aiPolished = await polish(places.highlights);
     const ps = presetsOf(inp);

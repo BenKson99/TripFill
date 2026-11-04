@@ -85,6 +85,7 @@ export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: 
   return { groups: Object.entries(g).map(([group, items]) => ({ group, items })), leaveAtHome };
 }
 
+const dist = (a: { lat?: number; lon?: number }, b: { lat?: number; lon?: number }) => { const r = (x: number) => x * Math.PI / 180; const h = Math.sin(r(b.lat! - a.lat!) / 2) ** 2 + Math.cos(r(a.lat!)) * Math.cos(r(b.lat!)) * Math.sin(r(b.lon! - a.lon!) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Food[]): ItinDay[] {
   const style = inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? 3 : 2;
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
@@ -102,7 +103,10 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     const trip = !rain && style !== "Slow" ? queue.find(x => x.dayTrip) : undefined;
     const fullDays = days.length - 2;
     const cityLeft = queue.filter(x => !x.dayTrip).length;
-    if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); slots.push(label(trip), "Explore the area & head back for sunset"); }
+    if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); const near = trip.lat != null ? queue.find(x => x !== trip && x.lat != null && dist(x, trip) < 15) : undefined;
+      if (near) queue.splice(queue.indexOf(near), 1);
+      const back = trip.distanceKm ? ` (~${Math.max(1, Math.round(trip.distanceKm * 2 / 60))} h round-trip drive)` : "";
+      slots.push(label(trip), near ? `Also nearby: ${near.name}, then head back${back}` : `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`); }
     else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
     const eats = food.filter(x => !/wine|drink|beverage|liqueur|spirit|beer|\btea\b|coffee/i.test((x as any).gloss || "")); const f = eats.length ? eats[i % eats.length] : food[i % Math.max(1, food.length)];
     // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again

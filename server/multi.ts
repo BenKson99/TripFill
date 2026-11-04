@@ -29,7 +29,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const legs = places.map((place, k) => ({ place, start: starts[k], end: k < places.length - 1 ? starts[k + 1] : tripEnd })).filter(l => l.start <= tripEnd).map(l => ({ ...l, end: l.end > tripEnd ? tripEnd : l.end }));
   const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp);
   const built = await Promise.all(legs.map(async (l, k) => {
-    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" ? 20 : 14 })]);
+    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.food.forEach(f => (f as any).leg = l.place.name);
     // Same-country legs share one food list: rotate it so the next city doesn't repeat the same dinners
