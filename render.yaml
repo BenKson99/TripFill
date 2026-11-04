@@ -1,0 +1,18 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: tripfill
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: TRIPFILL_CONTACT
+        sync: false
+      # Optional: lightly polishes highlight descriptions. Leave unset to stay keyless.
+      - key: OPENAI_API_KEY
+        sync: false

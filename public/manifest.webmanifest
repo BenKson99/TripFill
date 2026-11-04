@@ -1,0 +1,15 @@
+{
+  "name": "TripFill — trip planner",
+  "short_name": "TripFill",
+  "description": "Destination + dates in → weather, highlights, packing list and a day-by-day plan out.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6efe4",
+  "theme_color": "#b4532a",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

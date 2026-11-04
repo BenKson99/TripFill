@@ -1,0 +1,99 @@
+import express from "express";
+import fs from "node:fs";
+import path from "node:path";
+import { geocode, getWeather, dateRange, type Place } from "./weather.js";
+import { getPlaces } from "./places.js";
+import { packing, itinerary, timeline, type TripInput } from "./plan.js";
+import { budget } from "./budget.js";
+import { getFx } from "./fx.js";
+import { tripFacts } from "./trip.js";
+import { mountShare, shareStore } from "./share.js";
+import { buildMulti } from "./multi.js";
+import { presetsOf, presetPacking, presetItinerary } from "./presets.js";
+
+// Minimal .env loader (no dependency)
+try { for (const l of fs.readFileSync(".env", "utf8").split("\n")) { const m = l.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; } } catch { /* no .env */ }
+
+const app = express();
+mountShare(app);
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/api/geocode", async (req, res) => {
+  try { res.json({ results: await geocode(String(req.query.q || "")) }); }
+  catch (e: any) { res.status(502).json({ error: e.message }); }
+});
+
+app.get("/api/fx", async (req, res) => {
+  const force = process.env.NODE_ENV === "production" ? undefined : (req.query.force as string | undefined);
+  res.set("Cache-Control", "no-store");
+  res.json(await getFx({ refresh: req.query.refresh === "1", force }));
+});
+
+async function polish(highlights: any[]): Promise<boolean> {
+  const key = process.env.OPENAI_API_KEY; if (!key || !highlights.length) return false;
+  try {
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: "gpt-4o-mini", response_format: { type: "json_object" }, messages: [
+        { role: "system", content: "Rewrite each description as one friendly traveller-facing sentence (max 30 words). Use ONLY facts in the input. Never add opening hours, prices or new facts. Return {\"d\":[...]} in the same order." },
+        { role: "user", content: JSON.stringify(highlights.map(h => `${h.name}: ${h.description}`)) }] }),
+    });
+    const j: any = await r.json(); const d = JSON.parse(j.choices[0].message.content).d;
+    if (Array.isArray(d) && d.length === highlights.length) { d.forEach((t: string, i: number) => { highlights[i].description = t; }); return true; }
+  } catch (e) { console.warn("OpenAI polish skipped:", (e as Error).message); }
+  return false;
+}
+
+app.post("/api/generate", async (req, res) => {
+  try {
+    const inp = req.body as TripInput & { place?: Place };
+    if (!inp.start || !inp.end || inp.end < inp.start) return res.status(400).json({ error: "Valid start and end dates required" });
+    let end = inp.end; const all = dateRange(inp.start, inp.end); let capped = false;
+    if (all.length > 14) { end = all[13]; capped = true; }
+    let place = inp.place;
+    if (!place) {
+      const matches = await geocode(inp.destination);
+      if (!matches.length) return res.status(404).json({ error: `Couldn't find "${inp.destination}"` });
+      const distinct = matches.filter(m => (m.population ?? 0) > 0 || matches.length === 1);
+      if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 10 * (distinct[1].population || 0))) return res.json({ needsChoice: true, matches });
+      place = (distinct[0] || matches[0]); (inp as any)._matches = matches;
+    }
+    let home = inp.home as Place | undefined;
+    if (!home && (inp as any).homeCity) home = (await geocode((inp as any).homeCity))[0];
+    const facts = home ? tripFacts(home, place, inp.start) : null;
+    const domestic = !!facts?.domestic;
+    const fxForce = process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce;
+    const extra = ((inp as any).legs || []).filter((l: any) => l && (l.destination || l.place) && l.start);
+    if (extra.length) {
+      const m = await buildMulti(inp, place, extra, home, fxForce);
+      if (m.highlights.length) await polish(m.highlights);
+      return res.json({ input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
+    }
+    const [weather, places] = await Promise.all([getWeather(place, inp.start, end), getPlaces(place)]);
+    const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
+    const aiPolished = await polish(places.highlights);
+    const ps = presetsOf(inp);
+    const pk = packing(inp, weather, place, nights, domestic); presetPacking(pk.groups, ps, weather, pk.leaveAtHome);
+    const it = itinerary(inp, weather, places.highlights, places.food); presetItinerary(it, ps, weather);
+    res.json({
+      input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
+      weather, highlights: places.highlights, food: places.food, sources: places.sources, guideUrl: places.guideUrl,
+      packing: pk,
+      itinerary: it,
+      timeline: timeline(inp.start, !domestic),
+      budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce),
+    });
+  } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }
+});
+
+app.get("/healthz", (_q, r) => r.json({ ok: true, version: process.env.npm_package_version || "1.1.0", uptime: Math.round(process.uptime()), shareStore: shareStore() }));
+
+if (process.env.NODE_ENV === "production") {
+  const dist = path.resolve("dist");
+  if (!fs.existsSync(path.join(dist, "index.html"))) console.warn("dist/index.html missing — run `npm run build` first");
+  app.use(express.static(dist, { index: false, setHeaders: (res, f) => { if (f.includes(`${path.sep}assets${path.sep}`)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); else res.setHeader("Cache-Control", "no-cache"); } }));
+  app.get("*", (_q, r) => { r.setHeader("Cache-Control", "no-cache"); r.sendFile(path.join(dist, "index.html")); });
+}
+const port = Number(process.env.PORT || 8787);
+const host = process.env.HOST || "0.0.0.0";
+app.listen(port, host, () => console.log(`TripFill listening on http://${host}:${port} (${process.env.NODE_ENV || "development"})`));
