@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.2
+- Restaurants: local-cuisine ranking — dishes matching the destination country get a boost, clearly foreign cuisines are demoted and capped at 2 per list.
+- Small towns: restaurant/coffee search widens 2.5 → 6 → 15 km (OSM + Wikidata) until there are ≥5 restaurants and ≥3 cafés.
+- Geocoding: populated places (towns/cities) ranked ahead of islands, glaciers and other natural features; Tromsø now resolves straight to the city.
+- Past start dates: inline warning on the form, confirm before planning; the API rejects past starts unless confirmed.
+- "Today" uses the traveller's local timezone (sent by the browser), else the destination's — no more UTC rollover in the evening. Form defaults use local dates too.
+- Coffee shops: cinemas, theatres, hotels, clubs and similar venues filtered out.
+- Caches bumped (eats v4, places v10).
+
 ## 1.5.1
 - Weather: last forecast-horizon day no longer shows 0°/blank (Open-Meteo nulls now filled from typical); forecast window trimmed to 14 days.
 - Highlights: exact duplicate names removed (e.g. "Blackwell School" twice in Marfa).

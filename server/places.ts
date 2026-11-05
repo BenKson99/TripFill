@@ -245,7 +245,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v9|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
+  return cached(`places|v10|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];

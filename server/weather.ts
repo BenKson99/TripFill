@@ -1,12 +1,23 @@
 import { getJSON } from "./fetchy.js";
 
-export interface Place { id: number; name: string; country: string; countryCode: string; admin1?: string; lat: number; lon: number; timezone?: string; population?: number }
+export interface Place { id: number; name: string; country: string; countryCode: string; admin1?: string; lat: number; lon: number; timezone?: string; population?: number; featureCode?: string }
 export interface DayWeather { date: string; tmax: number; tmin: number; precipMm: number; precipProb: number | null; code: number | null; summary: string; typical?: boolean }
 export interface WeatherResult { source: "forecast" | "typical" | "mixed"; note: string; days: DayWeather[]; stats: { avgHigh: number; avgLow: number; minLow: number; maxHigh: number; rainyDays: number } }
 
 export async function geocode(q: string): Promise<Place[]> {
   const d = await getJSON<any>(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`);
-  return (d.results || []).map((r: any) => ({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population }));
+  const all: Place[] = (d.results || []).map((r: any) => ({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population, featureCode: r.feature_code }));
+  return sortPlaces(all);
+}
+/** Populated places (GeoNames PPL*) first, by population; islands, glaciers, peaks etc. after (v1.5.2). */
+export const isPopulated = (p: Place) => /^PPL/.test(p.featureCode || "") || (!p.featureCode && (p.population ?? 0) > 0);
+export function sortPlaces(all: Place[]): Place[] {
+  return all.map((p, i) => ({ p, i })).sort((a, b) => (+isPopulated(b.p) - +isPopulated(a.p)) || (isPopulated(a.p) ? ((b.p.population || 0) - (a.p.population || 0)) : 0) || a.i - b.i).map(x => x.p);
+}
+/** Today's calendar date (YYYY-MM-DD) in an IANA zone; falls back to UTC if unknown. */
+export function todayIn(tz?: string, now = new Date()): string {
+  try { if (tz) return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now); } catch {}
+  return now.toISOString().slice(0, 10);
 }
 
 const CODES: Record<number, string> = { 0: "Clear", 1: "Mostly clear", 2: "Partly cloudy", 3: "Overcast", 45: "Fog", 48: "Fog", 51: "Light drizzle", 53: "Drizzle", 55: "Heavy drizzle", 61: "Light rain", 63: "Rain", 65: "Heavy rain", 66: "Freezing rain", 67: "Freezing rain", 71: "Light snow", 73: "Snow", 75: "Heavy snow", 77: "Snow grains", 80: "Showers", 81: "Showers", 82: "Violent showers", 85: "Snow showers", 86: "Snow showers", 95: "Thunderstorm", 96: "Thunderstorm w/ hail", 99: "Thunderstorm w/ hail" };
@@ -26,8 +37,9 @@ export function stats(days: DayWeather[]) {
 // so judge them by how often it was wet; forecast days use probability or amount.
 export const isRainy = (d: DayWeather) => (d.precipProb ?? 0) >= 50 || (!d.typical && d.precipMm >= 2);
 
-export async function getWeather(p: Place, start: string, end: string, forceTypical = false): Promise<WeatherResult> {
-  const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+export async function getWeather(p: Place, start: string, end: string, forceTypical = false, todayIso?: string): Promise<WeatherResult> {
+  // "Today" = traveller's local date (client tz), else destination's — never raw UTC (v1.5.2)
+  const today = new Date((todayIso || todayIn(p.timezone)) + "T00:00:00Z");
   const endD = new Date(end + "T00:00:00Z");
   const daysOut = (endD.getTime() - today.getTime()) / 86400000;
   const startD = new Date(start + "T00:00:00Z");
@@ -35,7 +47,7 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
   const lastFcIso = lastFc.toISOString().slice(0, 10);
   if (!forceTypical && daysOut > 14 && startD <= lastFc && startD >= today) {
     // Mixed: forecast for the first part, typical for the rest
-    const [a, b] = await Promise.all([getWeather(p, start, lastFcIso), getWeather(p, dateRange(lastFcIso, end)[1], end)]);
+    const [a, b] = await Promise.all([getWeather(p, start, lastFcIso, false, todayIso), getWeather(p, dateRange(lastFcIso, end)[1], end, false, todayIso)]);
     const days = [...a.days, ...b.days];
     return { source: "mixed", note: `Live forecast through ${lastFcIso}; later days are typical for this season (averages of prior years, not a forecast).`, days, stats: stats(days) };
   }

@@ -9,7 +9,7 @@ export interface LegIn { destination: string; start: string; place?: Place }
 const fmt = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
 
 /** Multi-city plan. Leg 1 = main destination from inp.start; each extra leg starts (travel day) on its own date; last leg ends at inp.end. */
-export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], home: Place | undefined, fxForce?: string) {
+export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], home: Place | undefined, fxForce?: string, todayIso?: string) {
   const all = dateRange(inp.start, inp.end); let capped = false; let tripEnd = inp.end;
   if (all.length > 14) { tripEnd = all[13]; capped = true; }
   const starts = [inp.start, ...extra.map(l => l.start)];
@@ -29,7 +29,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const legs = places.map((place, k) => ({ place, start: starts[k], end: k < places.length - 1 ? starts[k + 1] : tripEnd })).filter(l => l.start <= tripEnd).map(l => ({ ...l, end: l.end > tripEnd ? tripEnd : l.end }));
   const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp);
   const built = await Promise.all(legs.map(async (l, k) => {
-    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
+    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.eats.restaurants.forEach(f => f.leg = l.place.name); pl.eats.cafes.forEach(f => f.leg = l.place.name);
     // Same-country legs share one food list: rotate it so the next city doesn't repeat the same dinners

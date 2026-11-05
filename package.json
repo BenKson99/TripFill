@@ -1,6 +1,6 @@
 {
   "name": "tripfill",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/eats.test.ts"
+    "test": "tsx test/eats.test.ts && tsx test/v152.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

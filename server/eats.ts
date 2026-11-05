@@ -6,13 +6,36 @@ import type { Place } from "./weather.js";
 export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v3|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v4|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^(the|o|a|el|la|le|il)\s+/, "").replace(/[^\p{L}\p{N}]+/gu, "");
 // Chains: OSM brand tags catch most; this list catches untagged ones
 export const CHAIN = /mcdonald|burger king|kfc|subway|starbucks|domino|pizza hut|costa coffee|dunkin|tim hortons|wendy|taco bell|telepizza|five guys|nando|pret a manger|caffe nero|doutor|tully|komeda|excelsior caff|yoshinoya|sukiya|matsuya|saizeriya|gusto\b|coco ?ichi|mos burger|lotteria|h3\b|vitaminas|padaria portuguesa|honolulu coffee|blue bottle|% arabica|tribeca|juan valdez|havanna|café martínez|cafe martinez|mugg & bean|vida e caff|chicken licken|wimpy|spur\b|ocean basket|hudsons|joe & the juice|segafredo|pronto\b|veloce|renoir|ueshima/i;
+
+// Local-cuisine ranking (v1.5.2): which tags count as the destination's own food
+const LOCAL: Record<string, RegExp> = {
+  PT: /portug|regional|local|tasca|tavern|seafood|fish|grill|francesinha|petisc|bacalhau|small plates/i,
+  ES: /spanish|tapas|basque|catal|galic|andalu|regional|local|seafood|tavern/i,
+  IT: /italian|pizza|pasta|trattoria|osteria|regional|local|seafood/i,
+  FR: /french|bistro|brasserie|crepe|regional|local|seafood/i,
+  JP: /japanese|sushi|ramen|udon|soba|noodle|izakaya|tempura|yakitori|tonkatsu|okonomiyaki|kaiseki|wagashi|unagi|teppan|yakiniku|donburi|regional|local/i,
+  US: /american|burger|bbq|barbecue|steak|diner|tex.?mex|mexican|southern|cajun|regional|local|grill/i,
+  MX: /mexican|taco|regional|local|seafood/i, AR: /argentin|parrilla|grill|steak|empanada|regional|local/i,
+  ZA: /south african|braai|african|cape malay|grill|regional|local|seafood/i, NZ: /new zealand|kiwi|seafood|lamb|regional|local|grill/i,
+  NO: /norweg|nordic|scandinav|seafood|fish|regional|local/i, GB: /british|english|pub|fish|regional|local/i,
+  DE: /german|bavarian|regional|local/i, GR: /greek|taverna|regional|local|seafood/i, TH: /thai|regional|local/i,
+  CN: /chinese|cantonese|sichuan|dim sum|regional|local|noodle/i, KR: /korean|regional|local/i, VN: /vietnam|pho|regional|local/i,
+  IN: /indian|regional|local|curry/i, PE: /peruv|ceviche|regional|local/i, CL: /chile|regional|local|seafood/i, BR: /brazil|churrasc|regional|local/i,
+};
+const NEUTRAL = /^(restaurant|café|cafe|bakery|bakery café|historic café|international|vegetarian|vegan|fine dining|breakfast|brunch)$/i;
+export const cuisineClass = (tag: string | undefined, cc?: string): "local" | "neutral" | "foreign" => {
+  const t = (tag || "restaurant").toLowerCase(); const re = LOCAL[(cc || "").toUpperCase()];
+  if (re?.test(t)) return "local"; if (NEUTRAL.test(t) || !re) return "neutral"; return "foreign";
+};
+// Non-café venues that OSM sometimes tags amenity=cafe or that Wikidata lumps in
+export const NOT_CAFE = /cinema|cine(?:ma|plex|teatro)?\b|theat(?:er|re)|teatro|movie|kino|nightclub|disco|casino|karaoke|hostel|hotel|museum|gallery|bowling|arcade|internet caf|cyber|gaming|hookah|shisha|cat caf|manga caf/i;
 
 const tagOf = (t: Record<string, string>) => {
   if (t.amenity === "cafe") return t.cuisine && !/coffee_shop|coffee/.test(t.cuisine) ? t.cuisine.split(";")[0].replace(/_/g, " ") : (t.shop === "bakery" || /bakery|pastry|cake/.test(t.cuisine || "") ? "bakery café" : "café");
@@ -21,8 +44,8 @@ const tagOf = (t: Record<string, string>) => {
   return c && c !== "regional" ? c : t.cuisine === "regional" ? "local cuisine" : "restaurant";
 };
 
-async function overpass(p: Place): Promise<Eat[]> {
-  const a = `around:2500,${p.lat},${p.lon}`;
+async function overpass(p: Place, radius = 2500): Promise<Eat[]> {
+  const a = `around:${radius},${p.lat},${p.lon}`;
   const q = `[out:json][timeout:6];(nwr(${a})["amenity"="restaurant"]["name"];nwr(${a})["amenity"="cafe"]["name"];);out center tags 700;`;
   const one = async (host: string): Promise<Eat[]> => {
     const r = await fetch(host, { method: "POST", headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" }, body: "data=" + encodeURIComponent(q), signal: AbortSignal.timeout(7000) });
@@ -30,6 +53,7 @@ async function overpass(p: Place): Promise<Eat[]> {
     const d: any = await r.json(); if (!d.elements?.length) throw new Error("empty");
     return d.elements.map((e: any) => {
       const t = e.tags || {}; const lat = e.lat ?? e.center?.lat, lon = e.lon ?? e.center?.lon;
+      if (t.amenity === "cafe" && (NOT_CAFE.test(t.name) || t.amenity === "cinema" || t.cinema || t.leisure)) return null;
       if (t.brand || t["brand:wikidata"] || CHAIN.test(t.name) || /\b(store|supermarket|grocery|minimarket)\b/i.test(t.name)) return null;
       if (/fast_food|kebab|burger|pizza|chicken|sandwich/.test(t.cuisine || "") && !t.wikidata) return null;
       const score = (t.wikidata ? 4 : 0) + (t.wikipedia ? 2 : 0) + (t.website || t["contact:website"] ? 1 : 0) + (t.opening_hours ? 0.5 : 0) + (t.cuisine ? 0.5 : 0) + (t["name:en"] ? 0.5 : 0) + (t.cuisine === "regional" || /portuguese|japanese|local|traditional/.test(t.cuisine || "") ? 0.5 : 0) + (t.tourism ? 1 : 0);
@@ -59,8 +83,8 @@ export function wvListings(list: Record<string, string>[], p: Place, clean: (s: 
 }
 
 /** Wikidata (free SPARQL): notable cafés/coffeehouses, bakeries and restaurants within 4 km, ranked by sitelinks. */
-async function wikidata(p: Place): Promise<Eat[]> {
-  const q = `SELECT ?i ?l ?c ?sl ?k ?t WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "4"; wikibase:distance ?k. } ?i wdt:P31 ?t. VALUES ?t { wd:Q30022 wd:Q11707 wd:Q274393 wd:Q1415899 wd:Q5307737 }. ?i wikibase:sitelinks ?sl. ?i rdfs:label ?l. FILTER(lang(?l)="en" || lang(?l)="${(p.countryCode || "en").toLowerCase()}") } LIMIT 150`;
+async function wikidata(p: Place, radiusKm = 4): Promise<Eat[]> {
+  const q = `SELECT ?i ?l ?c ?sl ?k ?t WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "${radiusKm}"; wikibase:distance ?k. } ?i wdt:P31 ?t. VALUES ?t { wd:Q30022 wd:Q11707 wd:Q274393 wd:Q1415899 wd:Q5307737 }. ?i wikibase:sitelinks ?sl. ?i rdfs:label ?l. FILTER(lang(?l)="en" || lang(?l)="${(p.countryCode || "en").toLowerCase()}") } LIMIT 150`;
   try {
     const r = await fetch("https://query.wikidata.org/sparql?query=" + encodeURIComponent(q), { headers: { "User-Agent": UA, Accept: "application/sparql-results+json" }, signal: AbortSignal.timeout(6000) });
     if (!r.ok) return [];
@@ -75,8 +99,9 @@ async function wikidata(p: Place): Promise<Eat[]> {
 }
 
 /** Merge, de-dupe (same name, or same normalised name within 150 m), rank and cap. */
-export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }): Eats {
-  all = all.filter(e => !/\b(store|supermarket|grocery|minimarket|mercearia)\b/i.test(e.name));
+export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }, cc?: string, maxForeign = 2): Eats {
+  all = all.filter(e => !/\b(store|supermarket|grocery|minimarket|mercearia)\b/i.test(e.name) && !(e.kind === "cafe" && NOT_CAFE.test(`${e.name} ${e.tag || ""}`)));
+  if (cc) all = all.map((e: any) => e.kind !== "restaurant" ? e : { ...e, _s: (e._s ?? 0) + ({ local: 2.5, neutral: 0, foreign: -2 } as const)[cuisineClass(e.tag, cc)] });
   const sorted = [...all].sort((a: any, b: any) => (b._s ?? 0) - (a._s ?? 0));
   const kept: Eat[] = [];
   for (const e of sorted) {
@@ -87,18 +112,28 @@ export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }): Eats 
     kept.push({ ...e });
   }
   // Spread out: avoid a list that's all from one street
-  const pick = (kind: Eat["kind"], n: number) => { const out: Eat[] = []; const streets = new Map<string, number>();
-    for (const e of kept.filter(x => x.kind === kind)) { const s = (e.area || "").toLowerCase(); if (s && (streets.get(s) || 0) >= 2) continue; streets.set(s, (streets.get(s) || 0) + 1); out.push(e); if (out.length >= n) break; }
+  const pick = (kind: Eat["kind"], n: number) => { const out: Eat[] = []; const streets = new Map<string, number>(); let foreign = 0;
+    for (const e of kept.filter(x => x.kind === kind)) { const s = (e.area || "").toLowerCase(); if (s && (streets.get(s) || 0) >= 2) continue;
+      if (kind === "restaurant" && cc && cuisineClass(e.tag, cc) === "foreign") { if (foreign >= maxForeign) continue; foreign++; } streets.set(s, (streets.get(s) || 0) + 1); out.push(e); if (out.length >= n) break; }
     return out.map(({ _s, ...e }: any) => e as Eat); };
   return { restaurants: pick("restaurant", caps.restaurants), cafes: pick("cafe", caps.cafes) };
 }
 
+export const EAT_FLOOR = { restaurants: 5, cafes: 3 };
+const RADII = [2500, 6000, 15000];
 export function getEats(p: Place, wv: Eat[]): Promise<Eats> {
+  const cc = p.countryCode;
   return cached(eatsKey(p), async () => {
-    const [osm, wd] = await Promise.all([overpass(p), wikidata(p)]);
-    const r = rankEats([...wv, ...wd, ...osm]);
-    return osm.length && r.restaurants.length >= 4 ? r : (null as any); // don't cache thin/failed lookups
-  }).then(async r => r ?? rankEats([...wv, ...await wikidata(p)]));
+    let pool: Eat[] = [...wv]; let r: Eats = { restaurants: [], cafes: [] }; let anyOsm = false;
+    // Small towns: widen the search until the lists reach a sensible floor, or the max radius
+    for (const rad of RADII) {
+      const [osm, wd] = await Promise.all([overpass(p, rad), wikidata(p, Math.max(4, rad / 1000))]);
+      anyOsm ||= osm.length > 0; pool = [...pool, ...wd, ...osm];
+      r = rankEats(pool, undefined, cc);
+      if (r.restaurants.length >= EAT_FLOOR.restaurants && r.cafes.length >= EAT_FLOOR.cafes) break;
+    }
+    return anyOsm && r.restaurants.length >= 3 ? r : (null as any); // don't cache failed lookups
+  }).then(async r => r ?? rankEats([...wv, ...await wikidata(p, 15)], undefined, cc));
 }
 
 /** Old saved plans (<1.4.0) carried `food` dish arrays; map to the new shape without crashing. */

@@ -3,7 +3,7 @@ const APP_VERSION: string = JSON.parse(__rf(new URL("../package.json", import.me
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { geocode, getWeather, dateRange, type Place } from "./weather.js";
+import { geocode, getWeather, dateRange, todayIn, isPopulated, type Place } from "./weather.js";
 import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput } from "./plan.js";
 import { budget } from "./budget.js";
@@ -50,13 +50,19 @@ app.post("/api/generate", async (req, res) => {
   try {
     const inp = req.body as TripInput & { place?: Place };
     if (!inp.start || !inp.end || inp.end < inp.start) return res.status(400).json({ error: "Valid start and end dates required" });
+    const clientTz = typeof (inp as any).tz === "string" ? (inp as any).tz : undefined;
+    const clientToday = /^\d{4}-\d{2}-\d{2}$/.test((inp as any).today || "") ? (inp as any).today : undefined;
+    const todayIso = clientToday || (clientTz ? todayIn(clientTz) : undefined);
+    if (inp.start < (todayIso || todayIn(inp.place?.timezone)) && !(inp as any).allowPast) return res.status(400).json({ error: `Start date ${inp.start} is in the past (today is ${todayIso || todayIn(inp.place?.timezone)}).`, pastDate: true });
     let end = inp.end; const all = dateRange(inp.start, inp.end); let capped = false;
     if (all.length > 14) { end = all[13]; capped = true; }
     let place = inp.place;
     if (!place) {
       const matches = await geocode(inp.destination);
       if (!matches.length) return res.status(404).json({ error: `Couldn't find "${inp.destination}"` });
-      const distinct = matches.filter(m => (m.population ?? 0) > 0 || matches.length === 1);
+      // Prefer real towns/cities over islands, glaciers and other natural features (Tromsø)
+      const towns = matches.filter(isPopulated);
+      const distinct = (towns.length ? towns : matches).filter(m => (m.population ?? 0) > 0 || matches.length === 1 || towns.length === 1);
       // Ask unless the top match dwarfs EVERY other one (Queenstown ZA 119k vs Queenstown NZ 10k is not decisive)
       const runnerUp = Math.max(0, ...distinct.slice(1).map(m => m.population || 0));
       if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 20 * runnerUp)) return res.json({ needsChoice: true, matches });
@@ -69,11 +75,11 @@ app.post("/api/generate", async (req, res) => {
     const fxForce = process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce;
     const extra = ((inp as any).legs || []).filter((l: any) => l && (l.destination || l.place) && l.start);
     if (extra.length) {
-      const m = await buildMulti(inp, place, extra, home, fxForce);
+      const m = await buildMulti(inp, place, extra, home, fxForce, todayIso);
       if (m.highlights.length) await polish(m.highlights);
       return res.json({ input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
     }
-    const [weather, places] = await Promise.all([getWeather(place, inp.start, end), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
+    const [weather, places] = await Promise.all([getWeather(place, inp.start, end, false, todayIso), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
     const aiPolished = await polish(places.highlights);
     const ps = presetsOf(inp);

@@ -38,7 +38,8 @@ const HeroArt = () => <svg className="hero-art" viewBox="0 0 400 260" aria-hidde
 type Any = any;
 const PRESETS: [string, string][] = [["beach", "🏖 Beach"], ["hiking", "🥾 Hiking"], ["ski", "⛷ Ski"], ["city", "🏙 City"], ["business", "💼 Business"], ["kids", "🧒 With kids"], ["roadtrip", "🚗 Road trip"]];
 const KEY = "tripfill:v1";
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Local calendar date (not UTC) so late evening in Detroit is still "today"
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const plus = (k: number) => { const d = new Date(); d.setDate(d.getDate() + k); return iso(d); };
 
 function Editable({ value, onChange, multiline }: { value: string; onChange: (v: string) => void; multiline?: boolean }) {
@@ -100,7 +101,7 @@ export default function App() {
     const legs = (legsOverride || form.legs || []).filter((l: Any) => l.destination?.trim());
     setErr(""); setLoading(true); setMatches(null);
     try {
-      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, legs: legs.length ? legs : undefined, place, home: homeCity || undefined, fxForce: new URLSearchParams(location.search).get("fxForce") || undefined }) });
+      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, today: plus(0), allowPast: form.start < plus(0) || undefined, legs: legs.length ? legs : undefined, place, home: homeCity || undefined, fxForce: new URLSearchParams(location.search).get("fxForce") || undefined }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Failed");
       if (j.needsChoice) setMatches(j.matches); else setPlan(j);
@@ -221,9 +222,9 @@ export default function App() {
       {!plan && <p className="muted small tabs-hint noprint">Packing & Prep and Budget unlock once you generate a plan.</p>}
       <div role="tabpanel" id="panel-plan" aria-labelledby="tab-plan" hidden={activeTab !== "plan"}>
       {!online && <div className="card warn noprint" data-testid="offline">📴 You're offline — showing your last saved plan. Editing works and is saved in this browser; generating a new plan, the map tiles and live rates need a connection.</div>}
-      <form className="card form noprint" onSubmit={e => { e.preventDefault(); generate(); }}>
+      <form className="card form noprint" onSubmit={e => { e.preventDefault(); if (form.start < plus(0) && !window.confirm(`Your start date (${form.start}) is before today (${plus(0)}). Plan it anyway? Weather will be typical for the season, not a forecast.`)) return; generate(); }}>
         <label className="wide">Destination<input required placeholder="e.g. Lisbon" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} /></label>
-        <label>Start<input type="date" required value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} /></label>
+        <label>Start<input type="date" required value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} />{form.start < plus(0) && <small className="warn" data-testid="past-warning" role="alert">⚠ This start date is in the past.</small>}</label>
         <label>End<input type="date" required value={form.end} min={form.start} onChange={e => setForm({ ...form, end: e.target.value })} /></label>
         {(form.legs || []).length > 0 && <div className="wide legs" data-testid="legs">
           <small className="muted">Leg 1: <b>{form.destination || "first city"}</b> from {form.start}. Each next city starts on its travel day; the trip ends {form.end}.</small>
