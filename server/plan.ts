@@ -1,7 +1,7 @@
 import type { WeatherResult, DayWeather, Place } from "./weather.js";
 import { isRainy } from "./weather.js";
 import type { Highlight } from "./places.js";
-import type { Food } from "./food.js";
+import type { Eat } from "./eats.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; home?: Place }
 export interface PackItem { id: string; item: string; reason: string; checked: boolean }
@@ -88,7 +88,7 @@ export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: 
 const dist = (a: { lat?: number; lon?: number }, b: { lat?: number; lon?: number }) => { const r = (x: number) => x * Math.PI / 180; const h = Math.sin(r(b.lat! - a.lat!) / 2) ** 2 + Math.cos(r(a.lat!)) * Math.cos(r(b.lat!)) * Math.sin(r(b.lon! - a.lon!) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
 /** "~1h 20m drive" from OSRM, or "~1h 30m drive est." from the straight-line fallback */
 export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm?: number }) => { const m = h.driveMin ?? (h.distanceKm != null ? Math.round(h.distanceKm * 1.4) : undefined); if (m == null) return ""; const r5 = Math.round(m / 5) * 5, H = Math.floor(r5 / 60), M = r5 % 60; return `~${H ? `${H}h${M ? ` ${M}m` : ""}` : `${M || 5}m`} drive${h.driveSrc === "osrm" ? "" : " est."}`; };
-export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Food[], extraIndoor: Highlight[] = []): ItinDay[] {
+export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = []): ItinDay[] {
   const style = inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? 3 : 2;
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
   hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
@@ -97,7 +97,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
   return days.map((d, i) => {
     const rain = isRainy(d); const wx = `${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? (d.typical ? `, wet in ${d.precipProb}% of past years` : `, ${d.precipProb}% rain`) : ""}`.trim();
-    if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `First taste: try ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
+    if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: "Last souvenir/coffee stop, then head to the airport/station", evening: "Travel home", notes: "" };
     const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && !(noTrip && x.dayTrip)) || queue.find(x => !(noTrip && x.dayTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
     const slots: string[] = [];
@@ -110,7 +110,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       const back = driveLabel(trip) ? ` (${driveLabel(trip)} back)` : "";
       slots.push(label(trip), near ? `Also nearby: ${near.name}, then head back${back}` : `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`); }
     else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
-    const eats = food.filter(x => !/wine|drink|beverage|liqueur|spirit|beer|\btea\b|coffee/i.test((x as any).gloss || "")); const f = eats.length ? eats[i % eats.length] : food[i % Math.max(1, food.length)];
+    const f = food.length ? food[i % food.length] : undefined;
     // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again
     // Prefer extra indoor venues (not on the highlight list), then unscheduled indoor highlights
     const bh = rain ? undefined : extraIndoor.find(h => !usedBackup.has(h.name)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name));
@@ -120,7 +120,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,
       morning: slots[0] || "Free morning — wander a new neighbourhood",
       afternoon: slots.slice(1).join(" → ") || (style === "Slow" ? "Long lunch & downtime" : "Explore a market or local street"),
-      evening: f ? `Dinner: look for ${f.name}` : "Dinner somewhere local",
+      evening: f ? `Dinner: ${f.name}${f.tag && f.tag !== "restaurant" ? ` (${f.tag})` : ""}` : "Dinner somewhere local",
       rainyBackup: rain ? "Rain likely — indoor / partly-covered sights first" : backup ? `If it rains: ${backup}` : "If it rains: café, museum or covered market",
       notes: "",
     };

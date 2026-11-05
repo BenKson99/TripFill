@@ -10,7 +10,9 @@ import { HomeCityField, Snapshot, useHomeCity } from "./Home";
 import { defaultPrep } from "./Prep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
 
-const TITLES: Record<string, string> = { weather: "Weather", highlights: "Local highlights", map: "Map", food: "Food to try", packing: "Packing list", prep: "Before you leave", itinerary: "Day by day", timeline: "Pre-trip timeline", budget: "Budget (estimate)" };
+// Plans saved before 1.4.0 had `food` dish arrays; they simply show the regenerate hint
+const eatsOf = (plan: Any) => ({ restaurants: Array.isArray(plan?.eats?.restaurants) ? plan.eats.restaurants : [], cafes: Array.isArray(plan?.eats?.cafes) ? plan.eats.cafes : [] });
+const TITLES: Record<string, string> = { weather: "Weather", highlights: "Local highlights", map: "Map", food: "Restaurants & coffee", packing: "Packing list", prep: "Before you leave", itinerary: "Day by day", timeline: "Pre-trip timeline", budget: "Budget (estimate)" };
 const TABS = [{ id: "plan", label: "Plan", icon: "🗺", secs: ["weather", "highlights", "map", "food", "itinerary"] }, { id: "pack", label: "Packing & Prep", icon: "🧳", secs: ["packing", "prep", "timeline"] }, { id: "money", label: "Budget", icon: "💰", secs: ["budget"] }] as const;
 type TabId = typeof TABS[number]["id"];
 const TAB_KEY = "tripfill:tab";
@@ -111,7 +113,7 @@ export default function App() {
     map: `${pins.length} pinned sights across ${new Set(pins.filter(p => p.day != null).map(p => p.day)).size} day(s)`,
     weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.rainyDays} wet day(s)`,
     highlights: `${plan.highlights.length} sights · ${plan.highlights.slice(0, 3).map((h: Any) => h.name).join(", ")}…`,
-    food: `${plan.food.length} dishes · ${plan.food.slice(0, 3).map((f: Any) => f.name).join(", ")}…`,
+    food: (() => { const E = eatsOf(plan); return `${E.restaurants.length} restaurants · ${E.cafes.length} coffee shops${E.restaurants.length ? " · " + E.restaurants.slice(0, 2).map((f: Any) => f.name).join(", ") + "…" : ""}`; })(),
     packing: `${packItems.length} items, ${packItems.filter((i: Any) => i.checked).length} packed`,
     itinerary: `${plan.itinerary.length} days · ${plan.input.style} pace`,
     prep: (() => { const pr = plan.prep || defaultPrep(plan); return `${pr.length} tasks, ${pr.filter((t: Any) => t.done).length} done`; })(),
@@ -149,8 +151,8 @@ export default function App() {
           </li>)}</ol>
     </>,
     food: <>
-          <ul className="hl">{plan.food.map((f: Any, i: number) => <li key={i}>{plan.legs?.length > 1 && f.leg && f.leg !== plan.food[i - 1]?.leg && <h3 className="leghead">📍 {f.leg}</h3>}<Editable value={f.name} onChange={v => upd(p => { p.food[i].name = v; })} />{(f.localName || f.gloss) && <div className="gloss">{f.localName && <b>{f.localName}</b>}{f.localName && f.gloss ? " — " : ""}{f.gloss}</div>}<Editable multiline value={f.description} onChange={v => upd(p => { p.food[i].description = v; })} /><small className="muted">{f.url ? <a href={f.url} target="_blank">{f.source}</a> : f.source}</small></li>)}</ul>
-          {plan.drinks?.length > 0 && <p className="drinks" data-testid="drinks"><b>🍷 Local drinks:</b> {plan.drinks.map((d: Any, i: number) => <span key={i}>{i > 0 && " · "}{d.url ? <a href={d.url} target="_blank">{d.name}</a> : d.name}{d.gloss && <small className="muted"> ({d.gloss.replace(/^./, (c: string) => c.toLowerCase())})</small>}</span>)}</p>}
+          {(() => { const E = eatsOf(plan); const list = (k: "restaurants" | "cafes") => E[k].length ? <ul className="hl eats">{E[k].map((f: Any, i: number) => <li key={i}>{plan.legs?.length > 1 && f.leg && f.leg !== E[k][i - 1]?.leg && <h3 className="leghead">📍 {f.leg}</h3>}<Editable value={f.name} onChange={v => upd(p => { p.eats[k][i].name = v; })} />{f.tag && <span className="tag eat">{f.tag}</span>}{(f.km != null || f.area) && <small className="muted"> {[f.area, f.km != null ? `${f.km < 1 ? Math.round(f.km * 1000) + " m" : f.km + " km"} from centre` : ""].filter(Boolean).join(" · ")}</small>}{f.description && <div className="gloss">{f.description}</div>}<small className="muted"> {f.url ? <a href={f.url} target="_blank">{f.source}</a> : f.source}{f.lat != null && <> · <a href={`https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lon}#map=18/${f.lat}/${f.lon}`} target="_blank">map</a></>}</small></li>)}</ul> : <p className="muted small">{plan.eats ? `No ${k === "cafes" ? "coffee shops" : "restaurants"} found nearby right now — try regenerating in a minute.` : "This plan was saved before TripFill 1.4 — regenerate it to see local restaurants and coffee shops."}</p>;
+            return <><h3>🍽 Restaurants</h3>{list("restaurants")}<h3>☕ Coffee shops</h3>{list("cafes")}</>; })()}
           <p className="muted small">Sources: {plan.sources.join(" · ")}{plan.aiPolished ? " · descriptions lightly reworded by AI" : ""}</p>
     </>,
     packing: <>
@@ -191,7 +193,7 @@ export default function App() {
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
       <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><ThemeToggle /></div>
-      <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Plan the trip, <em>not the spreadsheet.</em></h1><p>Destination and dates in — weather, highlights, food, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
+      <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Plan the trip, <em>not the spreadsheet.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
       {plan && <>
         {readOnly && <div className="card shared noprint" data-testid="shared-banner"><b>👀 Shared plan (read-only)</b> — {readOnly === "server" ? "loaded from this TripFill server" : "decoded from the link itself"}. Your own saved plan is untouched.

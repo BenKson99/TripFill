@@ -1,7 +1,6 @@
 import { getJSON, UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
-import { getFood, type Food } from "./food.js";
-import { countryInfo } from "./countries.js";
+import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
 export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number }
 
@@ -64,22 +63,6 @@ function listings(text: string, kinds: string[]): Record<string, string>[] {
 const INDOOR = /museum|gallery|palace|church|cathedral|basilica|monastery|aquarium|theat|cinema|market hall|library|mall|temple hall|indoor|exhibit|oceanarium|hall\b|tower|shrine museum|castle interior/i;
 const isIndoor = (s: string) => INDOOR.test(s);
 
-const FOOD_STOP = /vegetarian|vegan|tipping|chopstick|etiquette|breakfast|lunch|dinner|restaurant|caf[eé]s?$|supermarket|convenience|vending|directory|tabelog|guide|app\b|budget|splurge|mid-range|halal|kosher|allerg|warning|note/i;
-function boldTerms(sec: string): Food[] {
-  const out: Food[] = [] as any; const seen = new Set<string>();
-  for (const line of sec.split("\n")) {
-    const re = /'''([^']{3,40})'''(?:\s*\(([^)]{0,60})\))?/g; let m;
-    while ((m = re.exec(line))) {
-      const name = clean(m[1]); const key = name.toLowerCase();
-      if (seen.has(key) || /\d|http|open|price|€|\$/i.test(name) || FOOD_STOP.test(name)) continue;
-      seen.add(key);
-      const after = clean(line.slice(m.index + m[0].length)).replace(/^[,\s–—-]+/, "");
-      const desc = (m[2] ? clean(m[2]) + ". " : "") + after;
-      out.push({ name, gloss: "", description: firstSentences(desc || "Local speciality mentioned by Wikivoyage.", 160), source: "Wikivoyage" });
-    }
-  }
-  return out;
-}
 
 
 async function nearbyQids(p: Place): Promise<string[]> {
@@ -259,16 +242,16 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; food: Food[]; drinks: Food[]; sources: string[]; guideUrl?: string };
+type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v7|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.food.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
+  return cached(`places|v8|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
-  const countryP = wikitext(p.country); const wdIndoorP = wikidataIndoor(p); const osmP = osmIndoor(p); // start slow optional lookups now
+  const wdIndoorP = wikidataIndoor(p); const osmP = osmIndoor(p); // start slow optional lookups now
   const page = await wikitext(p.name) ;
-  let highlights: Highlight[] = []; let indoorExtra: Highlight[] = []; let food: Food[] = []; let cityFood: Food[] = []; let guideUrl: string | undefined;
+  let highlights: Highlight[] = []; let indoorExtra: Highlight[] = []; let wvEats: Eat[] = []; let guideUrl: string | undefined;
   const curated = new Set<string>(); const extra = new Set<string>();
   if (page && !/^#REDIRECT/i.test(page.text) && !/\{\{disamb/i.test(page.text)) {
     guideUrl = `https://en.wikivoyage.org/wiki/${encodeURIComponent(page.title.replace(/ /g, "_"))}`;
@@ -281,8 +264,7 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
     const subs = [...new Set(page.text.split(prefix).slice(1).map(x => page.title + "/" + x.split(/[|\]#]/)[0]))].slice(0, 12);
     const subTexts = await Promise.all(subs.map(t => wikitext(t)));
     for (const st of subTexts) if (st) for (const f of listings(st.text, ["see"])) if (f.wikidata && /^Q\d+$/.test(f.wikidata)) extra.add(f.wikidata);
-    const districts = new Set([...page.text.matchAll(/\[\[[^|\]#]+\/[^|\]#]+\|([^\]]+)\]\]/g)].map(m => clean(m[1]).toLowerCase()));
-    cityFood = boldTerms(section(page.text, "Eat")).filter(f => !districts.has(f.name.toLowerCase()) && !/district|neighbo|bairro|street|rua |area/i.test(f.name));
+    wvEats = wvListings(listings([page.text, ...subTexts.map(t => t?.text || "")].join("\n"), ["eat", "drink"]), p, clean);
   }
   const hlTask = (async () => { try {
     const [near, wideL, skiL] = await Promise.all([nearbyQids(p), Promise.all([searchQids(p, "tourist attraction", 70, 30), searchQids(p, "museum OR park OR plaza OR church OR winery OR monument OR beach", 40, 30), searchQids(p, "museum OR gallery OR aquarium OR theatre OR market OR library OR planetarium", 12, 40), searchQids(p, "national park OR mountain OR lake OR waterfall OR glacier OR vineyard", 120, 15)]).then(a => [...new Set(a.flat())]), opts.ski ? searchQids(p, "ski area", 80, 15) : Promise.resolve([] as string[])]);
@@ -301,38 +283,8 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
     }
     sources.push("Wikidata + Wikipedia (nearby, ranked by notability)");
   } catch (e) { console.warn("highlights failed", e); } })();
-  const foodTask = (async () => {
-  const merge = (list: Food[], src: string) => { const have = new Set(food.map(f => f.name.toLowerCase())); for (const f of list) if (!have.has(f.name.toLowerCase()) && !/^[A-Z]/.test(f.name)) { have.add(f.name.toLowerCase()); food.push({ ...f, source: src }); } };
-  merge(cityFood, "Wikivoyage");
-  const c = await countryP;
-  if (c) { sources.push(`https://en.wikivoyage.org/wiki/${encodeURIComponent(c.title.replace(/ /g, "_"))}`); merge(boldTerms(section(c.text, "Eat")), `Wikivoyage (${c.title})`); }
-  if (food.length < 8) try {
-    const sr = await getJSON<any>(`${WV}?action=query&list=search&srsearch=${encodeURIComponent(p.country + " cuisine")}&srlimit=1&format=json`);
-    const t = sr.query?.search?.[0]?.title as string | undefined;
-    if (t && /cuisine$/i.test(t)) {
-      const cz = await wikitext(t);
-      if (cz && cz.text.slice(0, 3000).includes(p.country)) {
-        sources.push(`https://en.wikivoyage.org/wiki/${encodeURIComponent(cz.title.replace(/ /g, "_"))}`);
-        const body = cz.text.split(/^(?===[^=])/m).filter(sec => !/^==\s*(understand|history|background|see also|learn)/i.test(sec)).join("\n");
-        merge(boldTerms(body), `Wikivoyage (${cz.title})`);
-      }
-    }
-  } catch { /* optional */ }
-  if (food.length < 5) food.push(...cityFood.filter(f => /^[A-Z]/.test(f.name)).map(f => ({ ...f, source: "Wikivoyage" })));
-  try {
-    const smart = await getFood(p.country, countryInfo(p.countryCode).lang, [...cityFood, ...food].map(f => f.name));
-    if (smart.length >= 5) food = smart;
-    // Same-country cities share the cuisine lookup; push other cities' signature dishes ("originally from Porto") to the back
-    food = [...food].sort((a, b) => Number(elsewhere(a, p)) - Number(elsewhere(b, p)));
-  } catch (e) { console.warn("food lookup failed, using Wikivoyage terms", e); }
-  // Bold lowercase phrases in guides are usually tips/warnings ("raw shellfish"), not dish names
-  food = food.filter(f => /^\p{Lu}/u.test(f.name));
-  })();
-  await Promise.all([hlTask, foodTask]);
-  // Alcoholic drinks get their own "Local drinks" line instead of sitting among dishes / dinner suggestions
-  const ALC = /liqueur|\bwine\b|\bbeer\b|\bale\b|lager|spirit|brandy|vodka|\bgin\b|\brum\b|whisk|cocktail|aperitif|apéritif|alcoholic|cider|pisco|grappa|schnapps|mead\b|sake\b|port wine/i;
-  const drinks = food.filter(f => ALC.test(`${f.gloss || ""} ${f.description}`) && !/dish|soup|stew|cake|dessert|sauce/i.test(f.gloss || ""));
-  food = food.filter(f => !drinks.includes(f));
+  const [, eats] = await Promise.all([hlTask, getEats(p, wvEats)]);
+  if (eats.restaurants.some(e => e.source === "OpenStreetMap")) sources.push("OpenStreetMap (Overpass) restaurants & cafés");
   // Near-duplicates: "Table Mountain" vs "Table Mountain National Park" within a few km — keep the higher-ranked one
   const near5 = (a: Highlight, b: Highlight) => a.lat == null || b.lat == null || haversine(a as any, b as any) < 40; // park centroids sit far from the landmark
   const nm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^the /, "");
@@ -340,5 +292,5 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
   highlights = highlights.filter(h => !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));
-  return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), food: food.slice(0, 8), drinks: drinks.slice(0, 4), sources, guideUrl };
+  return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), eats, sources, guideUrl };
 }

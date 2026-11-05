@@ -1,6 +1,6 @@
 {
   "name": "tripfill",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx test/food-key.test.ts"
+    "test": "tsx test/eats.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

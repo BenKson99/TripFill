@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+- Plan tab: "Food to try" dish lists replaced by **Restaurants** (up to 8) and **Coffee shops** (up to 6) near the destination.
+- Source: OpenStreetMap via Overpass (free, no key), boosted/backed up by Wikivoyage Eat/Drink listings. Ranked by notability (Wikidata/Wikipedia/website tags, guide listing) and distance from centre; chains (brand tags + known names) and fast food dropped; near-duplicates merged; max 2 per street.
+- Each place shows type (e.g. café, bakery, seafood), distance from centre/neighbourhood, and a map link.
+- Day-by-day dinners now name real restaurants. "Local drinks" line removed.
+- Cache keyed by city + coordinates (eats|v1, places|v8); old food caches are not reused.
+- Plans saved before 1.4 load fine and show a "regenerate" hint in this section.
+
 ## 1.3.1
 - Fix: food didn't change when switching to another city in the same country (e.g. Porto → Lisbon showed Porto's list). The food lookup was cached per country only, so the first city's list was reused; it is now keyed by country + that city's guide dishes, and old caches are invalidated.
 - Dishes described as another city's speciality ("originally from Porto") move to the end of the list.

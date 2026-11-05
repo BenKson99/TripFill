@@ -31,11 +31,11 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const built = await Promise.all(legs.map(async (l, k) => {
     const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
-    pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.food.forEach(f => (f as any).leg = l.place.name);
+    pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.eats.restaurants.forEach(f => f.leg = l.place.name); pl.eats.cafes.forEach(f => f.leg = l.place.name);
     // Same-country legs share one food list: rotate it so the next city doesn't repeat the same dinners
     const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
-    const rot = pl.food.length ? prior % pl.food.length : 0;
-    const legFood = [...pl.food.slice(rot), ...pl.food.slice(0, rot)];
+    const rot = pl.eats.restaurants.length ? prior % pl.eats.restaurants.length : 0;
+    const R0 = pl.eats.restaurants; const legFood = [...R0.slice(rot), ...R0.slice(0, rot)];
     const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); presetItinerary(it, ps, weather, pl.highlights);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start) : null;
     // Leg 1 carries the round trip from home (open-jaw ≈ round trip); later legs carry the one-way hop from the previous city
@@ -71,13 +71,12 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const totalNights = Math.max(0, dateRange(inp.start, tripEnd).length - 1);
   const pk = packing(inp, weather, synth, totalNights, domestic); presetPacking(pk.groups, ps, weather, pk.leaveAtHome);
   if (countries.length > 1 && !domestic) { const e = pk.groups.find(g => g.group === "Electronics"); const i = e?.items.find(x => x.item.startsWith("Plug adapter")); if (i) { i.item = `Plug adapter(s) for ${countries.join(", ")}`; i.reason = "multi-country trip — socket types may differ"; } }
-  const seen = new Set<string>(); const food = built.flatMap(L => L.places.food).filter(f => !seen.has(f.name) && (seen.add(f.name), true));
-  const dseen = new Set<string>(); const drinks = built.flatMap(L => L.places.drinks || []).filter(f => !dseen.has(f.name) && (dseen.add(f.name), true));
+  const eats = { restaurants: built.flatMap(L => L.places.eats.restaurants), cafes: built.flatMap(L => L.places.eats.cafes) };
   return {
     title: built.map(L => L.place.name).join(" → "), capped, place: first, domestic,
     trip: home ? tripFacts(home, first, inp.start) : null,
     legs: built.map((L, k) => ({ place: L.place, alternatives: alts[k] || [], start: L.start, end: L.end, nights: L.nights, budget: L.budget, fromPrev: L.fromPrev && { flightLabel: L.fromPrev.flightLabel, distanceKm: L.fromPrev.distanceKm, tzLabel: L.fromPrev.tzLabel, domestic: L.fromPrev.domestic } })),
-    weather, highlights: built.flatMap(L => L.places.highlights), food, drinks, sources: [...new Set(built.flatMap(L => L.places.sources))], guideUrl: built[0].places.guideUrl,
+    weather, highlights: built.flatMap(L => L.places.highlights), eats, sources: [...new Set(built.flatMap(L => L.places.sources))], guideUrl: built[0].places.guideUrl,
     packing: pk, itinerary: days, timeline: timeline(inp.start, !domestic), budget: built[0].budget,
   };
 }
