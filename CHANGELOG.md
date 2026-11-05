@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+- Weather: last forecast-horizon day no longer shows 0°/blank (Open-Meteo nulls now filled from typical); forecast window trimmed to 14 days.
+- Highlights: exact duplicate names removed (e.g. "Blackwell School" twice in Marfa).
+- Restaurants: shops/stores (e.g. "Portuel Kosher Store") filtered out.
+- Eats/places caches versioned (eats v3, places v9) so stale lists refresh after deploy.
+
 ## 1.5.0
 - Visual refresh: **boho chic** — cream/sand paper backgrounds with a soft linen noise texture, terracotta + dusty-rose accents, sage/olive secondary, soft charcoal ink (no pure black).
 - Warmer Fraunces display titles (italic accent on hero), airier spacing, softer rounded cards with gentle warm shadows, curated pill/rounded tab bar and gradient primary buttons.

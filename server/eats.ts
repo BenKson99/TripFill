@@ -6,7 +6,7 @@ import type { Place } from "./weather.js";
 export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v2|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v3|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
@@ -30,7 +30,7 @@ async function overpass(p: Place): Promise<Eat[]> {
     const d: any = await r.json(); if (!d.elements?.length) throw new Error("empty");
     return d.elements.map((e: any) => {
       const t = e.tags || {}; const lat = e.lat ?? e.center?.lat, lon = e.lon ?? e.center?.lon;
-      if (t.brand || t["brand:wikidata"] || CHAIN.test(t.name)) return null;
+      if (t.brand || t["brand:wikidata"] || CHAIN.test(t.name) || /\b(store|supermarket|grocery|minimarket)\b/i.test(t.name)) return null;
       if (/fast_food|kebab|burger|pizza|chicken|sandwich/.test(t.cuisine || "") && !t.wikidata) return null;
       const score = (t.wikidata ? 4 : 0) + (t.wikipedia ? 2 : 0) + (t.website || t["contact:website"] ? 1 : 0) + (t.opening_hours ? 0.5 : 0) + (t.cuisine ? 0.5 : 0) + (t["name:en"] ? 0.5 : 0) + (t.cuisine === "regional" || /portuguese|japanese|local|traditional/.test(t.cuisine || "") ? 0.5 : 0) + (t.tourism ? 1 : 0);
       const k = lat != null ? km(p, { lat, lon }) : 3;
@@ -45,7 +45,7 @@ const guessTag = (s: string) => GUESS.find(([r]) => r.test(s))?.[1];
 /** Wikivoyage {{eat}} / {{drink}} listings (already-fetched city wikitext), coffee-ish drinks only. */
 export function wvListings(list: Record<string, string>[], p: Place, clean: (s: string) => string): Eat[] {
   return list.map(f => {
-    const name = clean(f.name || ""); if (!name || name.length < 2 || CHAIN.test(name)) return null;
+    const name = clean(f.name || ""); if (!name || name.length < 2 || CHAIN.test(name) || /\b(store|supermarket|grocery|minimarket)\b/i.test(name)) return null;
     const blob = `${name} ${f.content || ""} ${f.alt || ""}`;
     const cafe = f._kind === "drink" ? /caf[eé]|coffee|kissa|tea ?house|espresso|roast|pastel|bakery|patisserie|confeitaria/i.test(blob) : /caf[eé](?![a-z])|coffee|kissaten|bakery|patisserie|confeitaria|pastelaria|past[eé]is|padaria/i.test(name);
     if (f._kind === "drink" && !cafe) return null;
@@ -67,7 +67,7 @@ async function wikidata(p: Place): Promise<Eat[]> {
     const d: any = await r.json(); const seen = new Set<string>();
     return d.results.bindings.filter((b: any) => !seen.has(b.i.value) && seen.add(b.i.value)).map((b: any) => {
       const t = b.t.value.split("/").pop(); const [lon, lat] = b.c.value.replace(/Point\(|\)/g, "").split(" ").map(Number); const k = Number(b.k.value); const sl = Number(b.sl.value);
-      const name = b.l.value as string; if (CHAIN.test(name) || /club|discot|pavil|armaz|hotel/i.test(name)) return null;
+      const name = b.l.value as string; if (CHAIN.test(name) || /club|discot|pavil|armaz|hotel|\b(store|supermarket|grocery|minimarket)\b/i.test(name)) return null;
       const cafe = t === "Q30022" || t === "Q274393" || t === "Q1415899" || /caf[eé](?![a-z])|coffee/i.test(name);
       return { name, kind: cafe ? "cafe" : "restaurant", tag: t === "Q274393" ? "bakery" : cafe ? (sl >= 3 ? "historic café" : "café") : (guessTag(name) || "restaurant"), km: Math.round(k * 10) / 10, source: "Wikidata", url: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, lat, lon, _s: 3 + Math.log2(sl + 1) * 1.5 - k * 0.5 } as any;
     }).filter(Boolean);
@@ -76,6 +76,7 @@ async function wikidata(p: Place): Promise<Eat[]> {
 
 /** Merge, de-dupe (same name, or same normalised name within 150 m), rank and cap. */
 export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }): Eats {
+  all = all.filter(e => !/\b(store|supermarket|grocery|minimarket|mercearia)\b/i.test(e.name));
   const sorted = [...all].sort((a: any, b: any) => (b._s ?? 0) - (a._s ?? 0));
   const kept: Eat[] = [];
   for (const e of sorted) {

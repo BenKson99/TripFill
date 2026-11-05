@@ -1,7 +1,7 @@
 // TripFill service worker: offline app shell + last plan-related API responses.
 // The plan itself lives in localStorage, so once the shell loads offline the last plan is there too.
 // Map tiles (tile.openstreetmap.org) are deliberately NOT cached, per the OSM tile usage policy.
-const VERSION = "tripfill-v1.5.0";
+const VERSION = "tripfill-v1.5.1";
 const SHELL = `${VERSION}-shell`, DATA = `${VERSION}-data`;
 const CORE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 

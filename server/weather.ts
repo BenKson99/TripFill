@@ -26,22 +26,31 @@ export function stats(days: DayWeather[]) {
 // so judge them by how often it was wet; forecast days use probability or amount.
 export const isRainy = (d: DayWeather) => (d.precipProb ?? 0) >= 50 || (!d.typical && d.precipMm >= 2);
 
-export async function getWeather(p: Place, start: string, end: string): Promise<WeatherResult> {
+export async function getWeather(p: Place, start: string, end: string, forceTypical = false): Promise<WeatherResult> {
   const today = new Date(); today.setUTCHours(0, 0, 0, 0);
   const endD = new Date(end + "T00:00:00Z");
   const daysOut = (endD.getTime() - today.getTime()) / 86400000;
   const startD = new Date(start + "T00:00:00Z");
-  const lastFc = new Date(today); lastFc.setUTCDate(lastFc.getUTCDate() + 15);
+  const lastFc = new Date(today); lastFc.setUTCDate(lastFc.getUTCDate() + 14);
   const lastFcIso = lastFc.toISOString().slice(0, 10);
-  if (daysOut > 15 && startD <= lastFc && startD >= today) {
+  if (!forceTypical && daysOut > 14 && startD <= lastFc && startD >= today) {
     // Mixed: forecast for the first part, typical for the rest
     const [a, b] = await Promise.all([getWeather(p, start, lastFcIso), getWeather(p, dateRange(lastFcIso, end)[1], end)]);
     const days = [...a.days, ...b.days];
     return { source: "mixed", note: `Live forecast through ${lastFcIso}; later days are typical for this season (averages of prior years, not a forecast).`, days, stats: stats(days) };
   }
-  if (daysOut <= 15 && startD >= today) {
+  if (!forceTypical && daysOut <= 14 && startD >= today) {
     const d = await getJSON<any>(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code&timezone=auto&start_date=${start}&end_date=${end}`);
     const days: DayWeather[] = d.daily.time.map((t: string, i: number) => ({ date: t, tmax: r1(d.daily.temperature_2m_max[i]), tmin: r1(d.daily.temperature_2m_min[i]), precipMm: r1(d.daily.precipitation_sum[i] ?? 0), precipProb: d.daily.precipitation_probability_max[i], code: d.daily.weather_code[i], summary: CODES[d.daily.weather_code[i]] ?? "" }));
+    // Open-Meteo's last horizon day(s) can come back null — fill those from typical instead of showing 0°
+    const gaps = d.daily.time.filter((_: string, i: number) => d.daily.temperature_2m_max[i] == null || d.daily.temperature_2m_min[i] == null);
+    if (gaps.length) {
+      const typ = await getWeather(p, gaps[0], gaps[gaps.length - 1], true).catch(() => null);
+      const byDate = new Map((typ?.days || []).map(x => [x.date, x]));
+      for (let i = 0; i < days.length; i++) if (gaps.includes(days[i].date) && byDate.has(days[i].date)) days[i] = byDate.get(days[i].date)!;
+      const ok = days.filter(x => !gaps.includes(x.date) || byDate.has(x.date));
+      if (gaps.length < days.length) return { source: "mixed", note: `Live forecast where available; ${gaps.length} later day(s) are typical for this season (not a forecast).`, days: ok, stats: stats(ok) };
+    }
     return { source: "forecast", note: "Live forecast from Open-Meteo.", days, stats: stats(days) };
   }
   // Typical: same calendar dates over the previous 3 years from the ERA5 archive.
