@@ -21,13 +21,19 @@ function WxIcon({ s }: { s: string }) {
   const [I, c] = /thunder|storm/.test(t) ? [CloudLightning, "rain"] : /snow|sleet/.test(t) ? [CloudSnow, "cloud"] : /rain|shower|drizzle|wet/.test(t) ? [CloudRain, "rain"] : /fog|mist/.test(t) ? [CloudFog, "cloud"] : /overcast|cloud/.test(t) ? (/part|some|mostly clear/.test(t) ? [CloudSun, ""] : [Cloud, "cloud"]) : [Sun, ""];
   return <I size={26} className={"wxi " + c} aria-hidden />;
 }
-const HeroArt = () => <svg className="hero-art" viewBox="0 0 400 260" aria-hidden><defs><linearGradient id="hg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".9" /><stop offset="1" stopColor="var(--sun)" stopOpacity=".8" /></linearGradient></defs>
-  <circle cx="290" cy="95" r="58" fill="url(#hg)" opacity=".85" />
-  <path d="M0 210 C70 170 120 190 180 175 S300 140 400 165 L400 260 L0 260Z" fill="var(--teal)" opacity=".18" />
-  <path d="M0 232 C90 205 160 222 240 205 S350 190 400 200 L400 260 L0 260Z" fill="var(--teal)" opacity=".28" />
-  <path d="M40 120 Q150 30 260 70" fill="none" stroke="var(--ink)" strokeOpacity=".35" strokeWidth="2" strokeDasharray="5 7" />
-  <g transform="translate(262 62) rotate(18)" fill="var(--ink)" opacity=".7"><path d="M0 0 L-14 -5 L-12 0 L-14 5Z" /><rect x="-9" y="-1.2" width="14" height="2.4" rx="1.2" /></g>
-  <circle cx="40" cy="120" r="5" fill="var(--accent)" /></svg>;
+const HeroArt = () => <svg className="hero-art" viewBox="0 0 400 260" aria-hidden><defs>
+    <linearGradient id="hg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".95" /><stop offset=".55" stopColor="var(--rose)" stopOpacity=".7" /><stop offset="1" stopColor="var(--sun)" stopOpacity=".85" /></linearGradient>
+    <linearGradient id="dune" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stopColor="var(--teal)" stopOpacity=".22" /><stop offset="1" stopColor="var(--teal)" stopOpacity=".08" /></linearGradient>
+  </defs>
+  <circle cx="298" cy="88" r="62" fill="url(#hg)" opacity=".88" />
+  <circle cx="298" cy="88" r="78" fill="none" stroke="var(--sun)" strokeOpacity=".25" strokeWidth="1.5" strokeDasharray="3 8" />
+  <path d="M0 198 C80 155 140 185 200 168 S310 130 400 155 L400 260 L0 260Z" fill="url(#dune)" />
+  <path d="M0 228 C95 200 155 218 240 200 S345 185 400 195 L400 260 L0 260Z" fill="var(--teal)" opacity=".26" />
+  <path d="M48 128 Q155 38 255 78" fill="none" stroke="var(--ink)" strokeOpacity=".28" strokeWidth="1.8" strokeDasharray="2 9" strokeLinecap="round" />
+  <g transform="translate(258 70) rotate(16)" fill="var(--ink)" opacity=".65"><path d="M0 0 L-13 -4.5 L-11 0 L-13 4.5Z" /><rect x="-8" y="-1.1" width="13" height="2.2" rx="1.1" /></g>
+  <ellipse cx="72" cy="168" rx="7" ry="11" fill="var(--teal)" opacity=".35" transform="rotate(-18 72 168)" />
+  <ellipse cx="88" cy="175" rx="5" ry="9" fill="var(--rose)" opacity=".4" transform="rotate(12 88 175)" />
+  <circle cx="48" cy="128" r="5.5" fill="var(--accent)" /></svg>;
 
 type Any = any;
 const PRESETS: [string, string][] = [["beach", "🏖 Beach"], ["hiking", "🥾 Hiking"], ["ski", "⛷ Ski"], ["city", "🏙 City"], ["business", "💼 Business"], ["kids", "🧒 With kids"], ["roadtrip", "🚗 Road trip"]];

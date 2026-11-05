@@ -6,13 +6,13 @@ import type { Place } from "./weather.js";
 export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v1|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v2|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^(the|o|a|el|la|le|il)\s+/, "").replace(/[^\p{L}\p{N}]+/gu, "");
 // Chains: OSM brand tags catch most; this list catches untagged ones
-export const CHAIN = /mcdonald|burger king|kfc|subway|starbucks|domino|pizza hut|costa coffee|dunkin|tim hortons|wendy|taco bell|telepizza|five guys|nando|pret a manger|caffe nero|doutor|tully|komeda|excelsior caff|yoshinoya|sukiya|matsuya|saizeriya|gusto\b|coco ?ichi|mos burger|lotteria|h3\b|vitaminas|padaria portuguesa|honolulu coffee|blue bottle|% arabica|tribeca|juan valdez|havanna|café martínez|cafe martinez|mugg & bean|vida e caff|wimpy|spur\b|ocean basket|hudsons|joe & the juice|segafredo|pronto\b|veloce|renoir|ueshima/i;
+export const CHAIN = /mcdonald|burger king|kfc|subway|starbucks|domino|pizza hut|costa coffee|dunkin|tim hortons|wendy|taco bell|telepizza|five guys|nando|pret a manger|caffe nero|doutor|tully|komeda|excelsior caff|yoshinoya|sukiya|matsuya|saizeriya|gusto\b|coco ?ichi|mos burger|lotteria|h3\b|vitaminas|padaria portuguesa|honolulu coffee|blue bottle|% arabica|tribeca|juan valdez|havanna|café martínez|cafe martinez|mugg & bean|vida e caff|chicken licken|wimpy|spur\b|ocean basket|hudsons|joe & the juice|segafredo|pronto\b|veloce|renoir|ueshima/i;
 
 const tagOf = (t: Record<string, string>) => {
   if (t.amenity === "cafe") return t.cuisine && !/coffee_shop|coffee/.test(t.cuisine) ? t.cuisine.split(";")[0].replace(/_/g, " ") : (t.shop === "bakery" || /bakery|pastry|cake/.test(t.cuisine || "") ? "bakery café" : "café");

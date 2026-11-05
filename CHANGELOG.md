@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0
+- Visual refresh: **boho chic** — cream/sand paper backgrounds with a soft linen noise texture, terracotta + dusty-rose accents, sage/olive secondary, soft charcoal ink (no pure black).
+- Warmer Fraunces display titles (italic accent on hero), airier spacing, softer rounded cards with gentle warm shadows, curated pill/rounded tab bar and gradient primary buttons.
+- Dark mode retuned to warm espresso/earth tones (terracotta accents, sage secondary) instead of cool blue-gray.
+- PWA theme/background colors updated to match; service-worker cache bumped to tripfill-v1.5.0.
+- No feature changes — Plan / Packing & Prep / Budget tabs, packing ticks, share, print and PWA behaviour unchanged.
+- Retest fix: drop "Chicken Licken" (and keep other SA chains filtered) from restaurant lists; eats cache key bumped to v2.
+
+
 ## 1.4.0
 - Plan tab: "Food to try" dish lists replaced by **Restaurants** (up to 8) and **Coffee shops** (up to 6) near the destination.
 - Source: OpenStreetMap via Overpass (free, no key), boosted/backed up by Wikivoyage Eat/Drink listings. Ranked by notability (Wikidata/Wikipedia/website tags, guide listing) and distance from centre; chains (brand tags + known names) and fast food dropped; near-duplicates merged; max 2 per street.

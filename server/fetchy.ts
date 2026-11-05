@@ -1,5 +1,5 @@
 // Wikimedia asks for a descriptive User-Agent with contact info; set TRIPFILL_CONTACT in .env to your email/URL.
-export const UA = `TripFill/1.4.0 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
+export const UA = `TripFill/1.5.0 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
 import fs from "fs"; import path from "path"; import crypto from "crypto";
 const cache = new Map<string, { at: number; data: unknown }>();
 const TTL = 24 * 3600e3; // Wikipedia/Wikidata/OSRM answers change slowly
