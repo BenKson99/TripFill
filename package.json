@@ -11,7 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "start": "NODE_ENV=production tsx server/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts test/*.test.tsx"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

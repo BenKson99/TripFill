@@ -1,3 +1,4 @@
+import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { ThemeToggle } from "./Theme";
@@ -172,9 +173,9 @@ export default function App() {
     </>,
     packing: <>
           <div className="grid">{plan.packing.groups.map((g: Any, gi: number) => <div key={g.group}><h3>{g.group}</h3>
-            {g.items.map((it: Any, ii: number) => <div key={it.id} className="pk"><input type="checkbox" checked={it.checked} onChange={e => upd(p => { p.packing.groups[gi].items[ii].checked = e.target.checked; })} /><Editable value={it.item} onChange={v => upd(p => { p.packing.groups[gi].items[ii].item = v; })} />{it.reason && <small className="why">{T(it.reason)}</small>}<button className="x noprint" onClick={() => upd(p => { p.packing.groups[gi].items.splice(ii, 1); })}>×</button></div>)}
+            {g.items.map((it: Any, ii: number) => <div key={it.id} className="pk"><ChecklistCheckbox aria-label={it.item} checked={it.checked} onChange={e => upd(p => { p.packing.groups[gi].items[ii].checked = e.target.checked; })} /><ChecklistText value={it.item} onChange={v => upd(p => { p.packing.groups[gi].items[ii].item = v; })} />{it.reason && <small className="why">{T(it.reason)}</small>}<button className="x noprint" onClick={() => upd(p => { p.packing.groups[gi].items.splice(ii, 1); })}>×</button></div>)}
             <button className="add noprint" onClick={() => upd(p => { p.packing.groups[gi].items.push({ id: crypto.randomUUID(), item: "New item", reason: "", checked: false }); })}>+ add</button></div>)}
-            <div><h3>🚫 Leave at home</h3>{plan.packing.leaveAtHome.map((it: Any, ii: number) => <div key={it.id} className="pk"><Editable value={it.item} onChange={v => upd(p => { p.packing.leaveAtHome[ii].item = v; })} /><small className="why">{T(it.reason)}</small></div>)}</div>
+            <div><h3>🚫 Leave at home</h3>{plan.packing.leaveAtHome.map((it: Any, ii: number) => <div key={it.id} className="pk"><ChecklistText value={it.item} onChange={v => upd(p => { p.packing.leaveAtHome[ii].item = v; })} /><small className="why">{T(it.reason)}</small></div>)}</div>
           </div>
     </>,
     itinerary: <>
@@ -186,11 +187,11 @@ export default function App() {
     </>,
     prep: <>
           <p className="muted small">Tick these off in the days before you go — saved with this plan.</p>
-          {(plan.prep || defaultPrep(plan)).map((t: Any, i: number) => <div key={t.id} className="pk" data-testid="prep-item"><input type="checkbox" aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].done = e.target.checked; })} /><Editable value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.splice(i, 1); })}>×</button></div>)}
+          {(plan.prep || defaultPrep(plan)).map((t: Any, i: number) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.splice(i, 1); })}>×</button></div>)}
           <button className="add noprint" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.push({ id: crypto.randomUUID(), task: "New task", done: false }); })}>+ add</button>
     </>,
     timeline: <>
-          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><input type="checkbox" checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><Editable value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /></div>)}
+          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /></div>)}
     </>,
     map: <MapView pins={pins} center={(plan.legs?.length > 1 ? plan.legs.map((l: Any) => l.place) : [plan.place]).map((q: Any) => ({ lat: q.lat, lon: q.lon, name: q.name }))} route={plan.legs?.length > 1}
       legend={[...plan.itinerary.map((d: Any, i: number) => ({ label: `Day ${i + 1}`, color: DAY_COLORS[i % DAY_COLORS.length] })).filter((_: Any, i: number) => pins.some(p => p.day === i)), ...(pins.some(p => p.day == null) ? [{ label: "Not scheduled", color: "#8a8f9c" }] : [])]} />,

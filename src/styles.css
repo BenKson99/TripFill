@@ -318,3 +318,14 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .import-start { margin: 0 0 1rem; }
 .eats .small { line-height: 1.6; }
 #share-url { width: 100%; min-width: 0; margin-top: .7rem; }
+
+/* Checklist text/state must remain readable without print backgrounds or native widgets. */
+.print-check,.checklist-print-text{display:none}
+.pk textarea.checklist-label{min-width:0;resize:vertical;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+@media (max-width:600px){.grid{grid-template-columns:minmax(0,1fr)}}
+@media print{
+  .pk .checklist-input,.pk textarea.checklist-label{display:none!important}
+  .pk .print-check{display:inline-block!important;color:#000!important;white-space:pre;font-family:monospace;flex:0 0 auto}
+  .pk .checklist-print-text{display:block!important;flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere;color:#000!important}
+  .pk:has(input:checked) .checklist-print-text{text-decoration:line-through}
+}

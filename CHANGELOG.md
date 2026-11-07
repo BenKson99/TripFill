@@ -1,6 +1,7 @@
 # Changelog
 
 ## 1.6.0
+- QA follow-up: print checklist completion as explicit [x]/[ ] text instead of background-dependent custom controls; packing/prep/timeline labels wrap and print in full. Narrow screens use a single packing column. Version remains 1.6.0 pending deployment.
 - Portable sharing: new links always embed compressed versioned snapshots; oversized links ask for JSON export instead of silently storing on Render's ephemeral disk. Retained legacy short-link reads, with clear unrecoverable-record errors.
 - Versioned JSON export/import with raw-plan migration, 750 KB UTF-8 and complexity limits, nested shape/date checks, prototype-key rejection, safe URLs and bounded decompression. Import is available without an existing plan and preserves edited text, budgets, packing/prep/timeline checks and preferences. Unreadable browser data is retained with a recovery download rather than overwritten.
 - Weather cards and itinerary days distinguish forecasts from seasonal history; known HTTP receipt timestamps are shown without implying model freshness. Fixed all-null/missing forecast and empty historical cases so they cannot become fake 0° days. Validated real calendar dates at the API boundary and used traveller-local today in timeline calculations.
