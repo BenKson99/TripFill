@@ -3,10 +3,10 @@
 import { UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
 
-export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string }
+export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string; sourceUrl?: string; retrievedAt?: string; cuisineEvidence?: string; dietary?: Record<string, string>; dietaryStatus?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v4|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v6|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
@@ -58,7 +58,7 @@ async function overpass(p: Place, radius = 2500): Promise<Eat[]> {
       if (/fast_food|kebab|burger|pizza|chicken|sandwich/.test(t.cuisine || "") && !t.wikidata) return null;
       const score = (t.wikidata ? 4 : 0) + (t.wikipedia ? 2 : 0) + (t.website || t["contact:website"] ? 1 : 0) + (t.opening_hours ? 0.5 : 0) + (t.cuisine ? 0.5 : 0) + (t["name:en"] ? 0.5 : 0) + (t.cuisine === "regional" || /portuguese|japanese|local|traditional/.test(t.cuisine || "") ? 0.5 : 0) + (t.tourism ? 1 : 0);
       const k = lat != null ? km(p, { lat, lon }) : 3;
-      return { name: (t["name:en"] && /[^\x00-\x7f]/.test(t.name) ? `${t["name:en"]}` : t.name) as string, kind: t.amenity === "cafe" ? "cafe" : "restaurant", tag: tagOf(t), km: Math.round(k * 10) / 10, area: t["addr:suburb"] || t["addr:quarter"] || t["addr:neighbourhood"] || t["addr:street"], source: "OpenStreetMap", url: t.website || t["contact:website"] || (t.wikipedia ? `https://${t.wikipedia.split(":")[0]}.wikipedia.org/wiki/${encodeURIComponent(t.wikipedia.split(":").slice(1).join(":"))}` : undefined), lat, lon, _s: score - k * 0.6 } as any;
+      return { name: (t["name:en"] && /[^\x00-\x7f]/.test(t.name) ? `${t["name:en"]}` : t.name) as string, kind: t.amenity === "cafe" ? "cafe" : "restaurant", tag: tagOf(t), km: Math.round(k * 10) / 10, area: t["addr:suburb"] || t["addr:quarter"] || t["addr:neighbourhood"] || t["addr:street"], source: "OpenStreetMap", sourceUrl: `https://www.openstreetmap.org/${e.type}/${e.id}`, retrievedAt: new Date().toISOString(), cuisineEvidence: t.cuisine ? "source-tag" : "unknown", dietary: Object.fromEntries(["vegetarian", "vegan", "gluten_free", "halal"].map(k => [k, ["yes", "no", "only"].includes(t["diet:" + k]) ? t["diet:" + k] : "unknown"])), url: t.website || t["contact:website"] || (t.wikipedia ? `https://${t.wikipedia.split(":")[0]}.wikipedia.org/wiki/${encodeURIComponent(t.wikipedia.split(":").slice(1).join(":"))}` : undefined), lat, lon, _s: score - k * 0.6 } as any;
     }).filter(Boolean);
   };
   return Promise.any(["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://overpass.kumi.systems/api/interpreter"].map(one)).catch(() => []);
@@ -67,7 +67,7 @@ async function overpass(p: Place, radius = 2500): Promise<Eat[]> {
 const GUESS: [RegExp, string][] = [[/sushi/i, "sushi"], [/ramen/i, "ramen"], [/udon|soba/i, "noodles"], [/izakaya/i, "izakaya"], [/tempura/i, "tempura"], [/yakitori/i, "yakitori"], [/tasca|taberna|tavern/i, "tavern"], [/marisq|seafood|fish|peixe/i, "seafood"], [/steak|churrasc|grill|parrilla/i, "grill"], [/francesinha/i, "francesinha"], [/petisc|tapas/i, "small plates"], [/vegan|vegetarian/i, "vegetarian"], [/thai/i, "thai"], [/italian|pasta|pizz/i, "italian"]];
 const guessTag = (s: string) => GUESS.find(([r]) => r.test(s))?.[1];
 /** Wikivoyage {{eat}} / {{drink}} listings (already-fetched city wikitext), coffee-ish drinks only. */
-export function wvListings(list: Record<string, string>[], p: Place, clean: (s: string) => string): Eat[] {
+export function wvListings(list: Record<string, string>[], p: Place, clean: (s: string) => string, pageTitle = p.name): Eat[] {
   return list.map(f => {
     const name = clean(f.name || ""); if (!name || name.length < 2 || CHAIN.test(name) || /\b(store|supermarket|grocery|minimarket)\b/i.test(name)) return null;
     const blob = `${name} ${f.content || ""} ${f.alt || ""}`;
@@ -78,7 +78,7 @@ export function wvListings(list: Record<string, string>[], p: Place, clean: (s: 
     const k = has ? km(p, { lat, lon }) : undefined;
     if (k != null && k > 25) return null;
     const c0 = clean(f.content || ""); const desc = c0.length > 160 ? c0.slice(0, 160).replace(/\s+\S*$/, "") + "…" : c0;
-    return { name, kind: cafe ? "cafe" : "restaurant", tag: cafe ? (/bakery|past[eé]|patisser|confeitaria|padaria/i.test(blob) ? "bakery café" : "café") : guessTag(name) || guessTag(clean(f.content || "").slice(0, 80)), km: k != null ? Math.round(k * 10) / 10 : undefined, area: clean(f.address || "").split(",")[0] || undefined, description: desc || undefined, source: "Wikivoyage", url: f.url || undefined, lat: has ? lat : undefined, lon: has ? lon : undefined, _s: 5 - (k ?? 2) * 0.4 } as any;
+    return { name, kind: cafe ? "cafe" : "restaurant", tag: cafe ? (/bakery|past[eé]|patisser|confeitaria|padaria/i.test(blob) ? "bakery café" : "café") : guessTag(name) || guessTag(clean(f.content || "").slice(0, 80)), km: k != null ? Math.round(k * 10) / 10 : undefined, area: clean(f.address || "").split(",")[0] || undefined, description: desc || undefined, source: "Wikivoyage", sourceUrl: `https://en.wikivoyage.org/wiki/${encodeURIComponent(pageTitle.replace(/ /g, "_"))}#${encodeURIComponent(name.replace(/ /g, "_"))}`, retrievedAt: new Date().toISOString(), cuisineEvidence: "inferred", url: f.url || undefined, lat: has ? lat : undefined, lon: has ? lon : undefined, _s: 5 - (k ?? 2) * 0.4 } as any;
   }).filter(Boolean) as Eat[];
 }
 
@@ -93,7 +93,7 @@ async function wikidata(p: Place, radiusKm = 4): Promise<Eat[]> {
       const t = b.t.value.split("/").pop(); const [lon, lat] = b.c.value.replace(/Point\(|\)/g, "").split(" ").map(Number); const k = Number(b.k.value); const sl = Number(b.sl.value);
       const name = b.l.value as string; if (CHAIN.test(name) || /club|discot|pavil|armaz|hotel|\b(store|supermarket|grocery|minimarket)\b/i.test(name)) return null;
       const cafe = t === "Q30022" || t === "Q274393" || t === "Q1415899" || /caf[eé](?![a-z])|coffee/i.test(name);
-      return { name, kind: cafe ? "cafe" : "restaurant", tag: t === "Q274393" ? "bakery" : cafe ? (sl >= 3 ? "historic café" : "café") : (guessTag(name) || "restaurant"), km: Math.round(k * 10) / 10, source: "Wikidata", url: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, lat, lon, _s: 3 + Math.log2(sl + 1) * 1.5 - k * 0.5 } as any;
+      return { name, kind: cafe ? "cafe" : "restaurant", tag: t === "Q274393" ? "bakery" : cafe ? (sl >= 3 ? "historic café" : "café") : (guessTag(name) || "restaurant"), km: Math.round(k * 10) / 10, source: "Wikidata", sourceUrl: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, retrievedAt: new Date().toISOString(), cuisineEvidence: "inferred", url: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, lat, lon, _s: 3 + Math.log2(sl + 1) * 1.5 - k * 0.5 } as any;
     }).filter(Boolean);
   } catch { return []; }
 }
@@ -129,11 +129,11 @@ export function getEats(p: Place, wv: Eat[]): Promise<Eats> {
     for (const rad of RADII) {
       const [osm, wd] = await Promise.all([overpass(p, rad), wikidata(p, Math.max(4, rad / 1000))]);
       anyOsm ||= osm.length > 0; pool = [...pool, ...wd, ...osm];
-      r = rankEats(pool, undefined, cc);
+      r = rankEats(pool, { restaurants: 40, cafes: 30 }, cc);
       if (r.restaurants.length >= EAT_FLOOR.restaurants && r.cafes.length >= EAT_FLOOR.cafes) break;
     }
     return anyOsm && r.restaurants.length >= 3 ? r : (null as any); // don't cache failed lookups
-  }).then(async r => r ?? rankEats([...wv, ...await wikidata(p, 15)], undefined, cc));
+  }).then(async r => r ?? rankEats([...wv, ...await wikidata(p, 15)], { restaurants: 40, cafes: 30 }, cc));
 }
 
 /** Old saved plans (<1.4.0) carried `food` dish arrays; map to the new shape without crashing. */

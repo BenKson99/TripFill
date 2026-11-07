@@ -1,27 +1,20 @@
-import { compressToEncodedURIComponent as enc, decompressFromEncodedURIComponent as dec } from "lz-string";
-type Any = any;
-/** Links up to this length carry the whole plan in the URL #fragment (never sent to any server). */
-export const MAX_URL_CHARS = 16000;
-
-export function sharePayload(plan: Any) { const { matches, ...rest } = plan; return rest; }
-
-export async function makeShareLink(plan: Any): Promise<{ url: string; mode: "url" | "server" }> {
-  const base = location.origin + location.pathname;
-  const hash = enc(JSON.stringify(sharePayload(plan)));
-  const url = `${base}#plan=${hash}`;
-  const max = import.meta.env.DEV && new URLSearchParams(location.search).get("shareMax") ? Number(new URLSearchParams(location.search).get("shareMax")) : MAX_URL_CHARS; // dev-only test hook
-  if (url.length <= max) return { url, mode: "url" };
-  const r = await fetch("/api/share", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: sharePayload(plan) }) });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Share failed");
-  return { url: `${base}?share=${(await r.json()).id}`, mode: "server" };
+import { decodePlan, encodePlan, parsePlan, safeUrl } from "../shared/portable";
+export { safeUrl };
+export const MAX_URL_CHARS = 100_000;
+/** New shares never fall back silently to ephemeral server storage. */
+export async function makeShareLink(plan: any): Promise<{ url: string; mode: "url" }> {
+  const url = `${location.origin}${location.pathname}#plan=${encodePlan(plan)}`;
+  if (url.length > MAX_URL_CHARS) throw new Error("Plan is too large for a link. Export JSON and send the file instead.");
+  return { url, mode: "url" };
 }
-
-/** Reads a shared plan from the current URL, if any. */
-export async function readSharedPlan(): Promise<{ plan: Any; via: string } | { error: string } | null> {
-  const m = location.hash.match(/#plan=(.+)$/);
-  if (m) { try { const p = JSON.parse(dec(m[1]) || ""); if (p?.place) return { plan: p, via: "link" }; } catch { /* fallthrough */ } return { error: "This share link is damaged or truncated." }; }
-  const id = new URLSearchParams(location.search).get("share");
-  if (id) { const r = await fetch(`/api/share/${encodeURIComponent(id)}`); const j = await r.json(); return r.ok ? { plan: j.plan, via: "server" } : { error: j.error }; }
-  return null;
+export async function readSharedPlan(): Promise<{ plan: any; via: string } | { error: string } | null> {
+  try {
+    if (location.hash.startsWith("#plan=")) return { plan: decodePlan(location.hash.slice(6)), via: "link" };
+    const id = new URLSearchParams(location.search).get("share");
+    if (!id) return null;
+    const r = await fetch(`/api/share/${encodeURIComponent(id)}`); const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "Legacy shared plan unavailable. Ask the sender for a new portable link or JSON export. Lost server links cannot be recovered.");
+    return { plan: parsePlan(JSON.stringify(j.plan)), via: "server" };
+  } catch (e: any) { return { error: e.message || "Unable to load share link. Try again or import its JSON export." }; }
 }
 export function clearShareFromUrl() { const u = new URL(location.href); u.hash = ""; u.searchParams.delete("share"); history.replaceState(null, "", u.toString()); }

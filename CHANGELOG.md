@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.6.0
+- Portable sharing: new links always embed compressed versioned snapshots; oversized links ask for JSON export instead of silently storing on Render's ephemeral disk. Retained legacy short-link reads, with clear unrecoverable-record errors.
+- Versioned JSON export/import with raw-plan migration, 750 KB UTF-8 and complexity limits, nested shape/date checks, prototype-key rejection, safe URLs and bounded decompression. Import is available without an existing plan and preserves edited text, budgets, packing/prep/timeline checks and preferences. Unreadable browser data is retained with a recovery download rather than overwritten.
+- Weather cards and itinerary days distinguish forecasts from seasonal history; known HTTP receipt timestamps are shown without implying model freshness. Fixed all-null/missing forecast and empty historical cases so they cannot become fake 0° days. Validated real calendar dates at the API boundary and used traveller-local today in timeline calculations.
+- Budget explains rough model bands, unknown baseline freshness and known FX date; road times disclose OSRM (without traffic) versus straight-line factor assumptions, including short-hop snapshot travel estimates.
+- Restaurant/coffee provenance links, metadata inference and collection-age caveats; honest sparse states and current availability/allergy disclaimers. Expanded the source candidate pool before preference filtering. Legacy entries without provenance remain unknown, not newly certified.
+- Pace/interests/walking tolerance/dietary controls influence actual itinerary selection/intensity, packing and restaurant sorting/filtering. Limited walking takes priority over strenuous presets; unknown dietary data stays explicitly unknown. Preferences persist through browser saves, JSON and links. Source caches are cloned before preference/leg mutations to avoid cross-request contamination.
+- Source strings and imported HTML remain text, including Leaflet tooltips; only HTTP(S) details links are used. Updated caches/User-Agent/version surfaces and added `npm test` regression + production HTTP restart tests. Added optional `TRIPFILL_DISABLE_AI=1` QA/free-only switch.
+- Preserved boho-chic design, Plan / Packing & Prep / Budget tabs, PWA, editable saves, multi-city and print. Actual browser/mobile/print review remains a separate manual release gate.
+
 ## 1.5.2
 - Restaurants: local-cuisine ranking — dishes matching the destination country get a boost, clearly foreign cuisines are demoted and capped at 2 per list.
 - Small towns: restaurant/coffee search widens 2.5 → 6 → 15 km (OSM + Wikidata) until there are ≥5 restaurants and ≥3 cafés.

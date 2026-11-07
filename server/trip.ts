@@ -29,9 +29,9 @@ export function tripFacts(home: Place, dest: Place, start: string): TripFacts {
   // Typical jet block time ≈ 30 min taxi/climb/descent + cruise at ~800 km/h over great-circle × 1.05 routing
   let flightHours: number | null = null, flightLabel: string;
   // Straight-line drive time; across a border (e.g. Mendoza → Santiago over the Andes) roads can be far longer
-  const xb = !domestic && home.countryCode && dest.countryCode ? "; straight-line estimate — border crossing, real roads may take much longer" : "";
+  const xb = "; straight-line distance ÷ 80 km/h, not road-routed; roads/borders can take much longer";
   if (km < 300) flightLabel = `${km} km — closer by road or rail (~${hm(km / 80)} drive${xb})`;
-  else { flightHours = 0.5 + (km * 1.05) / 800; flightLabel = `~${hm(flightHours)} nonstop flight (approx., ${km.toLocaleString("en-US")} km great-circle)${km < 700 ? `; or ~${hm(km / 80)} by road` : ""}`; }
+  else { flightHours = 0.5 + (km * 1.05) / 800; flightLabel = `~${hm(flightHours)} nonstop flight (approx., ${km.toLocaleString("en-US")} km great-circle)${km < 700 ? `; or ~${hm(km / 80)} by road (straight-line ÷ 80 km/h, not routed)` : ""}`; }
   let tzDiffHours: number | null = null, tzLabel = "Time difference unknown";
   if (home.timezone && dest.timezone) {
     const a = tzOffsetMin(home.timezone, start), b = tzOffsetMin(dest.timezone, start);

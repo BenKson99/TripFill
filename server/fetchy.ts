@@ -1,16 +1,18 @@
 // Wikimedia asks for a descriptive User-Agent with contact info; set TRIPFILL_CONTACT in .env to your email/URL.
-export const UA = `TripFill/1.5.2 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
+export const UA = `TripFill/1.6.0 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
 import fs from "fs"; import path from "path"; import crypto from "crypto";
 const cache = new Map<string, { at: number; data: unknown }>();
+const receipts = new Map<string, number>();
 const TTL = 24 * 3600e3; // Wikipedia/Wikidata/OSRM answers change slowly
 const DIR = path.resolve(process.env.TRIPFILL_CACHE_DIR || ".cache/http");
 try { fs.mkdirSync(DIR, { recursive: true }); } catch { /* read-only fs: memory only */ }
 const file = (k: string) => path.join(DIR, crypto.createHash("sha1").update(k).digest("hex") + ".json");
 function diskGet(k: string): unknown | undefined {
-  try { const f = file(k); const st = fs.statSync(f); if (Date.now() - st.mtimeMs < TTL) return JSON.parse(fs.readFileSync(f, "utf8")); } catch { /* miss */ }
+  try { const f = file(k); const st = fs.statSync(f); if (Date.now() - st.mtimeMs < TTL) { const data = JSON.parse(fs.readFileSync(f, "utf8")); receipts.set(k, st.mtimeMs); return data; } } catch { /* miss */ }
   return undefined;
 }
 function put(k: string, data: unknown) {
+  receipts.set(k, Date.now()); if (receipts.size > 2000) receipts.delete(receipts.keys().next().value!);
   cache.set(k, { at: Date.now(), data }); if (cache.size > 2000) cache.delete(cache.keys().next().value!);
   fs.promises.writeFile(file(k), JSON.stringify(data)).catch(() => {});
 }
@@ -61,4 +63,10 @@ async function getJSON1<T>(url: string, timeoutMs: number): Promise<T> {
       return data as T;
     } finally { clearTimeout(t); }
   }
+}
+
+/** Local receipt timestamp of the cached HTTP response, not source publication/model time. */
+export function responseReceivedAt(url: string): string | undefined {
+  const at = receipts.get(url); if (at !== undefined) return new Date(at).toISOString();
+  try { return fs.statSync(file(url)).mtime.toISOString(); } catch { return undefined; }
 }

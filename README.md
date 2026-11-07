@@ -1,6 +1,6 @@
 # TripFill
 
-Enter a destination and dates → get an editable trip plan: weather, local highlights, food to try, a weather-aware packing list (with reasons), a day-by-day itinerary with rainy-day backups, a dated pre-trip checklist and a heuristic budget. Free, no API keys required.
+Enter a destination and dates → get an editable trip plan: weather, local highlights, local restaurants & coffee shops, a weather-aware packing list (with reasons), a day-by-day itinerary with rainy-day backups, a dated pre-trip checklist and a heuristic budget. Free, no API keys required.
 
 ## Run
 ```bash
@@ -12,9 +12,10 @@ Production: `npm run build && npm start` → http://localhost:8787 (set `PORT=` 
 Requires Node 18+ (tested on Node 24).
 
 ## Data sources (all free, keyless, fetched server-side with a User-Agent)
-- **Open-Meteo** geocoding (place picker when ambiguous), forecast (≤16 days out) and historical archive (later dates: averages of the same dates in the 3 prior years, labelled *typical for this season*). Trips straddling the 16-day horizon get a mix, labelled per day.
-- **Wikivoyage** – curated sights (wikidata-linked sights on the city page and its district pages) and food (Eat sections of city/country pages + "<Country> cuisine" page).
-- **Wikipedia / Wikidata** – nearby notable places filtered by Wikidata type and ranked by pageviews + sitelinks; dishes from the country's cuisine article (local name + English gloss).
+- **Open-Meteo** geocoding (place picker when ambiguous), forecast (through today + 14 days where available) and historical archive (later dates: averages of the same dates in the 3 prior years, labelled *typical for this season*). Trips straddling the forecast horizon get a mix, labelled per day.
+- **Wikivoyage** – curated sights and restaurant/coffee listings from city and district pages, with links to their original listing pages.
+- **Wikipedia / Wikidata** – nearby notable attractions and restaurant/café records, linked to source pages.
+- **OpenStreetMap / Overpass** – named restaurants/cafés, cuisine and dietary tags where present. Coverage varies; no hours, ratings or allergy guarantees are invented.
 - **open.er-api.com** (fallback frankfurter.app) – exchange rates for the budget.
 - Opening hours and prices are never generated — the UI tells you to check official sites.
 
@@ -30,7 +31,7 @@ Copy `.env.example` to `.env`. If `OPENAI_API_KEY` is set, highlight description
 
 ## Limitations
 - Budget ranges come from country-level price tiers (World Bank ICP 2021, approximate) — not city- or season-specific, and never quotes.
-- Highlight quality depends on Wikivoyage/Wikipedia coverage; small towns may get fewer or less "touristy" results. Food items are parsed from bold terms and may need light editing.
+- Highlight quality depends on Wikivoyage/Wikipedia coverage; small towns may get fewer or less "touristy" results. Restaurant/coffee coverage and cuisine metadata can be thin or outdated; availability is not verified.
 - Plug-type, visa and health items are reminders, not looked-up facts.
 
 ## Currency & exchange rates (v0.4)
@@ -45,7 +46,7 @@ Copy `.env.example` to `.env`. If `OPENAI_API_KEY` is set, highlight description
 
 ## v1.0 features
 - **Home city** — set once in the form (geocoded, saved in this browser). Drives domestic vs international (passport/visa, local cash and plug-adapter items only for international trips), an approximate nonstop flight time (great-circle distance; drive estimate for short hops), time difference on your travel dates, your default home currency, and the Trip Snapshot.
-- **Share link** — *Copy share link* packs the whole plan into the URL (`#plan=…`, lz-string). Plans over ~16k characters are saved on the TripFill server instead (`data/shares/`, short `?share=` link). Recipients get a read-only view with *Import as my plan*. Links are snapshots — no live collaboration, no sync.
+- **Share link** — *Copy share link* packs the whole plan into the URL (`#plan=…`, lz-string). New links are always self-contained, including larger plans (up to 100,000 URL characters); beyond that, use JSON export. There is no silent fallback to temporary server storage. Recipients get a read-only view with *Import as my plan*. Links are snapshots — no live collaboration, no sync.
 - **Trip types** — multi-select Beach, Hiking, Ski, City, Business, With kids, Road trip. Each adds packing items with reasons and tweaks the itinerary (e.g. hike on the driest day, work mornings, car pick-up).
 - **Map** — Leaflet + OpenStreetMap tiles (attribution shown, scroll-zoom off, low tile use). Pins coloured by itinerary day, click for details; a collapsible/reorderable section like the others.
 - **Calendar (.ics)** — RFC 5545 file with one all-day event per itinerary day plus open checklist items. Imports into Google Calendar (Settings → Import & export), Apple Calendar and Outlook.
@@ -74,12 +75,31 @@ TripFill is a single Node service: Express serves the API and the built frontend
 ### Option B — manual web service
 1. **New → Web Service**, connect the repo.
 2. Runtime **Node**, plan **Free**.
-3. Build command `npm install && npm run build`; start command `npm start`.
+3. Build command `npm ci --include=dev && npm run build`; start command `npm start`.
 4. Health check path `/healthz`.
 5. Environment: `NODE_VERSION=22`, `TRIPFILL_CONTACT=<you@example.com>`, optionally `OPENAI_API_KEY`.
 
 ### Notes for the free tier
-- **Share store is ephemeral.** "Copy share link" normally embeds the whole plan in the URL, which needs no server storage and always works. Only plans too big for a URL are stored server-side, in `TRIPFILL_SHARE_DIR` (default `./data/shares`). If that isn't writable it falls back to the OS temp dir, then to memory (last 500 shares). On Render free the disk is wiped on every restart/redeploy/spin-down, so those short `?share=` links stop working afterwards. `/healthz` reports which store is active. For durable short links, attach a persistent disk (paid) and point `TRIPFILL_SHARE_DIR` at it.
+- **Portable snapshots survive restarts.** New `#plan=` links carry their own compressed, versioned plan; no database or server disk is required. They are not encrypted, and anyone with the full link can read the included details. Avoid sensitive notes. Long links can be truncated by chat/email apps: keep a JSON export as backup. Old `?share=` links still load while their records exist in `TRIPFILL_SHARE_DIR` (default `./data/shares`, then temp/memory fallback); free Render storage is ephemeral. Already-lost short links cannot be recovered. No paid disk/database is needed for the new portable links.
 - Free services spin down when idle; the first request after that takes ~30–60 s.
 - All build tools (Vite, TypeScript, type packages) are regular `dependencies`, so `npm install` works even if `NODE_ENV=production` is set at build time. Node ≥ 18 (`engines`).
 - The service worker/PWA needs HTTPS, which Render provides.
+
+## Quality & portability (v1.6.0)
+- **Plan / Packing & Prep / Budget** tabs and the boho-chic light/dark design are preserved.
+- **Export JSON** writes `{format:"tripfill",schemaVersion:1,exportedAt,plan}`. **Import trip JSON** is also available before generating a plan, validates before replacement, and supports older raw plan files and older compressed links. It preserves edited itinerary text, budgets, packing ticks, custom prep tasks, timeline checks and preferences. Older plans default to Mix pace / standard walking / no dietary preference; their absent cuisine provenance stays unknown.
+- Import/export is capped at **750 KB UTF-8**. Nested shapes, dates, list/depth limits and numbers are checked. Prototype keys are rejected; only HTTP(S) URLs without credentials are retained. The bounded LZ decoder limits output and dictionary size. Strings render as plain text, including map tooltips; HTML is never evaluated.
+- **Pace**, free-text **Interests**, **Walking tolerance**, and **Dietary preference** affect generated plans. Interests prioritize matching attraction metadata and add relevant packing. Limited walking caps outings, removes strenuous activities and prioritizes rest over hiking/ski/walking-tour presets; access is **not** verified. High tolerance permits an additional stop at Packed pace. Preferences are per snapshot, persisted/shared/exported. Change them and regenerate to apply; existing edits are not silently rewritten.
+- Dietary sorting works on an expanded source pool before final display caps: explicit source tags first, then explicitly unverified name hints; known source-tag conflicts are excluded, unknowns remain labelled. Cuisine preference remains a heuristic within those groups. This cannot establish allergy safety or prevent cross-contact: confirm with the venue. No guarantee of dietary availability.
+- Each weather day labels **Open-Meteo forecast** versus **seasonal estimate (not a forecast)**. Known local response receipt times are shown, not invented model-run times. Forecast responses may be cached up to 24 h. Missing temperatures use historical data if available; otherwise generation fails rather than displaying fake zeroes.
+- Budget ranges are **rough model bands**, not live prices or confidence intervals. Baseline freshness is unknown; the FX source date is included where known. Your edited figures remain distinct from model ranges. Drive labels distinguish OSRM road routing (no live traffic) from straight-line road-factor estimates. Short-hop estimates in the trip snapshot are explicitly not routed.
+- Restaurant entries show original source links, cuisine evidence/inference, collection timestamps and honest unknown freshness/opening-status caveats. Sparse lists are not padded. Collection time is not a source-revision or verification timestamp.
+
+### Automated checks
+```bash
+npm test          # offline deterministic regression + local production HTTP integration tests
+npm run build     # strict TypeScript checks + production Vite bundle
+```
+Tests include legacy and versioned JSON/URL migration, empty-store restart sharing, malformed/untrusted payloads and bounded decompression, dates/timezones/missing forecasts, preferences and dietary filtering, destination cache isolation, packing/prep/timeline persistence. HTTP tests use temporary directories/ports and clean up their child servers. The suite does not contact paid APIs or depend on upstream source availability. `TRIPFILL_DISABLE_AI=1` explicitly disables the optional description rewriter for local/manual QA.
+
+Browser review is still required: tab keyboard navigation/remembered selection, import/export download controls, read-only shared view and clipboard fallback, actual localStorage reload, print across all tabs (including labels), light/dark mobile layout and map tooltips. Automated tests do not claim screenshots, browser interaction or accessibility certification.

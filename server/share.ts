@@ -1,3 +1,4 @@
+import { parsePlan } from "../shared/portable.js";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,6 +8,7 @@ import express from "express";
 
 // Tiny share store: <dir>/<random id>.json. No accounts, no listing endpoint.
 // Storage order: TRIPFILL_SHARE_DIR (or ./data/shares) → OS temp dir → in-memory map.
+// Legacy compatibility only: the client no longer creates short links.
 // On hosts with ephemeral disks (e.g. Render free) shares vanish on restart/redeploy; URL-embedded
 // share links (#plan=…) are unaffected because they never touch the server.
 const MAX_BYTES = 1_000_000;
@@ -26,7 +28,8 @@ export function shareStore() { if (DIR === undefined) { DIR = writableDir(); con
 export function mountShare(app: Express) {
   shareStore();
   app.post("/api/share", express.json({ limit: MAX_BYTES }), (req, res) => {
-    const plan = req.body?.plan;
+    let plan: any;
+    try { plan = parsePlan(JSON.stringify(req.body?.plan)); } catch (e: any) { return res.status(400).json({ error: e.message }); }
     if (!plan || typeof plan !== "object" || !plan.place || !plan.input) return res.status(400).json({ error: "Not a TripFill plan" });
     const id = crypto.randomBytes(9).toString("base64url"); // 72 bits, unguessable
     const body = JSON.stringify({ createdAt: new Date().toISOString(), plan });
@@ -41,6 +44,6 @@ export function mountShare(app: Express) {
     if (!ID_RE.test(req.params.id)) return res.status(400).json({ error: "Bad id" });
     const m = mem.get(req.params.id); if (m) return res.type("json").send(m);
     try { if (DIR) return res.json(JSON.parse(fs.readFileSync(path.join(DIR, req.params.id + ".json"), "utf8"))); } catch { /* fall through */ }
-    res.status(404).json({ error: "Shared plan not found (it may have been deleted from this server, or the server restarted)" });
+    res.status(404).json({ error: "Shared plan not found (it may have been deleted from this server, or the server restarted). Lost short links cannot be recovered; ask the sender for a portable link or JSON export." });
   });
 }

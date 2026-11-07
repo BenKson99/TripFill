@@ -1,3 +1,4 @@
+import { dietaryEats, preferredHighlights, walkingNotes } from "./preferences.js";
 import { geocode, getWeather, dateRange, stats, type Place, type WeatherResult } from "./weather.js";
 import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput, type ItinDay } from "./plan.js";
@@ -27,16 +28,17 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   }
   // Build legs, dropping any that start after the 14-day cap
   const legs = places.map((place, k) => ({ place, start: starts[k], end: k < places.length - 1 ? starts[k + 1] : tripEnd })).filter(l => l.start <= tripEnd).map(l => ({ ...l, end: l.end > tripEnd ? tripEnd : l.end }));
-  const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp);
+  const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
   const built = await Promise.all(legs.map(async (l, k) => {
     const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
+    pl.eats = dietaryEats(pl.eats, inp);
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.eats.restaurants.forEach(f => f.leg = l.place.name); pl.eats.cafes.forEach(f => f.leg = l.place.name);
-    // Same-country legs share one food list: rotate it so the next city doesn't repeat the same dinners
+    // Each city has an independent cached source pool; rotate only its own dinner list.
     const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
     const rot = pl.eats.restaurants.length ? prior % pl.eats.restaurants.length : 0;
     const R0 = pl.eats.restaurants; const legFood = [...R0.slice(rot), ...R0.slice(0, rot)];
-    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); presetItinerary(it, ps, weather, pl.highlights);
+    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); presetItinerary(it, ps, weather, preferredHighlights(pl.highlights, inp)); walkingNotes(it, inp);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start) : null;
     // Leg 1 carries the round trip from home (open-jaw ≈ round trip); later legs carry the one-way hop from the previous city
     const hop = k ? (fromPrev ? { km: fromPrev.distanceKm, roundTrip: false, from: legs[k - 1].place.name } : undefined) : (home ? { km: tripFacts(home, l.place, l.start).distanceKm, roundTrip: true, from: home.name } : undefined);
@@ -54,7 +56,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
       const wx = N.weather.days.find(w => w.date === N.start);
       days.push({ date: N.start, leg: N.place.name, label: `Day 0 · ${fmt(N.start)} · Travel ${L.place.name} → ${N.place.name}`, weather: arrive?.weather || (wx ? `${wx.summary}` : ""),
         morning: `Check out in ${L.place.name}; travel to ${N.place.name} — ${N.fromPrev?.flightLabel || "check routes"}`,
-        afternoon: `Arrive in ${N.place.name}, check in; easy walk around your new neighbourhood`, evening: arrive?.evening || "Relaxed dinner near your stay", notes: "travel day" });
+        afternoon: inp.walkingTolerance === "low" ? `Arrive in ${N.place.name}, check in; rest or optional short outing using local transport` : `Arrive in ${N.place.name}, check in; easy walk around your new neighbourhood`, evening: arrive?.evening || "Relaxed dinner near your stay", notes: "travel day" });
     } else days.push(...d);
   });
   days.forEach((d, i) => { d.label = d.label.replace(/^Day \d+/, `Day ${i + 1}`); });
@@ -77,6 +79,6 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     trip: home ? tripFacts(home, first, inp.start) : null,
     legs: built.map((L, k) => ({ place: L.place, alternatives: alts[k] || [], start: L.start, end: L.end, nights: L.nights, budget: L.budget, fromPrev: L.fromPrev && { flightLabel: L.fromPrev.flightLabel, distanceKm: L.fromPrev.distanceKm, tzLabel: L.fromPrev.tzLabel, domestic: L.fromPrev.domestic } })),
     weather, highlights: built.flatMap(L => L.places.highlights), eats, sources: [...new Set(built.flatMap(L => L.places.sources))], guideUrl: built[0].places.guideUrl,
-    packing: pk, itinerary: days, timeline: timeline(inp.start, !domestic), budget: built[0].budget,
+    packing: pk, itinerary: days, timeline: timeline(inp.start, !domestic, todayIso), budget: built[0].budget,
   };
 }

@@ -42,11 +42,11 @@ export async function budget(countryCode: string, nights: number, travelers: num
     const [lo, hi] = fareUsd(travel.km, travel.roundTrip); const lowUsd = round(lo * P), highUsd = round(hi * P);
     const low = round(lowUsd * k), high = round(highUsd * k);
     const mode = travel.km < 300 ? "bus/train/car" : "economy flight";
-    lines.push({ category: "Flights / long-distance travel", basis: `rough estimate, editable — ${travel.roundTrip ? "round-trip" : "one-way"} ${mode} from ${travel.from} (~${travel.km.toLocaleString("en-US")} km), ${P} traveler(s); check real fares`, lowUsd, highUsd, low, high, total: round((low + high) / 2) });
+    lines.push({ category: "Flights / long-distance travel", basis: `rough estimate, editable — ${travel.roundTrip ? "round-trip" : "one-way"} ${mode} from ${travel.from} (~${travel.km.toLocaleString("en-US")} km great-circle distance band, not live fares), ${P} traveler(s); check real fares`, lowUsd, highUsd, low, high, total: round((low + high) / 2) });
   } else lines.push({ category: "Flights / long-distance travel", basis: "add a home city for a rough estimate, or enter your actual fare", lowUsd: 0, highUsd: 0, low: 0, high: 0, total: 0 });
   return {
     lines, currency, localCurrency: ci.cur, usdRate: rate, pli: ci.pli,
-    fxNote: rate ? `Converted from a USD baseline at 1 USD ≈ ${Number(rate.toPrecision(4))} ${ci.cur} (${fx.source})` : (ci.cur === "USD" ? "Prices in USD" : `Exchange rate unavailable — shown in USD instead of ${ci.cur}`),
-    note: `Estimate only, not a quote. Ranges scale a US mid-range baseline by this country's price level (${ci.known ? ci.pli : "unknown, assumed 60"}/100 vs USA; source: ${COST_SOURCE}), for ${nights} night(s), ${P} traveler(s), ${style} pace. Big cities and peak season usually cost more.`,
+    fxNote: rate ? `Converted from a USD baseline at 1 USD ≈ ${Number(rate.toPrecision(4))} ${ci.cur} (${fx.source}; rate date ${fx.updated || "unknown"})` : (ci.cur === "USD" ? "Prices in USD" : `Exchange rate unavailable — shown in USD instead of ${ci.cur}`),
+    note: `Rough model, not live prices or statistical confidence intervals. Your figures are editable; model ranges do not update to match edits. Baseline price freshness unknown. Ranges scale a US mid-range baseline by this country's price level (${ci.known ? ci.pli : "unknown, assumed 60"}/100 vs USA; source: ${COST_SOURCE}), for ${nights} night(s), ${P} traveler(s), ${style} pace. Big cities and peak season usually cost more.`,
   };
 }

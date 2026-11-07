@@ -245,7 +245,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v10|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(r => r ?? getPlaces0(p, opts));
+  return cached(`places|v12|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -264,7 +264,7 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
     const subs = [...new Set(page.text.split(prefix).slice(1).map(x => page.title + "/" + x.split(/[|\]#]/)[0]))].slice(0, 12);
     const subTexts = await Promise.all(subs.map(t => wikitext(t)));
     for (const st of subTexts) if (st) for (const f of listings(st.text, ["see"])) if (f.wikidata && /^Q\d+$/.test(f.wikidata)) extra.add(f.wikidata);
-    wvEats = wvListings(listings([page.text, ...subTexts.map(t => t?.text || "")].join("\n"), ["eat", "drink"]), p, clean);
+    wvEats = [page, ...subTexts.filter(Boolean)].flatMap(pg => wvListings(listings(pg!.text, ["eat", "drink"]), p, clean, pg!.title));
   }
   const hlTask = (async () => { try {
     const [near, wideL, skiL] = await Promise.all([nearbyQids(p), Promise.all([searchQids(p, "tourist attraction", 70, 30), searchQids(p, "museum OR park OR plaza OR church OR winery OR monument OR beach", 40, 30), searchQids(p, "museum OR gallery OR aquarium OR theatre OR market OR library OR planetarium", 12, 40), searchQids(p, "national park OR mountain OR lake OR waterfall OR glacier OR vineyard", 120, 15)]).then(a => [...new Set(a.flat())]), opts.ski ? searchQids(p, "ski area", 80, 15) : Promise.resolve([] as string[])]);
