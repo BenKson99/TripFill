@@ -36,7 +36,7 @@ test("selected activities and purpose create real suggestions, deterministic uni
   const a = suggestPacking(p), b = suggestPacking(p), names = packingItems(a).map(i => i.item);
   for (const name of ["Swimwear", "Hiking shoes / trail layers", "Ski jacket & pants", "Laptop & charger", "Car charger / phone mount", "Camera, battery & memory card"]) assert.ok(names.includes(name));
   assert.deepEqual(a, b); const ids = packingItems(a).map(i => i.id); assert.equal(new Set(ids).size, ids.length);
-  assert.equal(names.filter(n => n === "Swimwear").length, 1);
+  assert.equal(names.filter(n => n === "Swimwear").length, 2);
 });
 test("refresh merges only untouched suggestions and preserves all edits, checks, skipped and custom items", () => {
   const plan = fixture(); let p = suggestPacking(plan);
@@ -64,7 +64,7 @@ test("legacy packing migrates quantity, duplicate IDs and missing reasons withou
   const plan = fixture(); plan.packing = { groups: [{ group: "Clothing", items: [{ id: "old", item: "Tops ×6", checked: true }, { id: "old", item: "Custom keepsake", checked: false }] }], leaveAtHome: [] };
   const a = parsePlan(JSON.stringify(plan)).packing; assert.equal(a.modelVersion, 2); assert.equal(item(a, "Tops").quantity, 6); assert.equal(item(a, "Tops").checked, true); assert.equal(item(a, "Tops").bag, "unassigned");
   assert.equal(new Set(packingItems(a).map(i => i.id)).size, 2); assert.deepEqual(migratePacking(a), a);
-  const b = mergeSuggestions(a, suggestPacking(plan)); assert.equal(item(b, "Tops").quantity, 6); assert.equal(packingItems(b).filter(i => i.item === "Tops").length, 1);
+  const b = mergeSuggestions(a, suggestPacking(plan)); assert.equal(item(b, "Tops").quantity, 6); assert.equal(packingItems(b).filter(i => i.item === "Tops" && i.owner === "traveler-1").length, 1); assert.equal(packingItems(b).filter(i => i.item === "Tops").length, 2);
   const removed = removePackingItem(a, item(a, "Tops").id);
   assert.ok(!packingItems(mergeSuggestions(removed, suggestPacking(plan))).some(i => i.item === "Tops"));
   const combined = structuredClone(a); combined.groups[0].items.push({ ...item(a, "Tops"), id: "combined", item: "Underwear & socks", quantity: 8 });
@@ -95,11 +95,13 @@ test("separate trips do not share item objects/settings or checked status; read-
   assert.deepEqual(updatePackingItem(a, first.id, { checked: true }, true), a); assert.deepEqual(removePackingItem(a, first.id, true), a);
 });
 test("progress excludes not-needed rows, counts rows not quantities, and filter combinations are meaningful", () => {
-  let p = suggestPacking(short()); const first = packingItems(p)[0], second = packingItems(p)[1];
+  let p = suggestPacking(short());
+  const first = packingItems(p).find(i => /Passport|photo ID/.test(i.item))!;
+  const second = packingItems(p).find(i => i.item === "House keys")!;
   p = updatePackingItem(p, first.id, { quantity: 99, checked: true }); p = updatePackingItem(p, second.id, { skipped: true });
   const all = packingItems(p), prog = packingProgress(all); assert.equal(prog.packed, 1); assert.equal(prog.total, all.length - 1);
   assert.equal(filterPacking(all, "", "unpacked").length, all.length - 2);
-  assert.equal(filterPacking(all, second.item, "skipped").length, 1); assert.equal(filterPacking(all, "PASSPORT", "essential", "personal").length, 1);
+  assert.equal(filterPacking(all, second.item, "skipped").length, 1); assert.equal(filterPacking(all, "PASSPORT", "essential", "personal").length, 2);
   assert.equal(filterPacking(all, "no-match-at-all").length, 0); assert.deepEqual(packingProgress([]), { total: 0, packed: 0, percent: 0 });
   assert.equal(packingProgress(all.map(i => ({ ...i, skipped: true }))).total, 0);
 });
@@ -116,3 +118,67 @@ test("personal template strips checks/undo/source text and only intentionally ap
   assert.equal(TEMPLATE_KEY, "tripfill:packing-essentials:v1");
   assert.throws(() => parseEssentials('{"version":1,"items":[{"item":"x","quantity":0}]}'), /could not be read/);
 });
+
+test("personal items are listed per traveler and shared items stay singular", () => {
+  const a = suggestPacking(short());
+  const tops = packingItems(a).filter(i => i.item === "Tops");
+  assert.deepEqual(a.settings.members.map(m => m.id), ["traveler-1", "traveler-2"]);
+  assert.equal(tops.length, 2);
+  assert.deepEqual(tops.map(i => i.owner).sort(), ["traveler-1", "traveler-2"]);
+  assert.equal(packingItems(a).filter(i => i.item === "House keys").length, 1);
+  assert.equal(item(a, "House keys").owner, "shared");
+});
+test("clothing rewear and spare preferences change generated quantities", () => {
+  const p = fixture();
+  const a = suggestPacking(p, { laundryEvery: null, luggage: "all", rewearTopsEvery: 2, rewearBottomsEvery: 2, includeSpares: false });
+  assert.equal(item(a, "Tops").quantity, 4);
+  assert.equal(item(a, "Bottoms").quantity, 4);
+  assert.equal(item(a, "Underwear").quantity, 7);
+});
+test("optional activity kits can be disabled independently of trip text", () => {
+  const p = fixture(); p.input.presets = ["beach", "hiking"];
+  const off = suggestPacking(p, { laundryEvery: null, luggage: "all", activityKits: [] });
+  assert.ok(!packingItems(off).some(i => i.item === "Swimwear"));
+  assert.ok(!packingItems(off).some(i => i.item === "Hiking shoes / trail layers"));
+  const on = suggestPacking(p, { laundryEvery: null, luggage: "all", activityKits: ["beach"] });
+  assert.ok(item(on, "Swimwear"));
+  assert.ok(!packingItems(on).some(i => i.item === "Hiking shoes / trail layers"));
+});
+test("weather-dependent items explain essential versus optional when weather is uncertain", () => {
+  const p = fixture();
+  p.weather.days[0] = { ...p.weather.days[0], tmax: 2, tmin: -5, summary: "Snow" };
+  p.weather.source = "forecast";
+  const a = suggestPacking(p);
+  assert.match(item(a, "Insulated winter coat").reason, /Essential/);
+  assert.equal(item(a, "Insulated winter coat").essential, true);
+  p.weather.source = "typical";
+  const b = suggestPacking(p);
+  assert.match(item(b, "Insulated winter coat").reason, /Optional/);
+  assert.match(item(b, "Insulated winter coat").reason, /not a forecast|uncertain/);
+  assert.equal(item(b, "Insulated winter coat").essential, false);
+});
+test("packing stages track need-to-buy, ready, packed and departure-day items", () => {
+  let p = suggestPacking(short());
+  const tops = item(p, "Tops");
+  const flagged = packingItems(p).find(i => i.lastMinute)!;
+  assert.equal(tops.stage, "ready");
+  p = updatePackingItem(p, tops.id, { stage: "need-to-buy" });
+  assert.equal(item(p, "Tops").checked, false);
+  assert.equal(item(p, "Tops").stage, "need-to-buy");
+  p = updatePackingItem(p, tops.id, { checked: true });
+  assert.equal(item(p, "Tops").stage, "packed");
+  assert.ok(filterPacking(packingItems(p), "", "packed").some(i => i.id === tops.id));
+  assert.ok(filterPacking(packingItems(p), "", "departure-day").some(i => i.id === flagged.id));
+});
+test("refresh does not collide same-named items across travelers; one traveler's removal stays personal", () => {
+  const plan = fixture();
+  let p = suggestPacking(plan);
+  const t1 = packingItems(p).find(i => i.item === "Tops" && i.owner === "traveler-1")!;
+  const t2 = packingItems(p).find(i => i.item === "Tops" && i.owner === "traveler-2")!;
+  p = updatePackingItem(p, t1.id, { quantity: 9 });
+  p = removePackingItem(p, t2.id);
+  const q = mergeSuggestions(p, suggestPacking(plan, p.settings));
+  assert.equal(packingItems(q).find(i => i.item === "Tops" && i.owner === "traveler-1")!.quantity, 9);
+  assert.ok(!packingItems(q).some(i => i.item === "Tops" && i.owner === "traveler-2"));
+});
+

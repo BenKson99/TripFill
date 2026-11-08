@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0 — Traveler packing lists
+
+- Packing now builds an individual list for each traveler plus a shared-supplies list. Rename travelers in settings, switch lists from the tab bar, and move any item between shared and a person.
+- Clothing preferences control how often tops and bottoms are reworn and whether a spare pair of underwear and socks is added. Laundry planning is unchanged: nothing is assumed until you arrange a wash interval and refresh.
+- Activity kits (beach, hiking, ski, business, celebration, family, road trip, photography) start from the trip’s purpose and interests, and can be turned off or on before the next refresh.
+- Weather-dependent suggestions now say Essential or Optional in their reason. They are Essential only when a forecast clearly supports them; seasonal, mixed, or partial weather stays Optional and notes the uncertainty.
+- Track each item as need-to-buy, ready, or packed, and flag departure-day items. Progress counts packed rows; filters cover the new statuses. Older packed and last-minute items migrate without losing ticks.
+- Saved and shared plans migrate in place. Refresh still protects edits, checks and removals, and never deletes older items. Budget, Plan, and the existing portable schema version are unchanged.
+
+
 ## 1.7.1 — Headline copy
 
 - Hero headline now reads “Your next adventure, beautifully planned.” No other product changes.

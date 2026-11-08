@@ -11,7 +11,7 @@ if (mode === "seed") { await seedPackingQa(join(out, "http-cache")); console.log
 else {
   const base = process.argv[4] || "http://127.0.0.1:8847";
   const u = new URL(base); if (!["127.0.0.1", "localhost"].includes(u.hostname)) throw new Error("QA must target a local server only");
-  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.7.1");
+  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.8.0");
   const page = await (await fetch(base)).text(); assert.ok(page.includes('/assets/')); const js = page.match(/src="([^\"]+\.js)"/)?.[1]; assert.ok(js); assert.equal((await fetch(`${base}${js}`)).status, 200);
   const report: any[] = [];
   for (const c of qaCases) {
@@ -21,7 +21,7 @@ else {
     const raw: any = await response.json(); assert.equal(response.status, 200, raw.error); const plan = parsePlan(JSON.stringify(raw));
     plan.title = `QA FIXTURE — ${c.id} (synthetic weather and places)`;
     const beforeItin = structuredClone(plan.itinerary), beforeBudget = structuredClone(plan.budget);
-    if (c.id === "long-laundry") { plan.packing.settings = { laundryEvery: 7, luggage: "carry-on" }; plan.packing = mergeSuggestions(plan.packing, suggestPacking(plan, plan.packing.settings)); }
+    if (c.id === "long-laundry") { plan.packing.settings = { ...plan.packing.settings, laundryEvery: 7, luggage: "carry-on" }; plan.packing = mergeSuggestions(plan.packing, suggestPacking(plan, plan.packing.settings)); }
     const items = packingItems(plan.packing), find = (name: string) => items.find(i => i.item === name)!;
     assert.equal(new Set(items.map(i => i.id)).size, items.length); assert.deepEqual(plan.itinerary, beforeItin); assert.deepEqual(plan.budget, beforeBudget);
     if (c.id === "warm-short") { assert.equal(find("Tops").quantity, 3); assert.ok(find("Swimwear")); assert.ok(!find("Insulated winter coat")); }
