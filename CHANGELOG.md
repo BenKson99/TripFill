@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.1 — Default traveler names
+
+- Name boxes in “Who’s traveling?” and ⚙ Settings → Packing start filled with real, editable values: Traveler 1, Traveler 2, Traveler 3 and so on. Added rows continue the sequence. Custom names, types and IDs are kept, including when you lower the count and raise it again.
+- Fix: clearing a name used to snap straight back to the default on every keystroke and, in the questionnaire, dropped that traveler’s type. You can now clear a name and type a new one naturally. A blank name is never saved; it becomes “Traveler N” when you leave the box or press Enter, and the type is kept.
+
 ## 1.11.0 — “Who’s traveling?” in the trip questionnaire
 
 - The Plan form now has a **Who’s traveling?** section under Travelers: one row per traveler with an optional name and a Traveler type (Not set, Man, Woman, Girl, Boy, Infant). The first generated plan builds each person’s packing list from those rows, so infants get baby basics right away and no Refresh is needed. No other personal details are asked.

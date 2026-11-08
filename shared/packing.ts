@@ -90,12 +90,12 @@ export function inferActivityKits(plan: any): ActivityKit[] {
   return kits;
 }
 export function packingMembers(raw: any = {}, travelerCount?: number): PackingMember[] {
-  const existing = Array.isArray(raw?.members) ? raw.members.filter((m: any) => m && typeof m.id === "string" && /^traveler-\d+$/.test(m.id) && typeof m.name === "string" && m.name.trim()) : [];
+  const existing = Array.isArray(raw?.members) ? raw.members.filter((m: any) => m && typeof m.id === "string" && /^traveler-\d+$/.test(m.id) && typeof m.name === "string") : [];
   const n = Math.max(1, Math.min(20, Math.round(Number(travelerCount) || existing.length || 1)));
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    return { id, name: (found?.name || `Traveler ${i + 1}`).trim().slice(0, 80), ...(found?.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found?.profile as string) ? { profile: found!.profile } : {}) };
+    return { id, name: (found?.name?.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found?.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found?.profile as string) ? { profile: found!.profile } : {}) };
   });
 }
 export function packingSettings(raw: any = {}, plan?: any): PackingSettings {
