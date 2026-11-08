@@ -6,7 +6,14 @@ export type Stage = typeof STAGES[number];
 export const ACTIVITY_KITS = ["beach", "hiking", "ski", "business", "celebration", "kids", "roadtrip", "photography"] as const;
 export type ActivityKit = typeof ACTIVITY_KITS[number];
 export const SHARED = "shared";
-export interface PackingMember { id: string; name: string; child?: boolean }
+export const PROFILES = ["man", "woman", "girl", "boy", "infant"] as const;
+export type Profile = typeof PROFILES[number];
+export const PROFILE_LABELS: Record<Profile, string> = { man: "Man", woman: "Woman", girl: "Girl", boy: "Boy", infant: "Infant" };
+/** profile is optional and user-chosen; never inferred from names. Legacy `child: true` (1.9.0) is kept for compatibility. */
+export interface PackingMember { id: string; name: string; child?: boolean; profile?: Profile }
+export const isChildMember = (m: PackingMember) => m.profile ? m.profile === "girl" || m.profile === "boy" || m.profile === "infant" : m.child === true;
+export type MemberKind = "adult" | "child" | "infant";
+export const memberKind = (m: PackingMember): MemberKind => m.profile === "infant" ? "infant" : isChildMember(m) ? "child" : "adult";
 export interface PackingSettings {
   laundryEvery: number | null;
   luggage: "all" | "carry-on";
@@ -88,7 +95,7 @@ export function packingMembers(raw: any = {}, travelerCount?: number): PackingMe
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    return { id, name: (found?.name || `Traveler ${i + 1}`).trim().slice(0, 80), ...(found?.child === true ? { child: true } : {}) };
+    return { id, name: (found?.name || `Traveler ${i + 1}`).trim().slice(0, 80), ...(found?.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found?.profile as string) ? { profile: found!.profile } : {}) };
   });
 }
 export function packingSettings(raw: any = {}, plan?: any): PackingSettings {
@@ -161,7 +168,7 @@ export function validatePacking(raw: any) {
     if (s.rewearBottomsEvery !== undefined && !(Number.isInteger(s.rewearBottomsEvery) && s.rewearBottomsEvery >= 1 && s.rewearBottomsEvery <= 7)) fail();
     if (s.includeSpares !== undefined && typeof s.includeSpares !== "boolean") fail();
     if (s.activityKits !== undefined && (!Array.isArray(s.activityKits) || s.activityKits.length > 20 || s.activityKits.some((k: any) => !(ACTIVITY_KITS as readonly string[]).includes(k)))) fail();
-    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean"))) fail();
+    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean" || m.profile !== undefined && !(PROFILES as readonly string[]).includes(m.profile)))) fail();
   }
   if (raw.modelVersion === 2 && !raw.settings) fail();
   const checkItem = (i: any) => {
@@ -217,8 +224,12 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
     next.stage = next.checked || next.stage === "packed" ? "packed" : (next.stage || "ready");
     g.items.push(next);
   };
-  const each = (group: string, item: string, reason: string, qty = 1, opts: Partial<PackingItem> = {}) => {
-    for (const m of members) add(group, item, reason, qty, opts, m.id);
+  // Profiles (Man/Woman/Girl/Boy/Infant) only change which personal defaults apply; gender never changes the list.
+  type Who = "all" | "adults" | "notInfant" | "children" | "infants";
+  const adultsPresent = members.some(m => memberKind(m) === "adult");
+  const fits = (m: PackingMember, who: Who) => { const k = memberKind(m); return who === "all" || (who === "adults" ? k === "adult" || !adultsPresent : who === "notInfant" ? k !== "infant" : who === "children" ? k === "child" : k === "infant"); };
+  const each = (group: string, item: string, reason: string, qty = 1, opts: Partial<PackingItem> = {}, who: Who = "notInfant") => {
+    for (const m of members) if (fits(m, who)) add(group, item, reason, qty, opts, m.id);
   };
   const D = "Documents & Money", C = "Clothing", H = "Toiletries & Health", E = "Electronics", X = "Comfort & Extras", A = "Activities";
   const topQty = Math.min(Math.max(1, Math.ceil(cycle / settings.rewearTopsEvery)), 14);
@@ -226,10 +237,10 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   const underQty = Math.min(cycle + (settings.includeSpares ? 1 : 0), 31);
   const coldEssential = !uncertain && lo !== null && lo <= 0;
   const rainEssential = !uncertain && rain;
-  each(D, plan.trip?.domestic ? "Government photo ID" : "Passport / accepted travel ID & entry documents", "Check official entry and carrier rules for every destination and transit; requirements vary", 1, { essential: true, bag: "personal", lastMinute: true });
+  each(D, plan.trip?.domestic ? "Government photo ID" : "Passport / accepted travel ID & entry documents", "Check official entry and carrier rules for every destination and transit; requirements vary (infants and children usually need their own)", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
   add(D, "Bookings & tickets (offline copies)", "Keep arrival details available without a connection", 1, { essential: true, bag: "personal" });
-  each(D, "Payment card + backup / local cash", "Choose payment options for your route; separate backups", 1, { essential: true, bag: "personal", lastMinute: true });
-  each(D, "Travel insurance / emergency contact details", "Check coverage and keep a non-sensitive offline copy", 1, { bag: "personal" });
+  each(D, "Payment card + backup / local cash", "Choose payment options for your route; separate backups", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
+  each(D, "Travel insurance / emergency contact details", "Check coverage and keep a non-sensitive offline copy", 1, { bag: "personal" }, "adults");
   add(D, "House keys", "Keep accessible for your return", 1, { essential: true, bag: "personal", lastMinute: true });
   const rewearNote = (every: number, qty: number, cap: number) => (every === 1 ? `change daily: one per day for ${cycle} day(s)` : `rewear about every ${every} days: ${cycle} day(s) ÷ ${every}`) + (settings.laundryEvery && settings.laundryEvery < days ? " between washes" : "") + ` = ${qty}; capped at ${cap}`;
   each(C, "Tops", clothingNote + " · " + rewearNote(settings.rewearTopsEvery, topQty, 14), topQty);
@@ -238,22 +249,22 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   each(C, "Bottoms", clothingNote + " · " + rewearNote(settings.rewearBottomsEvery, bottomQty, 7), bottomQty);
   each(C, "Comfortable walking shoes", "One pair including the pair worn in transit; adjust for your mobility needs");
   each(C, "Sleepwear", "Reuse between washes", days > 7 ? 2 : 1);
-  if (lo !== null && lo <= 8) each(C, lo <= 0 ? "Insulated winter coat" : "Warm jacket", coldReason, 1, { essential: coldEssential && lo <= 0 });
+  if (lo !== null && lo <= 8) each(C, lo <= 0 ? "Insulated winter coat" : "Warm jacket", coldReason, 1, { essential: coldEssential && lo <= 0 }, "all");
   if (lo !== null && lo < 15) each(C, "Light sweater / fleece", coldReason);
-  if (lo !== null && lo <= 0) { each(C, "Hat, gloves & scarf", coldReason, 1, { essential: coldEssential }); each(C, "Thermal base layers", coldReason, 2, { essential: coldEssential }); }
-  if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
+  if (lo !== null && lo <= 0) { each(C, "Hat, gloves & scarf", coldReason, 1, { essential: coldEssential }, "all"); each(C, "Thermal base layers", coldReason, 2, { essential: coldEssential }); }
+  if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason, 1, {}, "all"); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
   if (rain || kits.includes("hiking")) each(C, "Packable waterproof shell", kits.includes("hiking") && !rain ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : "Hiking — exposed conditions can change; check route-specific weather"}`, 1, { essential: rainEssential && rain });
   if (lo !== null && lo <= 0 && rain) each(C, "Waterproof boots with grip", `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential });
-  each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful");
-  each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true });
+  each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful", 1, {}, "adults");
+  each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
   add(H, "Small first-aid / blister kit", "Choose supplies appropriate to your needs", 1, { bag: "personal" });
-  if (hi !== null && hi >= 18 || kits.includes("hiking") || kits.includes("ski") || kits.includes("beach")) each(H, "Sunscreen & sunglasses", "Sun protection can matter even in cool weather; follow product guidance");
+  if (hi !== null && hi >= 18 || kits.includes("hiking") || kits.includes("ski") || kits.includes("beach")) each(H, "Sunscreen & sunglasses", "Sun protection can matter even in cool weather; follow product guidance (check age suitability)", 1, {}, "all");
   if (lo !== null && lo <= 8) each(H, "Lip balm & moisturiser", coldReason);
-  each(E, "Phone & charger", "Daily navigation and communication", 1, { essential: true, bag: "personal", lastMinute: true });
-  each(E, "Power bank (if needed)", "Verify carrier/security battery rules, ratings and permitted bag; assignment is not clearance", 1, { bag: "personal" });
+  each(E, "Phone & charger", "Daily navigation and communication", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
+  each(E, "Power bank (if needed)", "Verify carrier/security battery rules, ratings and permitted bag; assignment is not clearance", 1, { bag: "personal" }, "adults");
   if (!plan.trip?.domestic) add(E, "Plug adapter(s) & voltage check", "Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage");
   if (kits.includes("photography")) add(E, "Camera, battery & memory card", "Photography interest — verify spare battery transport rules");
-  if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle)); each(E, "Laptop & charger", "Business plans; check security and carrier rules", 1, { bag: "personal" }); }
+  if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
   each(X, "Reusable water bottle", "Refill where drinking water is safe; empty before security if required");
   add(X, "Day bag / tote", "Daily essentials"); add(X, "Laundry / worn-clothes bag", settings.laundryEvery ? "Laundry planned — confirm facilities and drying time" : "Separate worn clothing; no washing facilities assumed");
@@ -263,7 +274,18 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (kits.includes("ski")) { each(A, "Ski jacket & pants", "Ski activity — weather-appropriate layers"); each(A, "Ski socks", "Ski activity — dry spare pairs", Math.min(3, cycle + 1)); each(A, "Goggles & helmet / rental booking", "Ski activity — confirm fit and rentals"); }
   if (kits.includes("kids")) { add(A, "Children's spare outfit, wipes & snacks", "Family plans — tailor to age and individual needs"); add(A, "Children's entertainment / comfort item", "Family plans — transit and downtime"); }
   if (kits.includes("roadtrip")) { add(A, "Driving licence & rental documents", "Road-trip activity — check official licence/permit and insurance rules", 1, { bag: "personal", essential: true }); add(A, "Car charger / phone mount", "Road-trip activity — navigation"); }
-  if (input.walkingTolerance === "low") each(X, "Usual mobility aids & accessibility notes", "Adjust to your own needs; verify route access, not medical advice");
+  // Infant basics (editable defaults): no assumption about formula vs breastfeeding or medical needs.
+  const infantDays = Math.min(cycle, 14);
+  each(C, "Baby outfits / bodysuits", `${clothingNote} · about two per day for ${infantDays} day(s) for changes; capped at 14 — adjust to your baby`, Math.min(14, infantDays * 2), {}, "infants");
+  each(C, "Baby sleepwear / sleep sack", "Familiar sleep setup helps; check accommodation cot/crib", 2, {}, "infants");
+  each(H, "Diapers / nappies", "Enough for travel days plus a buffer; buy more locally if available", 1, { essential: true, lastMinute: true }, "infants");
+  each(H, "Wipes, changing mat & diaper cream", "Changing basics for transit and outings", 1, { essential: true, bag: "personal" }, "infants");
+  each(H, "Feeding supplies (as you feed)", "Whatever this baby uses — e.g. bottles, pump, formula or food. Check carrier/security rules for liquids", 1, { essential: true, bag: "personal", lastMinute: true }, "infants");
+  each(H, "Bibs & burp cloths", "Feeding and spills", 3, {}, "infants");
+  each(X, "Baby carrier or travel stroller", "Check airline gate-check and local terrain", 1, {}, "infants");
+  each(X, "Comfort item / small toys", "Familiar items for transit and sleep", 1, { lastMinute: true }, "infants");
+  each(X, "Entertainment / comfort item for transit", "Books, games or a favourite item; tailor to this child", 1, {}, "children");
+  if (input.walkingTolerance === "low") each(X, "Usual mobility aids & accessibility notes", "Adjust to your own needs; verify route access, not medical advice", 1, {}, "all");
   if (input.walkingTolerance === "high") each(H, "Spare walking socks / foot care", "Longer outings selected — adjust to your needs");
   if (input.dietaryNeeds && input.dietaryNeeds !== "none") add(X, "Dietary translation card & backup snacks", "Confirm ingredients and cross-contact directly; not an allergy-safety guarantee");
   return { modelVersion: 2, settings: { ...settings, activityKits: kits, members: members.map(m => ({ ...m })) }, groups, dismissed: [], leaveAtHome: [] };
@@ -338,7 +360,7 @@ export function applyEssentials(list: PackingList, template: ReturnType<typeof m
 export interface SimpleRow { item: PackingItem; ownerName: string; shared: boolean }
 const KIDS_KIT_IDS = ["children-s-spare-outfit-wipes-snacks", "children-s-entertainment-comfort-item"];
 export function simpleLists(list: PackingList): { adults: SimpleRow[]; kids: SimpleRow[] | null } {
-  const childIds = new Set(list.settings.members.filter(m => m.child === true).map(m => m.id));
+  const childIds = new Set(list.settings.members.filter(isChildMember).map(m => m.id));
   const adults: SimpleRow[] = [], kids: SimpleRow[] = [];
   for (const it of packingItems(list)) {
     const owner = ownerOf(it), shared = owner === SHARED;
@@ -347,4 +369,16 @@ export function simpleLists(list: PackingList): { adults: SimpleRow[]; kids: Sim
     (childIds.has(owner) || kidsKit ? kids : adults).push(row);
   }
   return { adults, kids: childIds.size || kids.length ? kids : null };
+}
+
+/** Repair (v1.10.0): travelers who own no items at all — e.g. pre-1.8 lists whose rows all migrated to traveler-1,
+ * or travelers added later — get their own personal suggestions. Shared items are never added here, nothing
+ * existing is touched, and a traveler with any item or any removal on record is left alone, so it runs once. */
+export function fillEmptyTravelers(list: PackingList, plan: any): PackingList {
+  const items = packingItems(list);
+  const empty = list.settings.members.filter(m => !items.some(i => ownerOf(i) === m.id) && ownerOf(list.lastRemoved?.item ?? { owner: SHARED }) !== m.id
+    && !(list.dismissed || []).some(d => d.endsWith(`--${m.id}`) || d.startsWith(`${m.id}:`)));
+  if (!empty.length || !plan?.input) return list;
+  const ids = new Set(empty.map(m => m.id));
+  return mergeSuggestions(list, { ...suggestPacking(plan, list.settings), groups: suggestPacking(plan, list.settings).groups.map(g => ({ ...g, items: g.items.filter(i => ids.has(ownerOf(i))) })).filter(g => g.items.length) });
 }

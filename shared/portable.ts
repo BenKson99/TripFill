@@ -1,4 +1,4 @@
-import { validatePacking, migratePacking, syncPackingMembers } from "./packing.js";
+import { validatePacking, migratePacking, syncPackingMembers, fillEmptyTravelers } from "./packing.js";
 import LZ from "lz-string";
 export const MAX_PLAN_BYTES = 750_000;
 export const MAX_LINK_CHARS = 100_000;
@@ -48,7 +48,7 @@ export function validatePlan(raw: any): any {
     timeline: [{ id: "string", due: "date", task: "string", done: "boolean" }], budget, sources: ["string"]
   }, "plan");
   validatePacking(p.packing);
-  p.packing = syncPackingMembers(migratePacking(p.packing), Math.max(1, Number(p.input.travelers) || 1));
+  p.packing = fillEmptyTravelers(syncPackingMembers(migratePacking(p.packing), Math.max(1, Number(p.input.travelers) || 1)), p);
   if (!Number.isFinite(Date.parse(p.generatedAt))) fail("Invalid plan generation timestamp.");
   if (p.input.end < p.input.start || !p.place.name.trim() || Math.abs(p.place.lat) > 90 || Math.abs(p.place.lon) > 180) fail("Invalid destination or date range in plan.");
   // Early versions serialized travelers from an input as a string. Migrated below before validation in parsePlan.

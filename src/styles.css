@@ -380,3 +380,8 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .page-actions{margin:var(--s5,32px) 0 var(--s4,24px);padding-top:var(--s3,16px);border-top:1px solid var(--line)}
 .page-actions .toolbar{margin:0;min-width:0}.page-actions .toolbar>*{max-width:100%}
 .page-actions .card{margin-top:var(--s3,16px);overflow-wrap:anywhere}.page-actions #share-url{max-width:100%;width:100%}
+/* v1.10.0 traveler type */
+.packing-member{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;min-width:0}
+.packing-member label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;min-width:0}
+.packing-member select,.packing-member input{width:100%;min-width:0;min-height:42px}
+@media(max-width:420px){.packing-member{grid-template-columns:1fr}}

@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.10.0 — Traveler types and full per-traveler lists
+
+- Each traveler now has a **Traveler type** in ⚙ Settings → Packing: Not set (general), Man, Woman, Girl, Boy or Infant. Nothing is guessed from names. Man and Woman get the same defaults, because gender never changes the list. Girl and Boy get the core kids’ list without adult items like payment cards, phones or deodorant, plus an entertainment/comfort item. Infant gets ID, weather layers, baby outfits, sleepwear, diapers, wipes and changing basics, feeding supplies “as you feed” (no assumption about formula or breastfeeding), bibs, a carrier/stroller and a comfort item instead of an adult wardrobe. Everything stays editable.
+- Girl, Boy and Infant show under Kids in Simple mode; Man, Woman and Not set show under Adults. The 1.9.0 `child` flag still works, and an explicit type takes priority. Exports, imports and share links keep the type, and invalid values are rejected.
+- Fix: plans saved before 1.8 put every personal item on Traveler 1, and later travelers stayed empty until a manual Refresh. On load, any traveler with no items and no removals on record now gets their own suggested list. Shared supplies aren’t duplicated, existing rows, checks, statuses and edits are untouched, and it never runs twice.
+- Changing a traveler type takes effect when you press Refresh suggestions. It adds the new items and keeps every existing item, check and edit, so remove any that no longer apply.
+
 ## 1.9.1 — Trip actions at the bottom
 
 - Import trip JSON, Copy share link, Print / PDF, Export JSON, Install app, Calendar (.ics) and Clear moved from under the hero to a trip actions row at the bottom of the page, after the active tab’s content. The row scrolls with the page (not fixed or sticky) and wraps on mobile. With no plan yet, only Import trip JSON shows there. The share-link message now appears under that row.

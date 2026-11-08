@@ -29,7 +29,7 @@ The generated `*-link.txt` files open read-only snapshots. The `.json` files imp
 
 ## Focused browser acceptance (parent runs; executor did no browser automation)
 
-1. Confirm `/healthz` says **1.9.1**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
+1. Confirm `/healthz` says **1.10.0**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
 2. Tick an item; edit a different item's name/quantity; choose a bag and move it to Activities. Mark an item Not needed: it leaves the active denominator. Search, category, bag, Still to pack, Essentials, Last-minute and Not needed filters should intersect correctly. Category count reflects its entire category, not just search matches. Clear filters to restore all rows.
 3. Add “My journal”, mark it Essential. Remove another item, use Undo: name, quantity, bag and tick return. Remove it again and refresh suggestions: it must not resurrect. Reload: edits, settings, checks, not-needed status, removals and the last removal undo survive. Only the latest removal is undoable; older removed suggestions remain dismissed.
 4. Settings (⚙ Settings menu → Packing section, Packing tab only): choose wash every 2 days and carry-on only. Quantities must stay unchanged until **Refresh suggestions**. After refresh, untouched clothing changes; edited rows/checks/skips stay. Existing obsolete rows are never deleted. Existing manually assigned bags stay protected. No bag labels imply airline approval.
@@ -61,3 +61,12 @@ Synthetic samples (generated, not real people): `/workspace/tripfill-v1.9.0-qa/f
 5. Print preview in Simple mode shows Adults and Kids lists with [x]/[ ]/[–] and quantities and no controls. Detailed print is unchanged.
 6. Share link → open it: the Simple switch works, but all checkboxes are disabled.
 7. At 390px wide, long names wrap with no horizontal scroll.
+
+## Traveler types (1.10.0)
+
+Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHETIC.json` (pre-1.8 shape, 3 travelers, all rows on Traveler 1; Tops ×5 and My lucky scarf ticked) and `/workspace/tripfill-v1.10.0-qa/family-5-profiles-SYNTHETIC.json` (Man, Woman, Girl, Boy and Infant; Girl G Tops packed, Diapers need-to-buy).
+
+1. Import the legacy sample. The tabs read roughly Traveler 1 2/11 packed (Tops ×5 and the scarf ticked), Traveler 2 and 3 about 17 items each, and Shared 2. Reload or export and reimport: the counts don't change.
+2. Import the family sample: every traveler has a list. Infant I has diapers, feeding supplies and baby outfits but no Tops or payment card. In Simple mode the Kids list holds Girl G, Boy B and Infant I.
+3. In ⚙ Settings → Packing, change Adult Woman to Infant. A message says Refresh is needed. Press Refresh suggestions: baby items are added and the existing items and ticks stay.
+4. Open a share link: the Traveler type selects are disabled.

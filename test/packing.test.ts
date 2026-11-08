@@ -61,10 +61,10 @@ test("removals are not resurrected by refresh; undo preserves placement/status a
   assert.ok(!restored.dismissed.includes(first.suggestionId!));
 });
 test("legacy packing migrates quantity, duplicate IDs and missing reasons without losing edited names or ticks", () => {
-  const plan = fixture(); plan.packing = { groups: [{ group: "Clothing", items: [{ id: "old", item: "Tops ×6", checked: true }, { id: "old", item: "Custom keepsake", checked: false }] }], leaveAtHome: [] };
+  const plan = fixture(); plan.input.travelers = 1; plan.packing = { groups: [{ group: "Clothing", items: [{ id: "old", item: "Tops ×6", checked: true }, { id: "old", item: "Custom keepsake", checked: false }] }], leaveAtHome: [] };
   const a = parsePlan(JSON.stringify(plan)).packing; assert.equal(a.modelVersion, 2); assert.equal(item(a, "Tops").quantity, 6); assert.equal(item(a, "Tops").checked, true); assert.equal(item(a, "Tops").bag, "unassigned");
   assert.equal(new Set(packingItems(a).map(i => i.id)).size, 2); assert.deepEqual(migratePacking(a), a);
-  const b = mergeSuggestions(a, suggestPacking(plan)); assert.equal(item(b, "Tops").quantity, 6); assert.equal(packingItems(b).filter(i => i.item === "Tops" && i.owner === "traveler-1").length, 1); assert.equal(packingItems(b).filter(i => i.item === "Tops").length, 2);
+  const b = mergeSuggestions(a, suggestPacking(plan)); assert.equal(item(b, "Tops").quantity, 6); assert.equal(packingItems(b).filter(i => i.item === "Tops" && i.owner === "traveler-1").length, 1); assert.equal(packingItems(b).filter(i => i.item === "Tops").length, 1);
   const removed = removePackingItem(a, item(a, "Tops").id);
   assert.ok(!packingItems(mergeSuggestions(removed, suggestPacking(plan))).some(i => i.item === "Tops"));
   const combined = structuredClone(a); combined.groups[0].items.push({ ...item(a, "Tops"), id: "combined", item: "Underwear & socks", quantity: 8 });
