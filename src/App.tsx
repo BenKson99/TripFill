@@ -205,7 +205,7 @@ export default function App() {
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
       <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><ThemeToggle /></div>
-      <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Plan the trip, <em>not the spreadsheet.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
+      <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Your next adventure, <em>beautifully planned.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
       {recoveryPending.current && <button className="ghost noprint" onClick={() => { const a = document.createElement("a"); const u = URL.createObjectURL(new Blob([localStorage.getItem(KEY) || ""], { type: "application/json" })); a.href = u; a.download = "tripfill-browser-recovery.json"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); }}>Download original browser data for recovery</button>}
       <div className="noprint import-start"><label className="btn"><Upload size={16} />Import trip JSON<input type="file" accept=".json,application/json" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = ""; }} /></label></div>

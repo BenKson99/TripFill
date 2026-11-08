@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1 — Headline copy
+
+- Hero headline now reads “Your next adventure, beautifully planned.” No other product changes.
+
 ## 1.7.0 — Packing studio
 
 - Replaced implicit-laundry packing and quantity-in-name strings with a deterministic, shared packing engine and structured per-item quantities. Uses the full inclusive date range, per-person scope, opt-in wash interval, cautious caps, activity/purpose suggestions, and available climate extremes across all supplied legs (including departure-city stats).
