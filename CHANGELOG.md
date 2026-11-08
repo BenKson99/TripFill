@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.1 — Clothing note fix
+
+- Tops and bottoms notes now match the rewear setting: “Change daily” says one per day instead of “rewear if comfortable”, and other settings show the days ÷ rewear interval (between washes when laundry is arranged) that produced each traveler’s quantity. Existing unedited rows pick up the new note after Refresh suggestions; edited rows, checks, status and owners are unchanged.
+
 ## 1.8.0 — Traveler packing lists
 
 - Packing now builds an individual list for each traveler plus a shared-supplies list. Rename travelers in settings, switch lists from the tab bar, and move any item between shared and a person.

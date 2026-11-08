@@ -135,6 +135,24 @@ test("clothing rewear and spare preferences change generated quantities", () => 
   assert.equal(item(a, "Bottoms").quantity, 4);
   assert.equal(item(a, "Underwear").quantity, 7);
 });
+test("tops and bottoms notes match daily, rewear and laundry settings for every traveler", () => {
+  const p = fixture();
+  p.input.travelers = 2;
+  const daily = suggestPacking(p, { laundryEvery: null, luggage: "all", rewearTopsEvery: 1, rewearBottomsEvery: 3 });
+  const tops = packingItems(daily).filter(i => i.item === "Tops");
+  assert.equal(tops.length, 2);
+  for (const t of tops) {
+    assert.ok(!/rewear/i.test(t.reason), t.reason);
+    assert.match(t.reason, /change daily: one per day/);
+    assert.match(t.reason, new RegExp(`= ${t.quantity};`));
+  }
+  assert.match(item(daily, "Bottoms").reason, /rewear about every 3 days/);
+  const rew = suggestPacking(p, { laundryEvery: 3, luggage: "all", rewearTopsEvery: 2, rewearBottomsEvery: 1 });
+  assert.match(item(rew, "Tops").reason, /rewear about every 2 days: 3 day\(s\) ÷ 2 between washes = 2;/);
+  assert.equal(item(rew, "Tops").quantity, 2);
+  assert.match(item(rew, "Bottoms").reason, /change daily/);
+  assert.match(item(rew, "Tops").reason, /wash every 3 days/);
+});
 test("optional activity kits can be disabled independently of trip text", () => {
   const p = fixture(); p.input.presets = ["beach", "hiking"];
   const off = suggestPacking(p, { laundryEvery: null, luggage: "all", activityKits: [] });

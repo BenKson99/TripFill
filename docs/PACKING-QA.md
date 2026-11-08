@@ -1,4 +1,4 @@
-# Packing studio v1.8.0 — acceptance guide
+# Packing studio v1.8.1 — acceptance guide
 
 ## Automated checks
 
@@ -15,12 +15,12 @@ npm run build
 Use a new origin to avoid old service-worker builds. The handoff server uses **http://127.0.0.1:8847**. To recreate it, from the repo:
 
 ```bash
-npx tsx scripts/packing-qa.ts seed /workspace/tripfill-v1.8.0-qa
+npx tsx scripts/packing-qa.ts seed /workspace/tripfill-v1.8.1-qa
 NODE_ENV=production HOST=127.0.0.1 PORT=8847 TRIPFILL_DISABLE_AI=1 \
-  TRIPFILL_CACHE_DIR=/workspace/tripfill-v1.8.0-qa/http-cache \
-  TRIPFILL_SHARE_DIR=/workspace/tripfill-v1.8.0-qa/local-shares npm start
+  TRIPFILL_CACHE_DIR=/workspace/tripfill-v1.8.1-qa/http-cache \
+  TRIPFILL_SHARE_DIR=/workspace/tripfill-v1.8.1-qa/local-shares npm start
 # In another shell:
-npx tsx scripts/packing-qa.ts verify /workspace/tripfill-v1.8.0-qa http://127.0.0.1:8847
+npx tsx scripts/packing-qa.ts verify /workspace/tripfill-v1.8.1-qa http://127.0.0.1:8847
 ```
 
 The generated `*-link.txt` files open read-only snapshots. The `.json` files import as editable trips (use **Import trip JSON**). Import can replace the current plan; do not do this on the live site with an unexported personal trip. `report.json` records HTTP assertions.
@@ -29,7 +29,7 @@ The generated `*-link.txt` files open read-only snapshots. The `.json` files imp
 
 ## Focused browser acceptance (parent runs; executor did no browser automation)
 
-1. Confirm `/healthz` says **1.8.0**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs, clothing rewear and activity-kit settings, Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
+1. Confirm `/healthz` says **1.8.1**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs, clothing rewear and activity-kit settings, Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
 2. Tick an item; edit a different item's name/quantity; choose a bag and move it to Activities. Mark an item Not needed: it leaves the active denominator. Search, category, bag, Still to pack, Essentials, Last-minute and Not needed filters should intersect correctly. Category count reflects its entire category, not just search matches. Clear filters to restore all rows.
 3. Add “My journal”, mark it Essential. Remove another item, use Undo: name, quantity, bag and tick return. Remove it again and refresh suggestions: it must not resurrect. Reload: edits, settings, checks, not-needed status, removals and the last removal undo survive. Only the latest removal is undoable; older removed suggestions remain dismissed.
 4. Settings: choose wash every 2 days and carry-on only. Quantities must stay unchanged until **Refresh suggestions**. After refresh, untouched clothing changes; edited rows/checks/skips stay. Existing obsolete rows are never deleted. Existing manually assigned bags stay protected. No bag labels imply airline approval.

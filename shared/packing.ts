@@ -231,10 +231,11 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   each(D, "Payment card + backup / local cash", "Choose payment options for your route; separate backups", 1, { essential: true, bag: "personal", lastMinute: true });
   each(D, "Travel insurance / emergency contact details", "Check coverage and keep a non-sensitive offline copy", 1, { bag: "personal" });
   add(D, "House keys", "Keep accessible for your return", 1, { essential: true, bag: "personal", lastMinute: true });
-  each(C, "Tops", clothingNote + " · rewear if comfortable; capped at 14", topQty);
+  const rewearNote = (every: number, qty: number, cap: number) => (every === 1 ? `change daily: one per day for ${cycle} day(s)` : `rewear about every ${every} days: ${cycle} day(s) ÷ ${every}`) + (settings.laundryEvery && settings.laundryEvery < days ? " between washes" : "") + ` = ${qty}; capped at ${cap}`;
+  each(C, "Tops", clothingNote + " · " + rewearNote(settings.rewearTopsEvery, topQty, 14), topQty);
   each(C, "Underwear", clothingNote + " · " + (settings.includeSpares ? "one spare; " : "no spare added; ") + "capped at 31", underQty);
   each(C, "Socks", clothingNote + " · " + (settings.includeSpares ? "one spare; " : "no spare added; ") + "capped at 31", underQty);
-  each(C, "Bottoms", clothingNote + " · rewear roughly every " + settings.rewearBottomsEvery + " day(s); capped at 7", bottomQty);
+  each(C, "Bottoms", clothingNote + " · " + rewearNote(settings.rewearBottomsEvery, bottomQty, 7), bottomQty);
   each(C, "Comfortable walking shoes", "One pair including the pair worn in transit; adjust for your mobility needs");
   each(C, "Sleepwear", "Reuse between washes", days > 7 ? 2 : 1);
   if (lo !== null && lo <= 8) each(C, lo <= 0 ? "Insulated winter coat" : "Warm jacket", coldReason, 1, { essential: coldEssential && lo <= 0 });
