@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.9.0 — Simple packing mode
+
+- A Simple mode switch sits at the top of Packing & Prep. When it’s on, the tab shows just an Adults checklist and a Kids checklist (only when there are kids), with quantity, item name, a checkbox and a small owner or “Shared” label. Categories, bags, status, filters and edit controls are hidden. The pre-trip timeline is hidden, and Before you leave folds into a small disclosure.
+- Kids come only from an explicit “Child” checkbox per traveler (⚙ Settings → Packing) plus the shared children’s-kit items. Ages are never guessed from names. Plans without child flags show everything under Adults, including shared essentials like keys and chargers.
+- The mode is a view only. It uses the same items, so checks in Simple mode show immediately in Detailed mode. Toggling never regenerates, merges or migrates anything. Not-needed items stay visible, marked, and can’t be ticked. Simple mode always shows the whole list, ignoring the detailed search and filters. Shared read-only plans can switch the view, but their checkboxes are disabled.
+- The choice is remembered in this browser only (`tripfill:packingMode`) and is never put in the trip or share links. Printing in Simple mode lists Adults and Kids with [x] / [ ] / [–] and quantities. Detailed print is unchanged.
+
 ## 1.8.3 — Settings menu keyboard fix
 
 - Tab and Shift+Tab now stay inside the Settings menu, including the packing settings. Before, Tab from “Forget template” escaped to the page because those controls are rendered through a portal whose key events never reached the menu’s handler. The trap now uses a document-level listener and skips disabled, hidden and unrendered controls in page order. Escape still closes the menu and returns focus to the Settings button. Theme and temperature stay usable on shared plans.

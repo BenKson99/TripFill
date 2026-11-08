@@ -22,7 +22,7 @@ test("production HTTP: dates, legacy links, portable snapshot across restart wit
   }
   try {
     await start("first");
-    const health = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.8.3");
+    const health = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.9.0");
     for (const body of [{ start: "2026-02-30", end: "2026-03-02" }, { start: "2026-11-10", end: "2026-11-09" }, { start: "2000-01-01", end: "2000-01-02", today: "2026-11-06", tz: "America/Detroit" }]) {
       const r = await fetch(`${base}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, destination: "Porto" }) }); assert.equal(r.status, 400); assert.ok((await r.json()).error);
     }

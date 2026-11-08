@@ -6,7 +6,7 @@ export type Stage = typeof STAGES[number];
 export const ACTIVITY_KITS = ["beach", "hiking", "ski", "business", "celebration", "kids", "roadtrip", "photography"] as const;
 export type ActivityKit = typeof ACTIVITY_KITS[number];
 export const SHARED = "shared";
-export interface PackingMember { id: string; name: string }
+export interface PackingMember { id: string; name: string; child?: boolean }
 export interface PackingSettings {
   laundryEvery: number | null;
   luggage: "all" | "carry-on";
@@ -88,7 +88,7 @@ export function packingMembers(raw: any = {}, travelerCount?: number): PackingMe
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    return { id, name: (found?.name || `Traveler ${i + 1}`).trim().slice(0, 80) };
+    return { id, name: (found?.name || `Traveler ${i + 1}`).trim().slice(0, 80), ...(found?.child === true ? { child: true } : {}) };
   });
 }
 export function packingSettings(raw: any = {}, plan?: any): PackingSettings {
@@ -161,7 +161,7 @@ export function validatePacking(raw: any) {
     if (s.rewearBottomsEvery !== undefined && !(Number.isInteger(s.rewearBottomsEvery) && s.rewearBottomsEvery >= 1 && s.rewearBottomsEvery <= 7)) fail();
     if (s.includeSpares !== undefined && typeof s.includeSpares !== "boolean") fail();
     if (s.activityKits !== undefined && (!Array.isArray(s.activityKits) || s.activityKits.length > 20 || s.activityKits.some((k: any) => !(ACTIVITY_KITS as readonly string[]).includes(k)))) fail();
-    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80))) fail();
+    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean"))) fail();
   }
   if (raw.modelVersion === 2 && !raw.settings) fail();
   const checkItem = (i: any) => {
@@ -330,4 +330,21 @@ export function applyEssentials(list: PackingList, template: ReturnType<typeof m
     if (found) { found.essential = true; continue; }
     out = addPackingItem(out, i.group, { ...i, id: `personal-${identity(i.item)}`, reason: "Applied from your personal essentials", checked: false, skipped: false, edited: true, owner, stage: "ready" });
   } return out;
+}
+
+/** Simple-mode view model (v1.9.0). View-only: rows reference the real items; nothing is merged, copied or migrated.
+ * Kids = items owned by travelers explicitly marked Child in settings, plus shared children's-kit suggestions.
+ * Everything else (adult travelers, shared, unknown owners) is under Adults. Ages are never inferred from names. */
+export interface SimpleRow { item: PackingItem; ownerName: string; shared: boolean }
+const KIDS_KIT_IDS = ["children-s-spare-outfit-wipes-snacks", "children-s-entertainment-comfort-item"];
+export function simpleLists(list: PackingList): { adults: SimpleRow[]; kids: SimpleRow[] | null } {
+  const childIds = new Set(list.settings.members.filter(m => m.child === true).map(m => m.id));
+  const adults: SimpleRow[] = [], kids: SimpleRow[] = [];
+  for (const it of packingItems(list)) {
+    const owner = ownerOf(it), shared = owner === SHARED;
+    const kidsKit = shared && KIDS_KIT_IDS.some(k => it.suggestionId?.startsWith(`suggest-${k}--`));
+    const row = { item: it, ownerName: shared ? "Shared" : ownerLabel(list, owner), shared };
+    (childIds.has(owner) || kidsKit ? kids : adults).push(row);
+  }
+  return { adults, kids: childIds.size || kids.length ? kids : null };
 }

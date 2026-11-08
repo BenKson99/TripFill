@@ -1,4 +1,4 @@
-# Packing studio v1.8.3 — acceptance guide
+# Packing studio v1.9.0 — acceptance guide
 
 ## Automated checks
 
@@ -15,12 +15,12 @@ npm run build
 Use a new origin to avoid old service-worker builds. The handoff server uses **http://127.0.0.1:8847**. To recreate it, from the repo:
 
 ```bash
-npx tsx scripts/packing-qa.ts seed /workspace/tripfill-v1.8.3-qa
+npx tsx scripts/packing-qa.ts seed /workspace/tripfill-v1.9.0-qa
 NODE_ENV=production HOST=127.0.0.1 PORT=8847 TRIPFILL_DISABLE_AI=1 \
-  TRIPFILL_CACHE_DIR=/workspace/tripfill-v1.8.3-qa/http-cache \
-  TRIPFILL_SHARE_DIR=/workspace/tripfill-v1.8.3-qa/local-shares npm start
+  TRIPFILL_CACHE_DIR=/workspace/tripfill-v1.9.0-qa/http-cache \
+  TRIPFILL_SHARE_DIR=/workspace/tripfill-v1.9.0-qa/local-shares npm start
 # In another shell:
-npx tsx scripts/packing-qa.ts verify /workspace/tripfill-v1.8.3-qa http://127.0.0.1:8847
+npx tsx scripts/packing-qa.ts verify /workspace/tripfill-v1.9.0-qa http://127.0.0.1:8847
 ```
 
 The generated `*-link.txt` files open read-only snapshots. The `.json` files import as editable trips (use **Import trip JSON**). Import can replace the current plan; do not do this on the live site with an unexported personal trip. `report.json` records HTTP assertions.
@@ -29,7 +29,7 @@ The generated `*-link.txt` files open read-only snapshots. The `.json` files imp
 
 ## Focused browser acceptance (parent runs; executor did no browser automation)
 
-1. Confirm `/healthz` says **1.8.3**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
+1. Confirm `/healthz` says **1.9.0**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
 2. Tick an item; edit a different item's name/quantity; choose a bag and move it to Activities. Mark an item Not needed: it leaves the active denominator. Search, category, bag, Still to pack, Essentials, Last-minute and Not needed filters should intersect correctly. Category count reflects its entire category, not just search matches. Clear filters to restore all rows.
 3. Add “My journal”, mark it Essential. Remove another item, use Undo: name, quantity, bag and tick return. Remove it again and refresh suggestions: it must not resurrect. Reload: edits, settings, checks, not-needed status, removals and the last removal undo survive. Only the latest removal is undoable; older removed suggestions remain dismissed.
 4. Settings (⚙ Settings menu → Packing section, Packing tab only): choose wash every 2 days and carry-on only. Quantities must stay unchanged until **Refresh suggestions**. After refresh, untouched clothing changes; edited rows/checks/skips stay. Existing obsolete rows are never deleted. Existing manually assigned bags stay protected. No bag labels imply airline approval.
@@ -49,3 +49,15 @@ The generated `*-link.txt` files open read-only snapshots. The `.json` files imp
 - Editing any detail protects the whole item from automatic refresh. Packed/not-needed status alone does not protect generated quantities. Refresh never deletes old items. Legacy items are all protected.
 - Essential and last-minute are organizational flags, not safety guarantees. No medical, entry, security, airline, power or voltage advice is guaranteed.
 - Template storage is per browser/device. Trip storage remains the existing single saved-plan slot; import/generation replaces it. JSON backups and portable snapshots work as before.
+
+## Simple mode (1.9.0)
+
+Synthetic samples (generated, not real people): `/workspace/tripfill-v1.9.0-qa/family-2-adults-2-kids-SYNTHETIC.json` (Kid C and Kid D are flagged Child; Passport ticked, Sleepwear not needed, Socks need-to-buy for Adult A) and `/workspace/tripfill-v1.9.0-qa/adults-only-2-SYNTHETIC.json`.
+
+1. Import the family sample → Packing & Prep → turn on **Simple mode** (switch, Space/Enter works). You should see an Adults list (Adult A/B items plus Shared items such as House keys) and a Kids list (Kid C/D items plus shared Children’s kit). There are no bags, categories, filters or timeline, and Before you leave is a closed disclosure.
+2. Tick an item in Simple mode, switch it off, and the same row is packed in Detailed mode. Untick it in Detailed mode and Simple mode follows. Sleepwear shows “Not needed” and can’t be ticked.
+3. In Detailed mode, type a search that hides most items, then switch to Simple mode: the full lists still show. Switch back and the search is still there.
+4. Reload: the mode is remembered. Import the adults-only sample: no Kids list.
+5. Print preview in Simple mode shows Adults and Kids lists with [x]/[ ]/[–] and quantities and no controls. Detailed print is unchanged.
+6. Share link → open it: the Simple switch works, but all checkboxes are disabled.
+7. At 390px wide, long names wrap with no horizontal scroll.
