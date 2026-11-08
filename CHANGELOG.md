@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.11.0 — “Who’s traveling?” in the trip questionnaire
+
+- The Plan form now has a **Who’s traveling?** section under Travelers: one row per traveler with an optional name and a Traveler type (Not set, Man, Woman, Girl, Boy, Infant). The first generated plan builds each person’s packing list from those rows, so infants get baby basics right away and no Refresh is needed. No other personal details are asked.
+- Same editor and data as ⚙ Settings → Packing. Once a plan exists, its traveler settings are the source of truth. Editing them in Settings updates the questionnaire, and old, imported or shared plans prefill it from their packing settings. Questionnaire edits apply only when you press Generate; they never change the current plan before that.
+- Lowering the count hides rows but keeps their names and types, so raising it again brings them back. On an existing plan, a smaller count never deletes items or checks; they move to the last remaining traveler, as before. Generating again builds a new plan, as it always has. Shared plans hide the questionnaire and stay read-only.
+
 ## 1.10.0 — Traveler types and full per-traveler lists
 
 - Each traveler now has a **Traveler type** in ⚙ Settings → Packing: Not set (general), Man, Woman, Girl, Boy or Infant. Nothing is guessed from names. Man and Woman get the same defaults, because gender never changes the list. Girl and Boy get the core kids’ list without adult items like payment cards, phones or deodorant, plus an entertainment/comfort item. Infant gets ID, weather layers, baby outfits, sleepwear, diapers, wipes and changing basics, feeding supplies “as you feed” (no assumption about formula or breastfeeding), bibs, a carrier/stroller and a comfort item instead of an adult wardrobe. Everything stays editable.

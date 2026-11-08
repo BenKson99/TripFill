@@ -80,7 +80,7 @@ app.post("/api/generate", async (req, res) => {
     if (extra.length) {
       const m = await buildMulti(inp, place, extra, home, fxForce, todayIso);
       if (m.highlights.length) await polish(m.highlights);
-      return res.json({ input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
+      return res.json({ input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
     }
     const [weather, places] = await Promise.all([getWeather(place, inp.start, end, false, todayIso), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
@@ -90,7 +90,7 @@ app.post("/api/generate", async (req, res) => {
     const pk = packing(inp, weather, place, nights, domestic);
     const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra); presetItinerary(it, ps, weather, preferredHighlights(places.highlights, inp)); walkingNotes(it, inp);
     res.json({
-      input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
+      input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,

@@ -385,3 +385,7 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .packing-member label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;min-width:0}
 .packing-member select,.packing-member input{width:100%;min-width:0;min-height:42px}
 @media(max-width:420px){.packing-member{grid-template-columns:1fr}}
+/* v1.11.0 Who's traveling? questionnaire */
+.travelers-q{border:1px solid var(--line);border-radius:14px;padding:12px 16px 16px;margin:0;min-width:0}
+.travelers-q legend{font-weight:650;padding:0 6px}
+.traveler-fields{display:grid;gap:10px}

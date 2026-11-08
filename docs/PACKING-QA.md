@@ -29,7 +29,7 @@ The generated `*-link.txt` files open read-only snapshots. The `.json` files imp
 
 ## Focused browser acceptance (parent runs; executor did no browser automation)
 
-1. Confirm `/healthz` says **1.10.0**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
+1. Confirm `/healthz` says **1.11.0**. Open 127.0.0.1:8847, not an older port or `localhost` with existing data. At 390px and desktop width, import `warm-short.json`, select Packing & Prep. All labels/reasons should wrap without horizontal scrolling; try dark mode. Warm fixture: 3 tops, 4 underwear, swimwear, no winter coat. Confirm Everyone / Shared / Traveler tabs; open ⚙ Settings (top right) or “Packing settings…” above the list and confirm the Packing section holds laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials (Tab/Shift+Tab stay inside the menu, Escape closes it and returns focus); confirm Essential vs Optional weather reasons, and need-to-buy / ready / packed / departure-day status.
 2. Tick an item; edit a different item's name/quantity; choose a bag and move it to Activities. Mark an item Not needed: it leaves the active denominator. Search, category, bag, Still to pack, Essentials, Last-minute and Not needed filters should intersect correctly. Category count reflects its entire category, not just search matches. Clear filters to restore all rows.
 3. Add “My journal”, mark it Essential. Remove another item, use Undo: name, quantity, bag and tick return. Remove it again and refresh suggestions: it must not resurrect. Reload: edits, settings, checks, not-needed status, removals and the last removal undo survive. Only the latest removal is undoable; older removed suggestions remain dismissed.
 4. Settings (⚙ Settings menu → Packing section, Packing tab only): choose wash every 2 days and carry-on only. Quantities must stay unchanged until **Refresh suggestions**. After refresh, untouched clothing changes; edited rows/checks/skips stay. Existing obsolete rows are never deleted. Existing manually assigned bags stay protected. No bag labels imply airline approval.
@@ -70,3 +70,12 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 2. Import the family sample: every traveler has a list. Infant I has diapers, feeding supplies and baby outfits but no Tops or payment card. In Simple mode the Kids list holds Girl G, Boy B and Infant I.
 3. In ⚙ Settings → Packing, change Adult Woman to Infant. A message says Refresh is needed. Press Refresh suggestions: baby items are added and the existing items and ticks stay.
 4. Open a share link: the Traveler type selects are disabled.
+
+## Who’s traveling? (1.11.0)
+
+1. Start with no plan (Clear). Set Travelers to 5. Five rows appear under “Who’s traveling?”. Name them and choose Man, Woman, Girl, Boy and Infant, then Generate (Porto, any dates). Packing & Prep shows five named lists right away: the Infant has Diapers / nappies and no Tops, and Simple mode Kids lists Girl, Boy and Infant. No Refresh is needed.
+2. Change Travelers to 2 and then back to 5: the names and types return. Changing them doesn’t alter the current plan until you Generate.
+3. In ⚙ Settings → Packing, rename Traveler 2. The Plan questionnaire row updates to match.
+4. Import `/workspace/tripfill-v1.11.0-qa/old-plan-5-profiles-SYNTHETIC.json` (a 1.10 export with no questionnaire data): the questionnaire prefills Adult Man … Infant I. The legacy `legacy-only-traveler1-SYNTHETIC.json` prefills Traveler 1–3.
+5. Open a share link: the questionnaire is hidden and nothing is editable.
+6. At 390px the rows stack without horizontal scrolling.

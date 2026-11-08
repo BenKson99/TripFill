@@ -105,7 +105,8 @@ export function packingSettings(raw: any = {}, plan?: any): PackingSettings {
     rewearTopsEvery: Number.isInteger(raw.rewearTopsEvery) && raw.rewearTopsEvery >= 1 && raw.rewearTopsEvery <= 7 ? raw.rewearTopsEvery : 1,
     rewearBottomsEvery: Number.isInteger(raw.rewearBottomsEvery) && raw.rewearBottomsEvery >= 1 && raw.rewearBottomsEvery <= 7 ? raw.rewearBottomsEvery : 3,
     includeSpares: raw.includeSpares === false ? false : true,
-    members: packingMembers(raw, plan?.input?.travelers),
+    // Members come from saved settings; a fresh plan takes them from the questionnaire (input.members).
+    members: packingMembers(Array.isArray(raw.members) ? raw : { members: plan?.input?.members }, plan?.input?.travelers),
   };
   if (Array.isArray(raw.activityKits)) settings.activityKits = [...new Set(raw.activityKits.filter((k: any) => (ACTIVITY_KITS as readonly string[]).includes(k)))] as ActivityKit[];
   else if (plan) settings.activityKits = inferActivityKits(plan);

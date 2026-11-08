@@ -1,5 +1,5 @@
 // Wikimedia asks for a descriptive User-Agent with contact info; set TRIPFILL_CONTACT in .env to your email/URL.
-export const UA = `TripFill/1.10.0 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
+export const UA = `TripFill/1.11.0 (local trip planner; ${process.env.TRIPFILL_CONTACT || "self-hosted"}) node-fetch`;
 import fs from "fs"; import path from "path"; import crypto from "crypto";
 const cache = new Map<string, { at: number; data: unknown }>();
 const receipts = new Map<string, number>();

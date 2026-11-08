@@ -4,6 +4,7 @@ import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { SettingsMenu } from "./SettingsMenu";
+import { TravelerFields, travelerRows, editTraveler, withMembers, syncFormMembers } from "./Travelers";
 import { readPackMode, writePackMode } from "./Packing";
 import { LayoutBar, SectionList, useLayout } from "./Sections";
 import { InstallButton, useOnline } from "./Pwa";
@@ -58,7 +59,7 @@ const defaultUnit = (): "C" | "F" => /-(US|LR|MM)$/i.test(navigator.language || 
 export default function App() {
   const [saved] = useState(() => { try { return readSaved(localStorage); } catch (e: Any) { return { form: null, plan: null, error: `Saved trip could not be read: ${e.message} The original browser data has not been overwritten.` }; } });
   const recoveryPending = useRef(!!(saved && "error" in saved));
-  const [form, setForm] = useState<Any>(saved?.form || { ...normalizePreferences(), destination: "", start: plus(10), end: plus(16), travelers: 2, purpose: "Leisure", style: "Mix", interests: "" });
+  const [form, setForm] = useState<Any>(() => withMembers(saved?.form || { ...normalizePreferences(), destination: "", start: plus(10), end: plus(16), travelers: 2, purpose: "Leisure", style: "Mix", interests: "" }, saved?.plan));
   const [plan, setPlan] = useState<Any>(saved?.plan || null);
   const [matches, setMatches] = useState<Any[] | null>(null);
   const [unit, setUnit] = useState<"C" | "F">(() => (localStorage.getItem(KEY + ":unit") as "C" | "F") || defaultUnit());
@@ -85,13 +86,16 @@ export default function App() {
   const changeSimple = (on: boolean) => { setSimplePacking(on); writePackMode(globalThis.localStorage, on); };
   const [settingsOpen, setSettingsOpen] = useState(false), [settingsSlot, setSettingsSlot] = useState<HTMLDivElement | null>(null);
   const [readOnly, setReadOnly] = useState<string | null>(null); // "link" | "server" when viewing a shared plan
+  // Settings → Packing edits to the active (own) plan's travelers flow back into the questionnaire; extra rows are kept.
+  const planMembersKey = JSON.stringify(plan?.packing?.settings?.members || null);
+  useEffect(() => { if (readOnly || !plan?.packing?.settings?.members) return; setForm((f: Any) => syncFormMembers(f, plan.packing.settings.members)); }, [planMembersKey, readOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   const [shareMsg, setShareMsg] = useState("");
   useEffect(() => {
     const load = () => readSharedPlan().then(r => { if (!r) return; if ("error" in r) setErr(r.error); else { setErr(""); setPlan(r.plan); setReadOnly(r.via); } });
     load(); addEventListener("hashchange", load); return () => removeEventListener("hashchange", load);
   }, []);
   useEffect(() => { if (!readOnly && !(recoveryPending.current && !plan)) { try { savePlan(localStorage, form, plan); } catch { setErr("Browser storage is full or unavailable. Export JSON now to keep your edits."); } } }, [form, plan, readOnly]);
-  const closeShared = () => { try { const own = readSaved(localStorage); clearShareFromUrl(); setReadOnly(null); setPlan(own?.plan || null); if (own?.form) setForm(own.form); } catch (e: Any) { setErr(e.message); } };
+  const closeShared = () => { try { const own = readSaved(localStorage); clearShareFromUrl(); setReadOnly(null); setPlan(own?.plan || null); if (own?.form) setForm(withMembers(own.form, own.plan)); } catch (e: Any) { setErr(e.message); } };
   const importShared = () => { if (localStorage.getItem(KEY) && !confirm("Replace your saved plan with this shared snapshot? To back up your own plan first, choose Cancel, close the shared view, and Export JSON.")) return; recoveryPending.current = false; clearShareFromUrl(); setForm({ ...plan.input, ...normalizePreferences(plan.input) }); setReadOnly(null); setTab("plan"); };
   async function share() {
     setShareMsg("…");
@@ -123,7 +127,7 @@ export default function App() {
     if (f.size > MAX_PLAN_BYTES) throw new Error("File exceeds 750 KB. Choose a smaller TripFill JSON export.");
     const next = parsePlan(await f.text());
     if ((plan || (saved && "error" in saved)) && !confirm("Importing replaces your saved plan in this browser. Export your current plan first if you need a backup. Continue?")) return;
-    recoveryPending.current = false; clearShareFromUrl(); setReadOnly(null); setPlan(next); setForm({ ...next.input, ...normalizePreferences(next.input) }); setErr(""); setShareMsg(""); setShareUrl(""); setTab("plan");
+    recoveryPending.current = false; clearShareFromUrl(); setReadOnly(null); setPlan(next); setForm(withMembers({ ...next.input, ...normalizePreferences(next.input) }, next, true)); setErr(""); setShareMsg(""); setShareUrl(""); setTab("plan");
   } catch (e: Any) { setErr(e.message); } };
   const fmtRange = (a: string, b: string) => { const o: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }; const f = (x: string) => new Date(x + "T12:00").toLocaleDateString(undefined, o); return `${f(a)} – ${f(b)}, ${b.slice(0, 4)}`; };
   const placeLabel = (m: Any) => [m.name, m.admin1, m.country].filter(Boolean).join(", ");
@@ -236,7 +240,11 @@ export default function App() {
           </div>)}
         </div>}
         <button type="button" className="ghost wide addleg" data-testid="add-leg" onClick={() => { const prev = (form.legs || []).at(-1)?.start || form.start; const a = new Date(prev + "T12:00").getTime(), b = new Date(form.end + "T12:00").getTime(); const mid = new Date(a + Math.max(86400000, Math.round((b - a) / 2 / 86400000) * 86400000)).toISOString().slice(0, 10); setForm({ ...form, legs: [...(form.legs || []), { destination: "", start: mid > form.end ? form.end : mid }] }); }}>+ Add another city</button>
-        <label>Travelers<input type="number" min={1} value={form.travelers} onChange={e => setForm({ ...form, travelers: e.target.value })} /></label>
+        <label>Travelers<input type="number" min={1} max={20} value={form.travelers} onChange={e => setForm({ ...form, travelers: e.target.value })} /></label>
+        <fieldset className="wide travelers-q" data-testid="who-traveling"><legend>Who’s traveling?</legend>
+          <p className="muted small">Add a name and type for each traveler so every person gets their own packing list from the start. Both are optional, and you can change them later in ⚙ Settings → Packing. Changes here apply when you press Generate.</p>
+          <TravelerFields idPrefix="form-traveler" members={travelerRows(form.members, form.travelers)} onEdit={(id, patch) => setForm((f: Any) => ({ ...f, members: editTraveler(f.members, f.travelers, id, patch) }))} />
+        </fieldset>
         <label>Purpose<select value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}>{["Leisure", "Business", "Family", "Celebration", "Adventure", "Other"].map(x => <option key={x}>{x}</option>)}</select></label>
         <label>Pace<select value={form.style} onChange={e => setForm({ ...form, style: e.target.value })}>{["Slow", "Mix", "Packed"].map(x => <option key={x}>{x}</option>)}</select></label>
         <label>Walking tolerance<select value={form.walkingTolerance || "standard"} onChange={e => setForm({ ...form, walkingTolerance: e.target.value })}><option value="low">Limited — short outings & rest</option><option value="standard">Standard</option><option value="high">High — longer outings welcome</option></select></label>
