@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.3 — Settings menu keyboard fix
+
+- Tab and Shift+Tab now stay inside the Settings menu, including the packing settings. Before, Tab from “Forget template” escaped to the page because those controls are rendered through a portal whose key events never reached the menu’s handler. The trap now uses a document-level listener and skips disabled, hidden and unrendered controls in page order. Escape still closes the menu and returns focus to the Settings button. Theme and temperature stay usable on shared plans.
+
 ## 1.8.2 — Settings menu
 
 - Theme and temperature toggles moved from the top bar and toolbar into one Settings menu (top right), closed by default. It closes with Escape, the × button or a click outside, and returns focus to the Settings button. It scrolls on small screens and is left out of print.

@@ -11,7 +11,7 @@ if (mode === "seed") { await seedPackingQa(join(out, "http-cache")); console.log
 else {
   const base = process.argv[4] || "http://127.0.0.1:8847";
   const u = new URL(base); if (!["127.0.0.1", "localhost"].includes(u.hostname)) throw new Error("QA must target a local server only");
-  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.8.2");
+  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.8.3");
   const page = await (await fetch(base)).text(); assert.ok(page.includes('/assets/')); const js = page.match(/src="([^\"]+\.js)"/)?.[1]; assert.ok(js); assert.equal((await fetch(`${base}${js}`)).status, 200);
   const report: any[] = [];
   for (const c of qaCases) {
