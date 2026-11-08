@@ -376,3 +376,7 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .simple-prep summary{cursor:pointer;font-weight:650}
 @media(max-width:700px){.simple-list li{flex-wrap:wrap;padding:10px 12px}.simple-owner{margin-left:30px}}
 @media print{.simple-print{display:block!important}.simple-list{border-color:#aaa}.simple-list li{border-color:#ccc}.simple-prep:not([open])>*:not(summary){display:block}}
+/* v1.9.1 trip actions at the bottom of the page (not fixed/sticky) */
+.page-actions{margin:var(--s5,32px) 0 var(--s4,24px);padding-top:var(--s3,16px);border-top:1px solid var(--line)}
+.page-actions .toolbar{margin:0;min-width:0}.page-actions .toolbar>*{max-width:100%}
+.page-actions .card{margin-top:var(--s3,16px);overflow-wrap:anywhere}.page-actions #share-url{max-width:100%;width:100%}

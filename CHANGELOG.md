@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.1 — Trip actions at the bottom
+
+- Import trip JSON, Copy share link, Print / PDF, Export JSON, Install app, Calendar (.ics) and Clear moved from under the hero to a trip actions row at the bottom of the page, after the active tab’s content. The row scrolls with the page (not fixed or sticky) and wraps on mobile. With no plan yet, only Import trip JSON shows there. The share-link message now appears under that row.
+- Settings, the hero, the main tabs, the shared-plan banner, read-only rules (no Copy share link or Clear in shared view), print exclusion and saved data are unchanged.
+
 ## 1.9.0 — Simple packing mode
 
 - A Simple mode switch sits at the top of Packing & Prep. When it’s on, the tab shows just an Adults checklist and a Kids checklist (only when there are kids), with quantity, item name, a checkbox and a small owner or “Shared” label. Categories, bags, status, filters and edit controls are hidden. The pre-trip timeline is hidden, and Before you leave folds into a small disclosure.

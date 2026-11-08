@@ -214,21 +214,10 @@ export default function App() {
       <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Your next adventure, <em>beautifully planned.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
       {recoveryPending.current && <button className="ghost noprint" onClick={() => { const a = document.createElement("a"); const u = URL.createObjectURL(new Blob([localStorage.getItem(KEY) || ""], { type: "application/json" })); a.href = u; a.download = "tripfill-browser-recovery.json"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); }}>Download original browser data for recovery</button>}
-      <div className="noprint import-start"><label className="btn"><Upload size={16} />Import trip JSON<input type="file" accept=".json,application/json" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = ""; }} /></label></div>
       {err && <div className="card error" role="alert">{err}</div>}
       {plan && <>
         {readOnly && <div className="card shared noprint" data-testid="shared-banner"><b>👀 Shared plan (read-only)</b> — {readOnly === "server" ? "loaded from this TripFill server" : "decoded from the link itself"}. Your own saved plan is untouched.
           <div className="chips"><button onClick={importShared}><Download size={16} />Import as my plan</button><button className="ghost" onClick={closeShared}>Close</button></div></div>}
-        <div className="toolbar noprint">
-          {!readOnly && <button data-testid="share" onClick={share}><Link2 size={16} />Copy share link</button>}
-          <button onClick={() => window.print()}><Printer size={16} />Print / PDF</button>
-          <button onClick={download}><Download size={16} />Export JSON</button>
-          <InstallButton />
-          <button data-testid="ics" onClick={() => downloadIcs(plan, T)} title="All-day events for each itinerary day + open checklist items. Imports into Google Calendar (Settings → Import), Apple Calendar and Outlook."><CalendarPlus size={16} />Calendar (.ics)</button>
-          {!readOnly && <button className="ghost" onClick={() => { if (confirm("Clear this plan?")) setPlan(null); }}>Clear</button>}
-        </div>
-
-        {shareMsg && !readOnly && <div className="card noprint small" data-testid="share-msg">{shareMsg}{shareUrl && <input id="share-url" readOnly value={shareUrl} onFocus={e => e.target.select()} />}<span className="muted"> Anyone with the full link can read this snapshot, including custom notes. Avoid sensitive details. Edits are not synced.</span></div>}
       </>}
       <div className="tabs noprint" role="tablist" aria-label="TripFill sections">{TABS.map((t, i) => { const dis = !plan && t.id !== "plan"; return <button key={t.id} role="tab" id={`tab-${t.id}`} ref={el => { tabRefs.current[t.id] = el; }} aria-selected={activeTab === t.id} aria-controls={`panel-${t.id}`} aria-disabled={dis || undefined} tabIndex={activeTab === t.id ? 0 : -1} disabled={dis} title={dis ? "Generate a plan first" : undefined} className={activeTab === t.id ? "on" : ""} onClick={() => setTab(t.id)} onKeyDown={e => onTabKey(e, i)}><span aria-hidden>{t.icon}</span> {t.label}</button>; })}</div>
       {!plan && <p className="muted small tabs-hint noprint">Packing & Prep and Budget unlock once you generate a plan.</p>}
@@ -296,6 +285,20 @@ export default function App() {
           <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("money")} />
         </div>
       </>}
+      <footer className="page-actions noprint" data-testid="page-actions" aria-label="Trip actions">
+        <div className="toolbar">
+          <label className="btn"><Upload size={16} />Import trip JSON<input type="file" accept=".json,application/json" hidden onChange={e => { const f = e.target.files?.[0]; if (f) void importJson(f); e.target.value = ""; }} /></label>
+          {plan && <>
+            {!readOnly && <button data-testid="share" onClick={share}><Link2 size={16} />Copy share link</button>}
+            <button onClick={() => window.print()}><Printer size={16} />Print / PDF</button>
+            <button onClick={download}><Download size={16} />Export JSON</button>
+            <InstallButton />
+            <button data-testid="ics" onClick={() => downloadIcs(plan, T)} title="All-day events for each itinerary day + open checklist items. Imports into Google Calendar (Settings → Import), Apple Calendar and Outlook."><CalendarPlus size={16} />Calendar (.ics)</button>
+            {!readOnly && <button className="ghost" onClick={() => { if (confirm("Clear this plan?")) setPlan(null); }}>Clear</button>}
+          </>}
+        </div>
+          {plan && shareMsg && !readOnly && <div className="card noprint small" data-testid="share-msg">{shareMsg}{shareUrl && <input id="share-url" readOnly value={shareUrl} onFocus={e => e.target.select()} />}<span className="muted"> Anyone with the full link can read this snapshot, including custom notes. Avoid sensitive details. Edits are not synced.</span></div>}
+      </footer>
     </div>
   );
 }

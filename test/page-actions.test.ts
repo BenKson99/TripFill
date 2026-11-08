@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const src = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+const at = (s: string) => { const i = src.indexOf(s); assert.ok(i >= 0, `missing ${s}`); return i; };
+test("v1.9.1: trip actions render once, after the tab panels, in a non-sticky footer; Settings stays on top", () => {
+  const footer = at('className="page-actions noprint"');
+  assert.ok(at("<SettingsMenu") < at('className="hero noprint"'));
+  assert.ok(at('className="hero noprint"') < at('className="tabs noprint"'));
+  for (const p of ['id="panel-plan"', 'id="panel-pack"', 'id="panel-money"']) assert.ok(at(p) < footer, `${p} before actions`);
+  assert.equal(src.split("Import trip JSON").length, 2); assert.equal(src.split('data-testid="share"').length, 2);
+  assert.ok(!src.includes("import-start")); assert.equal(src.split('className="toolbar').length, 2);
+  const end = src.indexOf("</footer>", footer), block = src.slice(footer, end);
+  const order = ["Import trip JSON", "Copy share link", "Print / PDF", "Export JSON", "<InstallButton", "Calendar (.ics)", ">Clear<", 'data-testid="share-msg"'];
+  const pos = order.map(o => block.indexOf(o)); assert.ok(pos.every(p => p >= 0), String(pos));
+  assert.deepEqual([...pos].sort((a, b) => a - b), pos, "toolbar order preserved");
+  assert.ok(block.indexOf("{plan && <>") < block.indexOf("Copy share link") && block.indexOf("Import trip JSON") < block.indexOf("{plan && <>"), "import works without a plan; plan actions need a plan");
+  assert.match(block, /\{!readOnly && <button data-testid="share"/); assert.match(block, /\{!readOnly && <button className="ghost" onClick=\{\(\) => \{ if \(confirm\("Clear/);
+  const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8"), rule = css.slice(css.indexOf(".page-actions{"));
+  assert.ok(!/\.page-actions\{[^}]*position:\s*(fixed|sticky)/.test(rule));
+});
