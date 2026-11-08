@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.2 — Settings menu
+
+- Theme and temperature toggles moved from the top bar and toolbar into one Settings menu (top right), closed by default. It closes with Escape, the × button or a click outside, and returns focus to the Settings button. It scrolls on small screens and is left out of print.
+- On Packing & Prep, laundry, rewear, spares, traveler names, activity kits, Refresh suggestions and personal essentials now live in a Packing section of that menu, opened from “Packing settings” above the list. Progress, list tabs, search, filters, checkboxes, add and undo stay on the page. Settings values and Refresh behaviour are unchanged; shared plans stay view-only.
+
 ## 1.8.1 — Clothing note fix
 
 - Tops and bottoms notes now match the rewear setting: “Change daily” says one per day instead of “rewear if comfortable”, and other settings show the days ÷ rewear interval (between washes when laundry is arranged) that produced each traveler’s quantity. Existing unedited rows pick up the new note after Refresh suggestions; edited rows, checks, status and owners are unchanged.

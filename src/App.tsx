@@ -3,7 +3,7 @@ import { packingProgress } from "../shared/packing";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
-import { ThemeToggle } from "./Theme";
+import { SettingsMenu } from "./SettingsMenu";
 import { LayoutBar, SectionList, useLayout } from "./Sections";
 import { InstallButton, useOnline } from "./Pwa";
 import { downloadIcs } from "./ics";
@@ -80,6 +80,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(saved && "error" in saved ? saved.error || "" : "");
 
+  const [settingsOpen, setSettingsOpen] = useState(false), [settingsSlot, setSettingsSlot] = useState<HTMLDivElement | null>(null);
   const [readOnly, setReadOnly] = useState<string | null>(null); // "link" | "server" when viewing a shared plan
   const [shareMsg, setShareMsg] = useState("");
   useEffect(() => {
@@ -173,7 +174,7 @@ export default function App() {
             return <><p className="warn small">These are source listings, not ratings or guaranteed recommendations. Local-cuisine ordering uses incomplete metadata; it is not a verified authenticity ranking. Confirm menus, availability, hours and allergy/cross-contact handling directly.</p>{(E.restaurants.length < 5 || E.cafes.length < 3) && <p className="warn" data-testid="limited-eats">Limited source coverage: {E.restaurants.length} restaurant(s), {E.cafes.length} coffee shop(s). No results added to pad the lists. {safeUrl(plan.guideUrl) ? <a href={safeUrl(plan.guideUrl)} target="_blank" rel="noopener noreferrer">Check the city guide</a> : "Check the destination tourist information office"} and venue websites.</p>}<h3>🍽 Restaurants</h3>{list("restaurants")}<h3>☕ Coffee shops</h3>{list("cafes")}</>; })()}
           <p className="muted small">Sources: {plan.sources.join(" · ")}{plan.aiPolished ? " · descriptions lightly reworded by AI" : ""}</p>
     </>,
-    packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
+    packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} settingsSlot={activeTab === "pack" ? settingsSlot : null} openSettings={() => setSettingsOpen(true)} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
             {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
@@ -204,7 +205,7 @@ export default function App() {
   const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => roBodies[k]).map(k => [k, roBodies[k]]));
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
-      <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><ThemeToggle /></div>
+      <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} unit={unit} setUnit={setUnit} slotRef={setSettingsSlot} /></div>
       <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Your next adventure, <em>beautifully planned.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
       {recoveryPending.current && <button className="ghost noprint" onClick={() => { const a = document.createElement("a"); const u = URL.createObjectURL(new Blob([localStorage.getItem(KEY) || ""], { type: "application/json" })); a.href = u; a.download = "tripfill-browser-recovery.json"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); }}>Download original browser data for recovery</button>}
@@ -219,7 +220,6 @@ export default function App() {
           <button onClick={download}><Download size={16} />Export JSON</button>
           <InstallButton />
           <button data-testid="ics" onClick={() => downloadIcs(plan, T)} title="All-day events for each itinerary day + open checklist items. Imports into Google Calendar (Settings → Import), Apple Calendar and Outlook."><CalendarPlus size={16} />Calendar (.ics)</button>
-          <div className="seg" role="group" aria-label="Temperature unit">{(["F", "C"] as const).map(u => <button key={u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>°{u}</button>)}</div>
           {!readOnly && <button className="ghost" onClick={() => { if (confirm("Clear this plan?")) setPlan(null); }}>Clear</button>}
         </div>
 
