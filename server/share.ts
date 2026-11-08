@@ -31,6 +31,7 @@ export function mountShare(app: Express) {
     let plan: any;
     try { plan = parsePlan(JSON.stringify(req.body?.plan)); } catch (e: any) { return res.status(400).json({ error: e.message }); }
     if (!plan || typeof plan !== "object" || !plan.place || !plan.input) return res.status(400).json({ error: "Not a TripFill plan" });
+    delete plan.packing.lastRemoved; // do not publish a local undo buffer
     const id = crypto.randomBytes(9).toString("base64url"); // 72 bits, unguessable
     const body = JSON.stringify({ createdAt: new Date().toISOString(), plan });
     if (DIR) {

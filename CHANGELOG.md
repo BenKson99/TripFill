@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.0 — Packing studio
+
+- Replaced implicit-laundry packing and quantity-in-name strings with a deterministic, shared packing engine and structured per-item quantities. Uses the full inclusive date range, per-person scope, opt-in wash interval, cautious caps, activity/purpose suggestions, and available climate extremes across all supplied legs (including departure-city stats).
+- Packing workspace: overall and category progress, packed/not-needed status, essentials and last-minute flags, search/category/status/bag filters, explicit bag assignments, readable wrapping labels, custom items, category moves, editing, removal and one-step persisted undo. Preparation tasks stay separate.
+- Explicit suggestion refresh protects every edited item, checks, skipped rows and removed suggestions. Refresh updates untouched suggestions and adds missing ones; it never automatically deletes items. Settings save without silently changing the list.
+- Browser-local personal essentials: intentional save/apply/forget, deduplicating apply and no copied checkmarks. Templates never enter snapshots unless applied; sensitive/medical details are not needed.
+- Packing model v2 validation/migration inside the existing schema-1 portable format; old IDs/names/checks retained with separated trailing quantities and safe defaults. Shared views disable all packing mutations while permitting filters. JSON and both share paths omit the deleted-item undo buffer. Print includes the entire list, quantity, category, bag and status even when screen filters are active.
+- Removed obsolete preset packing generator and unsupported universal passport/medicine/liquid guidance from new suggestions. Bag assignments are not airline/security approval; entry, plug, voltage, transport and health requirements must be checked independently.
+- Added 15 packing-focused behavior/render/integration tests (29 total tests), including four seeded production HTTP scenarios. Deterministic QA tooling is documented in `docs/PACKING-QA.md`.
+- Scope: Plan and Budget are unchanged. No accounts, paid services, auto template application, separate blank-list mode, weight calculator, reminders, or invented weather for uncovered trip days.
+
 ## 1.6.0
 - QA follow-up: print checklist completion as explicit [x]/[ ] text instead of background-dependent custom controls; packing/prep/timeline labels wrap and print in full. Narrow screens use a single packing column. Version remains 1.6.0 pending deployment.
 - Portable sharing: new links always embed compressed versioned snapshots; oversized links ask for JSON export instead of silently storing on Render's ephemeral disk. Retained legacy short-link reads, with clear unrecoverable-record errors.

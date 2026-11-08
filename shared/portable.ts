@@ -1,3 +1,4 @@
+import { validatePacking, migratePacking } from "./packing.js";
 import LZ from "lz-string";
 export const MAX_PLAN_BYTES = 750_000;
 export const MAX_LINK_CHARS = 100_000;
@@ -46,6 +47,8 @@ export function validatePlan(raw: any): any {
     itinerary: [{ date: "date", label: "string", weather: "string", morning: "string", afternoon: "string", evening: "string", notes: "string", rainyBackup: "string?", leg: "string?" }],
     timeline: [{ id: "string", due: "date", task: "string", done: "boolean" }], budget, sources: ["string"]
   }, "plan");
+  validatePacking(p.packing);
+  p.packing = migratePacking(p.packing);
   if (!Number.isFinite(Date.parse(p.generatedAt))) fail("Invalid plan generation timestamp.");
   if (p.input.end < p.input.start || !p.place.name.trim() || Math.abs(p.place.lat) > 90 || Math.abs(p.place.lon) > 180) fail("Invalid destination or date range in plan.");
   // Early versions serialized travelers from an input as a string. Migrated below before validation in parsePlan.
@@ -76,7 +79,10 @@ export function parsePlan(text: string): any {
   return validatePlan(raw);
 }
 export function exportPlan(plan: any) {
-  const envelope = { format: "tripfill", schemaVersion: 1, exportedAt: new Date().toISOString(), plan: parsePlan(JSON.stringify(plan)) };
+  const snapshot = parsePlan(JSON.stringify(plan));
+  // Local undo buffers may contain deleted personal text; never distribute them.
+  delete snapshot.packing.lastRemoved;
+  const envelope = { format: "tripfill", schemaVersion: 1, exportedAt: new Date().toISOString(), plan: snapshot };
   let text = JSON.stringify(envelope, null, 2);
   if (new TextEncoder().encode(text).length > MAX_PLAN_BYTES) text = JSON.stringify(envelope);
   if (new TextEncoder().encode(text).length > MAX_PLAN_BYTES) fail("Export exceeds 750 KB. Remove some custom content first.");

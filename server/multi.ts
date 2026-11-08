@@ -4,7 +4,7 @@ import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput, type ItinDay } from "./plan.js";
 import { budget } from "./budget.js";
 import { tripFacts, haversineKm } from "./trip.js";
-import { presetsOf, presetPacking, presetItinerary } from "./presets.js";
+import { presetsOf, presetItinerary } from "./presets.js";
 
 export interface LegIn { destination: string; start: string; place?: Place }
 const fmt = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -71,8 +71,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const countries = [...new Set(built.map(L => L.place.country))];
   const synth: Place = { ...first, country: countries.join(" & ") };
   const totalNights = Math.max(0, dateRange(inp.start, tripEnd).length - 1);
-  const pk = packing(inp, weather, synth, totalNights, domestic); presetPacking(pk.groups, ps, weather, pk.leaveAtHome);
-  if (countries.length > 1 && !domestic) { const e = pk.groups.find(g => g.group === "Electronics"); const i = e?.items.find(x => x.item.startsWith("Plug adapter")); if (i) { i.item = `Plug adapter(s) for ${countries.join(", ")}`; i.reason = "multi-country trip — socket types may differ"; } }
+  const pk = packing(inp, weather, synth, totalNights, domestic);
   const eats = { restaurants: built.flatMap(L => L.places.eats.restaurants), cafes: built.flatMap(L => L.places.eats.cafes) };
   return {
     title: built.map(L => L.place.name).join(" → "), capped, place: first, domestic,

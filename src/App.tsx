@@ -1,3 +1,5 @@
+import { PackingWorkspace } from "./Packing";
+import { packingProgress } from "../shared/packing";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
@@ -129,7 +131,7 @@ export default function App() {
     weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.rainyDays} wet day(s)`,
     highlights: `${plan.highlights.length} sights · ${plan.highlights.slice(0, 3).map((h: Any) => h.name).join(", ")}…`,
     food: (() => { const E = eatsOf(plan); return `${E.restaurants.length} restaurants · ${E.cafes.length} coffee shops${E.restaurants.length ? " · " + E.restaurants.slice(0, 2).map((f: Any) => f.name).join(", ") + "…" : ""}`; })(),
-    packing: `${packItems.length} items, ${packItems.filter((i: Any) => i.checked).length} packed`,
+    packing: `${packingProgress(packItems).packed}/${packingProgress(packItems).total} active items packed`,
     itinerary: `${plan.itinerary.length} days · ${plan.input.style} pace`,
     prep: (() => { const pr = plan.prep || defaultPrep(plan); return `${pr.length} tasks, ${pr.filter((t: Any) => t.done).length} done`; })(),
     timeline: `${plan.timeline.length} tasks, ${plan.timeline.filter((t: Any) => t.done).length} done · next: ${(plan.timeline.find((t: Any) => !t.done) || {}).task || "all done"}`,
@@ -171,13 +173,7 @@ export default function App() {
             return <><p className="warn small">These are source listings, not ratings or guaranteed recommendations. Local-cuisine ordering uses incomplete metadata; it is not a verified authenticity ranking. Confirm menus, availability, hours and allergy/cross-contact handling directly.</p>{(E.restaurants.length < 5 || E.cafes.length < 3) && <p className="warn" data-testid="limited-eats">Limited source coverage: {E.restaurants.length} restaurant(s), {E.cafes.length} coffee shop(s). No results added to pad the lists. {safeUrl(plan.guideUrl) ? <a href={safeUrl(plan.guideUrl)} target="_blank" rel="noopener noreferrer">Check the city guide</a> : "Check the destination tourist information office"} and venue websites.</p>}<h3>🍽 Restaurants</h3>{list("restaurants")}<h3>☕ Coffee shops</h3>{list("cafes")}</>; })()}
           <p className="muted small">Sources: {plan.sources.join(" · ")}{plan.aiPolished ? " · descriptions lightly reworded by AI" : ""}</p>
     </>,
-    packing: <>
-          <div className="grid">{plan.packing.groups.map((g: Any, gi: number) => <div key={g.group}><h3>{g.group}</h3>
-            {g.items.map((it: Any, ii: number) => <div key={it.id} className="pk"><ChecklistCheckbox aria-label={it.item} checked={it.checked} onChange={e => upd(p => { p.packing.groups[gi].items[ii].checked = e.target.checked; })} /><ChecklistText value={it.item} onChange={v => upd(p => { p.packing.groups[gi].items[ii].item = v; })} />{it.reason && <small className="why">{T(it.reason)}</small>}<button className="x noprint" onClick={() => upd(p => { p.packing.groups[gi].items.splice(ii, 1); })}>×</button></div>)}
-            <button className="add noprint" onClick={() => upd(p => { p.packing.groups[gi].items.push({ id: crypto.randomUUID(), item: "New item", reason: "", checked: false }); })}>+ add</button></div>)}
-            <div><h3>🚫 Leave at home</h3>{plan.packing.leaveAtHome.map((it: Any, ii: number) => <div key={it.id} className="pk"><ChecklistText value={it.item} onChange={v => upd(p => { p.packing.leaveAtHome[ii].item = v; })} /><small className="why">{T(it.reason)}</small></div>)}</div>
-          </div>
-    </>,
+    packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
             {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
@@ -204,7 +200,7 @@ export default function App() {
         </> : budgetTable(plan.budget, (p: Any) => p.budget),
   } : {};
 
-  const roBodies = readOnly ? Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, <fieldset key={k} className="ro" disabled>{v}</fieldset>])) : bodies;
+  const roBodies = readOnly ? Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, k === "packing" ? v : <fieldset key={k} className="ro" disabled>{v}</fieldset>])) : bodies;
   const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => roBodies[k]).map(k => [k, roBodies[k]]));
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>

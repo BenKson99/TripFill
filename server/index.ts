@@ -13,7 +13,7 @@ import { getFx } from "./fx.js";
 import { tripFacts } from "./trip.js";
 import { mountShare, shareStore } from "./share.js";
 import { buildMulti } from "./multi.js";
-import { presetsOf, presetPacking, presetItinerary } from "./presets.js";
+import { presetsOf, presetItinerary } from "./presets.js";
 
 // Minimal .env loader (no dependency)
 try { for (const l of fs.readFileSync(".env", "utf8").split("\n")) { const m = l.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; } } catch { /* no .env */ }
@@ -87,7 +87,7 @@ app.post("/api/generate", async (req, res) => {
     const aiPolished = await polish(places.highlights);
     places.eats = dietaryEats(places.eats, inp);
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
-    const pk = packing(inp, weather, place, nights, domestic); presetPacking(pk.groups, ps, weather, pk.leaveAtHome);
+    const pk = packing(inp, weather, place, nights, domestic);
     const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra); presetItinerary(it, ps, weather, preferredHighlights(places.highlights, inp)); walkingNotes(it, inp);
     res.json({
       input: { ...inp, _matches: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
