@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
-import { TravelerFields, editTraveler } from "./Travelers";
+import { TravelerFields, editTraveler, setAllTypes } from "./Travelers";
 import { TravelModeField } from "./TravelMode";
 import { resolveTravelMode, type TravelMode } from "../shared/travel";
 
 import { Settings } from "lucide-react";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
-import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, bagLabel, bagsFor, type SimpleRow, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
+import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, groupSimpleRows, simpleGroupLabel, updatePackingItems, bagLabel, bagsFor, type SimpleRow, type SimpleGroup, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
 
 const KIT_LABELS: Record<ActivityKit, string> = {
   beach: "Beach & swim", hiking: "Hiking", ski: "Ski", business: "Business",
@@ -59,10 +59,11 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     </article>)}
   </section>; });
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
+  const checkMany = (ids: string[], checked: boolean) => { if (!readOnly) onChange(updatePackingItems(p, ids, { checked })); };
   if (simple) return <div className="packing-workspace packing-simple" data-testid="packing-workspace">
     {toggle}
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} />, settingsSlot)}
-    <SimpleLists p={p} readOnly={readOnly} onCheck={(id, checked) => edit(id, { checked })} />
+    <SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={(id, checked) => edit(id, { checked })} />
   </div>;
   return <div className="packing-workspace" data-testid="packing-workspace">
     {toggle}
@@ -80,6 +81,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
       <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All categories</option>{p.groups.map(g => <option key={g.group}>{g.group}</option>)}</select></label>
       <label>Show<select value={status} onChange={e => setStatus(e.target.value)}>{[["all", "All items"], ["unpacked", "Still to pack"], ["need-to-buy", "Need to buy"], ["ready", "Ready"], ["packed", "Packed"], ["essential", "Essentials"], ["departure-day", "Departure day"], ["skipped", "Not needed"]].map(([v, s]) => <option key={v} value={v}>{s}</option>)}</select></label>
       <label>Bag<select value={bag} onChange={e => setBag(e.target.value)}><option value="all">All bags</option>{bagsFor(travelMode).map(b => <option key={b} value={b}>{bagLabel(b, travelMode)}</option>)}</select></label>
+      {members.length > 1 && <label>Show only<select aria-label="Show only" data-testid="packing-show-only" value={owner} onChange={e => { setOwner(e.target.value); if (e.target.value !== "all") setNewOwner(e.target.value); }}><option value="all">Everyone</option><option value={members[0].id}>My list · {members[0].name}</option><option value="shared">Shared</option>{members.slice(1).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>}
     </div>
     {message && <p className="packing-message noprint" role="status">{message}</p>}
     {!readOnly && p.lastRemoved && <div className="packing-undo noprint"><span>Last removed: {p.lastRemoved.item.item}</span><button className="ghost" onClick={() => { change(undoPackingRemoval(p)); setMessage("Item restored with its quantity, bag and packed status."); }}>Undo removal</button></div>}
@@ -110,7 +112,7 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
         <label>Rewear tops<select value={p.settings.rewearTopsEvery ?? 1} onChange={e => changeSettings({ rewearTopsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label>
         <label>Rewear bottoms<select value={p.settings.rewearBottomsEvery ?? 3} onChange={e => changeSettings({ rewearBottomsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label></div>
         <label className="packing-flag"><input type="checkbox" checked={p.settings.includeSpares !== false} onChange={e => changeSettings({ includeSpares: e.target.checked })} />Add a spare pair of underwear and socks</label>
-        <TravelerFields idPrefix="settings-traveler" members={members} disabled={readOnly} onEdit={(id, patch) => { changeSettings({ members: editTraveler(members, members.length, id, patch) }); if (patch.type !== undefined) setMessage("Traveler type saved. Press Refresh suggestions to add items for it; existing items, checks and edits are kept — remove any that no longer apply."); }} />
+        <TravelerFields idPrefix="settings-traveler" members={members} disabled={readOnly} onEdit={(id, patch) => { changeSettings({ members: editTraveler(members, members.length, id, patch) }); if (patch.type !== undefined) setMessage("Traveler type saved. Press Refresh suggestions to add items for it; existing items, checks and edits are kept — remove any that no longer apply."); }} onEditAll={type => { changeSettings({ members: setAllTypes(members, members.length, type) }); setMessage("Traveler type saved. Press Refresh suggestions to add items for it; existing items, checks and edits are kept — remove any that no longer apply."); }} />
         <p className="muted small">Traveler type picks sensible defaults (Girl, Boy and Infant appear under Kids in Simple mode). Type changes apply when you press Refresh suggestions.</p>
         <fieldset className="packing-kits"><legend>Optional activity kits</legend><p className="muted small">Kits start from this trip’s purpose and interests. Turn one off to keep it out of the next refresh; existing items stay unless you remove them.</p><div className="chips">{ACTIVITY_KITS.map(k => <label key={k} className="packing-flag"><input type="checkbox" checked={kits.includes(k)} onChange={e => changeSettings({ activityKits: e.target.checked ? [...kits, k] : kits.filter(x => x !== k) })} />{KIT_LABELS[k]}</label>)}</div></fieldset>
         <p className="muted small">Settings are saved with this trip. Nothing changes automatically: refresh suggestions when ready. Refresh updates only untouched suggestions and adds missing ones; it keeps your edits, checks, not-needed items and removals, and never deletes old items. Review any older suggestions yourself.</p>
@@ -126,29 +128,68 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
 }
 
 /** Simple mode: whole active lists (ignores detailed search/filters), same item ids, checks only. */
-export function SimpleLists({ p, readOnly, onCheck }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void }) {
-  const { adults, kids } = simpleLists(p);
+export function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {
+  const checkMany = onCheckMany || ((ids: string[], checked: boolean) => ids.forEach(id => onCheck(id, checked)));
+  const lists = useMemo(() => simpleLists(p), [p]);
+  const adultEntries = useMemo(() => groupSimpleRows(lists.adults), [lists.adults]);
+  const kidEntries = useMemo(() => lists.kids ? groupSimpleRows(lists.kids) : null, [lists.kids]);
   const multi = (p.settings.members?.length || 1) > 1;
-  const list = (title: string, rows: SimpleRow[], print: boolean) => {
+  const list = (title: string, grouped: ReturnType<typeof groupSimpleRows>, rows: SimpleRow[], print: boolean) => {
     const active = rows.filter(r => !r.item.skipped), done = active.filter(r => r.item.checked).length;
     return <section className="simple-list" aria-label={`${title} packing list`} data-testid={print ? undefined : `simple-${title.toLowerCase()}`}>
       <header><h3>{title}</h3><span className="muted small">{done}/{active.length} packed</span></header>
-      {rows.length ? <ul>{rows.map(({ item: i, ownerName, shared }) => {
-        const tag = shared ? "Shared" : multi || title === "Kids" ? ownerName : "";
-        const label = `${i.quantity} × ${i.item}${tag ? ` (${tag})` : ""}${i.skipped ? " — not needed" : ""}`;
-        return <li key={i.id} className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id}>
-          {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
-            : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-          <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span>
-          {tag && <small className="simple-owner">{tag}</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
-        </li>; })}</ul> : <p className="muted small">No items yet.</p>}
+      {rows.length ? <ul>{grouped.entries.map(e => e.kind === "shared"
+        ? <SimpleSharedRow key={e.row.item.id} row={e.row} readOnly={readOnly} print={print} onCheck={onCheck} />
+        : <SimpleGroupRow key={e.group.key} g={e.group} multi={multi} title={title} readOnly={readOnly} print={print} onCheck={onCheck} onCheckMany={checkMany} />)}</ul>
+        : <p className="muted small">No items yet.</p>}
     </section>;
   };
   return <>
-    <div className="simple-screen noprint">{list("Adults", adults, false)}{kids && list("Kids", kids, false)}</div>
-    <div className="packing-print simple-print">{list("Adults", adults, true)}{kids && list("Kids", kids, true)}</div>
+    <div className="simple-screen noprint">{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</div>
+    <div className="packing-print simple-print">{list("Adults", adultEntries, lists.adults, true)}{kidEntries && list("Kids", kidEntries, lists.kids!, true)}</div>
   </>;
 }
+
+const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void }) {
+  const i = row.item, label = `${i.quantity} × ${i.item} (Shared)${i.skipped ? " — not needed" : ""}`;
+  return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id} data-shared="true">
+    {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
+      : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
+    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span>
+    <small className="simple-owner">Shared</small>{i.skipped && <small className="simple-owner">Not needed</small>}
+  </li>;
+});
+
+const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly, print, onCheck, onCheckMany }: { g: SimpleGroup; multi: boolean; title: string; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany: (ids: string[], checked: boolean) => void }) {
+  const [open, setOpen] = useState(false);
+  if (g.rows.length === 1) {
+    const { item: i, ownerName } = g.rows[0];
+    const tag = multi || title === "Kids" ? ownerName : "";
+    const label = `${i.quantity} × ${i.item}${tag ? ` (${tag})` : ""}${i.skipped ? " — not needed" : ""}`;
+    return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id}>
+      {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
+        : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
+      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span>
+      {tag && <small className="simple-owner">{tag}</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
+    </li>;
+  }
+  const label = simpleGroupLabel(g), allPacked = g.total > 0 && g.packed === g.total, some = g.packed > 0 && !allPacked;
+  const ids = g.rows.filter(r => !r.item.skipped).map(r => r.item.id);
+  return <li className={`simple-group${allPacked ? " packed" : ""}`} data-group-key={print ? undefined : g.key}>
+    {print ? <span aria-hidden>{allPacked ? "[x]" : some ? "[/]" : "[ ]"}</span>
+      : <input type="checkbox" aria-label={`Pack ${label} for everyone`} checked={allPacked} ref={el => { if (el) el.indeterminate = some; }} disabled={readOnly || !g.total} onChange={() => onCheckMany(ids, !allPacked)} />}
+    <span className="simple-name">{label}</span>
+    <small className="simple-progress">{g.packed}/{g.total} packed</small>
+    {!print && !readOnly && g.total > 0 && <button type="button" className="ghost simple-mark-all" onClick={() => onCheckMany(ids, !allPacked)}>{allPacked ? "Unpack all" : "Mark all packed"}</button>}
+    {!print && <button type="button" className="ghost simple-expand" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Hide people" : "Show people"}</button>}
+    {print && <small className="simple-owner">{g.rows.map(r => r.ownerName).join(", ")}</small>}
+    {open && !print && <ul className="simple-people">{g.rows.map(({ item: i, ownerName }) => <li key={i.id} className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={i.id}>
+      <input type="checkbox" aria-label={`Pack ${i.item} for ${ownerName}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />
+      <span className="simple-name">{ownerName}</span>
+      {i.skipped && <small className="simple-owner">Not needed</small>}
+    </li>)}</ul>}
+  </li>;
+});
 
 /** Browser-local view preference only ("simple" | "detailed"); never part of the trip or shared links. */
 export const PACK_MODE_KEY = "tripfill:packingMode";

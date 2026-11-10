@@ -13,7 +13,7 @@ test("v1.11.1: questionnaire boxes hold real values Traveler 1, Traveler 2, Trav
 test("adding travelers appends sequential defaults and keeps custom names, types and ids", () => {
   let m = editTraveler([], 2, "traveler-1", { name: "Ben" }); m = editTraveler(m, 2, "traveler-2", { type: "infant" });
   const rows = travelerRows(m, 4);
-  assert.deepEqual(rows.map(r => [r.id, r.name, r.profile]), [["traveler-1", "Ben", undefined], ["traveler-2", "Traveler 2", "infant"], ["traveler-3", "Traveler 3", undefined], ["traveler-4", "Traveler 4", undefined]]);
+  assert.deepEqual(rows.map(r => [r.id, r.name, r.profile]), [["traveler-1", "Ben", undefined], ["traveler-2", "Traveler 2", "infant"], ["traveler-3", "Traveler 3", "infant"], ["traveler-4", "Traveler 4", "infant"]], "new rows inherit the most common / last chosen type");
   const back = travelerRows(editTraveler(m, 1, "traveler-1", { name: "Ben K" }), 2);
   assert.deepEqual(back.map(r => r.name), ["Ben K", "Traveler 2"]); assert.equal(back[1].profile, "infant", "shrink/re-expand keeps drafts");
 });

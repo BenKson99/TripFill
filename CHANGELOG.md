@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.13.0 — Big groups, snow vs rain, set everyone
+
+- Simple packing mode now collapses identical personal items in a group (Adults or Kids) into one row, such as “Passport ×16”, with a compact “5/16 packed” count, an expand-to-tick-people control, and “Mark all packed”. Ticks still update each traveler’s underlying item, so detailed mode, export and share stay consistent. Shared items stay as single rows. Toggling Simple with a large group is instant. Detailed mode has a “Show only” / “My list” focus. Shared quantities such as plug adapters scale with group size (about one per three travelers).
+- Weather treats freezing precipitation as snow: Open-Meteo `snowfall_sum` is read from the existing forecast and archive requests, and otherwise a temperature heuristic is used (mean at or below about 1°C, or high ≤ about 2°C, counts as snow; up to about 4°C is mixed). Summaries and icons say “Snowy” / “Snow likely” instead of “Often wet” and rain. For ski trips, snow is good news (“Fresh snow, great for skiing; dress warm”) and does not trigger the indoor rain backup. Packing suggests a waterproof shell and snow boots, not an umbrella. Warm-day rain behaviour is unchanged.
+- In “Who’s traveling?” and ⚙ Settings → Packing, a compact **Set everyone to** control applies a traveler type to every visible row, keeping names. New rows added by raising the count inherit the most common type (ties go to the last chosen type) instead of “Not set”. After a plan exists, Settings still asks you to Refresh suggestions, as before.
+
 ## 1.12.1 — Home city on Generate
 
 - Pressing Generate now uses whatever is typed in Home city, even if the lookup has not finished. The typed name is sent and resolved on the server, the same way Destination is. If the city cannot be found, an error is shown in the form and under the Home city field, instead of building a plan with no home.

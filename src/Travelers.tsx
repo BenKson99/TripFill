@@ -20,10 +20,25 @@ export function editTraveler(all: PackingMember[] | undefined, count: unknown, i
   return [...rows.map(apply), ...extra];
 }
 export const typeValue = (m: PackingMember) => m.profile || (m.child ? "child" : "");
+/** Apply one type to every visible traveler; names and hidden (shrunk) rows are preserved. */
+export function setAllTypes(all: PackingMember[] | undefined, count: unknown, type: string): PackingMember[] {
+  const rows = travelerRows(all, count), extra = (all || []).filter(m => !rows.some(r => r.id === m.id));
+  const apply = (x: PackingMember): PackingMember => {
+    const next: PackingMember = { id: x.id, name: x.name };
+    if (type === "child") next.child = true;
+    else if ((PROFILES as readonly string[]).includes(type)) { next.profile = type as Profile; if (type === "girl" || type === "boy" || type === "infant") next.child = true; }
+    return next;
+  };
+  return [...rows.map(apply), ...extra];
+}
 
 /** One traveler editor used by both the Plan questionnaire and ⚙ Settings → Packing. */
-export function TravelerFields({ members, onEdit, disabled, idPrefix }: { members: PackingMember[]; onEdit: (id: string, patch: { name?: string; type?: string }) => void; disabled?: boolean; idPrefix: string }) {
-  return <div className="packing-members traveler-fields">{members.map((m, i) => { const val = typeValue(m); return <div key={m.id} className="packing-member" data-testid={`${idPrefix}-${m.id}`}>
+export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix }: { members: PackingMember[]; onEdit: (id: string, patch: { name?: string; type?: string }) => void; onEditAll?: (type: string) => void; disabled?: boolean; idPrefix: string }) {
+  return <div className="packing-members traveler-fields">{members.length >= 2 && onEditAll && <div className="set-everyone" data-testid={`${idPrefix}-set-everyone`}>
+    <label>Set everyone to<select aria-label="Set everyone to" defaultValue="" disabled={disabled} onChange={e => { const v = e.target.value; if (v !== "") onEditAll(v === "unset" ? "" : v); e.target.selectedIndex = 0; }}>
+      <option value="">Choose type…</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}<option value="unset">Not set (general)</option>
+    </select></label>
+  </div>}{members.map((m, i) => { const val = typeValue(m); return <div key={m.id} className="packing-member" data-testid={`${idPrefix}-${m.id}`}>
     <label>Traveler {i + 1} name<NameInput index={i} name={m.name} disabled={disabled} onCommit={name => onEdit(m.id, { name })} /></label>
     <label>Traveler type<select aria-label={`Traveler type for traveler ${i + 1}`} value={val} disabled={disabled} onChange={e => onEdit(m.id, { type: e.target.value })}>
       <option value="">Not set (general)</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}{val === "child" && <option value="child">Child (unspecified)</option>}</select></label>

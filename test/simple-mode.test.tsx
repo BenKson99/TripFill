@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { fixture } from "./fixtures.js";
-import { packingItems, simpleLists, suggestPacking, updatePackingItem, validatePacking, packingMembers, migratePacking } from "../shared/packing.js";
+import { packingItems, simpleLists, groupSimpleRows, suggestPacking, updatePackingItem, validatePacking, packingMembers, migratePacking } from "../shared/packing.js";
 import { SimpleLists, PackingWorkspace, readPackMode, writePackMode, PACK_MODE_KEY } from "../src/Packing.js";
 
 const family = () => {
@@ -77,14 +77,15 @@ test("shared read-only: simple checkboxes all disabled, no settings mutation pat
   assert.ok(boxes.length > 10); assert.ok(boxes.every(b => b.includes('disabled=""')));
   assert.ok(html.includes('role="switch"'), "appearance toggle still offered");
 });
-test("simple print lists every item grouped Adults/Kids with quantities and status markers; detailed print unchanged", () => {
-  const p = family(), first = simpleLists(p.packing).adults[0].item;
-  p.packing = updatePackingItem(p.packing, first.id, { checked: true, quantity: 3 });
+test("simple print lists Adults/Kids with quantities and status markers; identical personal items are collapsed; detailed print unchanged", () => {
+  const p = family(), key = packingItems(p.packing).find(i => i.item === "House keys")!;
+  p.packing = updatePackingItem(p.packing, key.id, { checked: true, quantity: 3 });
   const html = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} simple onChange={() => {}} T={s => s} />);
   const print = html.slice(html.indexOf('class="packing-print simple-print"'));
   assert.ok(print.includes('aria-label="Adults packing list"') && print.includes('aria-label="Kids packing list"'));
-  assert.ok(print.includes(`[x]</span><span class="simple-qty">3 ×</span><span class="simple-name">${first.item.replace(/&/g, "&amp;")}`));
-  assert.equal((print.match(/<li /g) || []).length, packingItems(p.packing).length);
+  assert.ok(print.includes(`[x]</span><span class="simple-qty">3 ×</span><span class="simple-name">House keys`));
+  const { adults, kids } = simpleLists(p.packing);
+  assert.equal((print.match(/<li /g) || []).length, groupSimpleRows(adults).entries.length + groupSimpleRows(kids!).entries.length);
   assert.ok(!print.includes("<input"));
   const detailed = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} onChange={() => {}} T={s => s} />);
   assert.ok(detailed.includes('<div class="packing-print">') && !detailed.includes("simple-print"));

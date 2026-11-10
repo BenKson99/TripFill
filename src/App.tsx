@@ -4,7 +4,7 @@ import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { SettingsMenu } from "./SettingsMenu";
-import { TravelerFields, travelerRows, editTraveler, withMembers, syncFormMembers } from "./Travelers";
+import { TravelerFields, travelerRows, editTraveler, setAllTypes, withMembers, syncFormMembers } from "./Travelers";
 import { TravelModeField } from "./TravelMode";
 import { resolveTravelMode, type TravelMode } from "../shared/travel";
 import { applyTravelMode } from "../shared/applyTravel";
@@ -14,6 +14,7 @@ import { InstallButton, useOnline } from "./Pwa";
 import { downloadIcs } from "./ics";
 import { DAY_COLORS, MapView, pinsFor } from "./MapView";
 import { exportPlan, parsePlan, readSaved, savePlan, normalizePreferences, MAX_PLAN_BYTES, safeUrl, weatherLabel } from "../shared/portable";
+import { precipProbLabel } from "../shared/precip";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
@@ -156,7 +157,7 @@ export default function App() {
   const pins = plan ? pinsFor(plan.highlights || [], plan.itinerary || []) : [];
   const summaries: Record<string, string> = plan ? {
     map: `${pins.length} pinned sights across ${new Set(pins.filter(p => p.day != null).map(p => p.day)).size} day(s)`,
-    weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.rainyDays} wet day(s)`,
+    weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.snowDays ? plan.weather.stats.snowDays + " snow day(s)" : plan.weather.stats.rainyDays + " wet day(s)"}${plan.weather.stats.snowDays && plan.weather.stats.rainyDays ? ` · ${plan.weather.stats.rainyDays} wet` : ""}`,
     highlights: `${plan.highlights.length} sights · ${plan.highlights.slice(0, 3).map((h: Any) => h.name).join(", ")}…`,
     food: (() => { const E = eatsOf(plan); return `${E.restaurants.length} restaurants · ${E.cafes.length} coffee shops${E.restaurants.length ? " · " + E.restaurants.slice(0, 2).map((f: Any) => f.name).join(", ") + "…" : ""}`; })(),
     packing: `${packingProgress(packItems).packed}/${packingProgress(packItems).total} active items packed`,
@@ -185,9 +186,9 @@ export default function App() {
   const bodies: Record<string, JSX.Element> = plan ? {
     weather: <>
           <p className={plan.weather.source !== "forecast" ? "warn" : "muted"}>{plan.weather.source === "typical" ? "📊 " : "📡 "}{plan.weather.note}</p>
-          <p className="wxstat"><span><Thermometer size={15} /> Avg high <b>{deg(plan.weather.stats.avgHigh)}</b> · low <b>{deg(plan.weather.stats.avgLow)}</b></span><span><Droplets size={15} /> Wet days ~<b>{plan.weather.stats.rainyDays}</b></span></p>
-          {plan.weather.legs?.length > 1 && <ul className="small wx-legs" data-testid="leg-weather">{plan.weather.legs.map((l: Any) => <li key={l.name}><b>{l.name}</b>: avg high {deg(l.stats.avgHigh)} · low {deg(l.stats.avgLow)} · wet days ~{l.stats.rainyDays}</li>)}</ul>}
-          <div className="wx">{plan.weather.days.map((d: Any) => <div key={d.date} className="wxd">{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${d.typical ? " wet in sampled years" : " rain"}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}</div>)}</div>
+          <p className="wxstat"><span><Thermometer size={15} /> Avg high <b>{deg(plan.weather.stats.avgHigh)}</b> · low <b>{deg(plan.weather.stats.avgLow)}</b></span><span><Droplets size={15} /> {plan.weather.stats.snowDays ? <>Snow days ~<b>{plan.weather.stats.snowDays}</b>{plan.weather.stats.rainyDays ? " · " : ""}</> : null}{plan.weather.stats.rainyDays || !plan.weather.stats.snowDays ? <>Wet days ~<b>{plan.weather.stats.rainyDays}</b></> : null}</span></p>
+          {plan.weather.legs?.length > 1 && <ul className="small wx-legs" data-testid="leg-weather">{plan.weather.legs.map((l: Any) => <li key={l.name}><b>{l.name}</b>: avg high {deg(l.stats.avgHigh)} · low {deg(l.stats.avgLow)} · {l.stats.snowDays ? `snow days ~${l.stats.snowDays}` : ""}{l.stats.snowDays && l.stats.rainyDays ? " · " : ""}{l.stats.rainyDays || !l.stats.snowDays ? `wet days ~${l.stats.rainyDays}` : ""}</li>)}</ul>}
+          <div className="wx">{plan.weather.days.map((d: Any) => <div key={d.date} className="wxd">{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}</div>)}</div>
     </>,
     highlights: <>
           <ol className="hl">{plan.highlights.map((h: Any, i: number) => <li key={i}>{plan.legs?.length > 1 && h.leg !== plan.highlights[i - 1]?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
@@ -263,7 +264,7 @@ export default function App() {
         <label>Travelers<input type="number" min={1} max={20} value={form.travelers} onChange={e => setForm({ ...form, travelers: e.target.value })} /></label>
         <fieldset className="wide travelers-q" data-testid="who-traveling"><legend>Who’s traveling?</legend>
           <p className="muted small">Add a name and type for each traveler so every person gets their own packing list from the start. Both are optional, and you can change them later in ⚙ Settings → Packing. Changes here apply when you press Generate.</p>
-          <TravelerFields idPrefix="form-traveler" members={travelerRows(form.members, form.travelers)} onEdit={(id, patch) => setForm((f: Any) => ({ ...f, members: editTraveler(f.members, f.travelers, id, patch) }))} />
+          <TravelerFields idPrefix="form-traveler" members={travelerRows(form.members, form.travelers)} onEdit={(id, patch) => setForm((f: Any) => ({ ...f, members: editTraveler(f.members, f.travelers, id, patch) }))} onEditAll={type => setForm((f: Any) => ({ ...f, members: setAllTypes(f.members, f.travelers, type) }))} />
         </fieldset>
         <label>Purpose<select value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}>{["Leisure", "Business", "Family", "Celebration", "Adventure", "Other"].map(x => <option key={x}>{x}</option>)}</select></label>
         <label>Pace<select value={form.style} onChange={e => setForm({ ...form, style: e.target.value })}>{["Slow", "Mix", "Packed"].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -290,7 +291,7 @@ export default function App() {
           <div className="stats" data-testid="stats">
             <div className="stat"><CalendarDays size={18} /><div><b>{plan.itinerary.length} days</b><small>{plan.input.start} → {plan.input.end}</small></div></div>
             <div className="stat"><Users size={18} /><div><b>{plan.input.travelers}</b><small>traveler(s)</small></div></div>
-            <div className="stat"><WxIcon s={plan.weather.days[0]?.summary || ""} /><div><b>{deg(plan.weather.stats.avgHigh)} / {deg(plan.weather.stats.avgLow)}</b><small>avg high / low · {plan.weather.stats.rainyDays} wet</small></div></div>
+            <div className="stat"><WxIcon s={plan.weather.days[0]?.summary || ""} /><div><b>{deg(plan.weather.stats.avgHigh)} / {deg(plan.weather.stats.avgLow)}</b><small>avg high / low · {plan.weather.stats.snowDays ? `${plan.weather.stats.snowDays} snow` : ""}{plan.weather.stats.snowDays && plan.weather.stats.rainyDays ? " · " : ""}{plan.weather.stats.rainyDays ? `${plan.weather.stats.rainyDays} wet` : plan.weather.stats.snowDays ? "" : "0 wet"}</small></div></div>
             <div className="stat"><Wallet size={18} /><div><b>{(summaries.budget || "").replace(/ estimate$/, "").split(" ≈ ").pop()}</b><small>budget estimate</small></div></div>
           </div>
           {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <small className="muted noprint"> · not it? {lg.alternatives.slice(0, 3).map((a: Any, ai: number) => <a key={ai} href="#" onClick={e => { e.preventDefault(); const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }}>{a.name}, {a.country}</a>).reduce((acc: Any[], x: Any, i: number) => i ? [...acc, " · ", x] : [x], [])}</small>}</span>)}</div>}

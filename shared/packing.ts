@@ -1,5 +1,6 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
+import { precipKind } from "./precip.js";
 export const BAGS = ["unassigned", "personal", "carry-on", "checked", "day-bag", "car", "cooler"] as const;
 export type Bag = typeof BAGS[number];
 export const FLY_BAGS: Bag[] = ["unassigned", "personal", "carry-on", "checked"];
@@ -22,7 +23,8 @@ export type Profile = typeof PROFILES[number];
 export const PROFILE_LABELS: Record<Profile, string> = { man: "Man", woman: "Woman", girl: "Girl", boy: "Boy", infant: "Infant" };
 /** profile is optional and user-chosen; never inferred from names. Legacy `child: true` (1.9.0) is kept for compatibility. */
 export interface PackingMember { id: string; name: string; child?: boolean; profile?: Profile }
-export const isChildMember = (m: PackingMember) => m.profile ? m.profile === "girl" || m.profile === "boy" || m.profile === "infant" : m.child === true;
+export const isChildProfile = (p?: string) => p === "girl" || p === "boy" || p === "infant";
+export const isChildMember = (m: PackingMember) => m.profile ? isChildProfile(m.profile) : m.child === true;
 export type MemberKind = "adult" | "child" | "infant";
 export const memberKind = (m: PackingMember): MemberKind => m.profile === "infant" ? "infant" : isChildMember(m) ? "child" : "adult";
 export interface PackingSettings {
@@ -46,7 +48,7 @@ export interface PackingList {
   dismissed: string[]; lastRemoved?: { group: string; index: number; item: PackingItem };
 }
 const key = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-const identity = (s: string) => key(s.replace(/\s*×\s*\d+\b/, ""));
+export const identity = (s: string) => key(s.replace(/\s*×\s*\d+\b/, ""));
 // A legacy combined row already covers both suggestions. Never duplicate it on refresh.
 const itemNames = (name: string) => identity(name) === "underwear-socks" ? ["underwear-socks", "underwear", "socks"] : [identity(name)];
 // Deterministic 64-bit tombstones keep removed custom labels out of distributed snapshots.
@@ -100,13 +102,40 @@ export function inferActivityKits(plan: any): ActivityKit[] {
   if (/photo|camera/.test(text)) kits.push("photography");
   return kits;
 }
+export function inheritProfile(existing: PackingMember[]): (typeof PROFILES)[number] | undefined {
+  const withP = existing.filter(m => (PROFILES as readonly string[]).includes(m.profile as string));
+  if (!withP.length) return undefined;
+  const counts = new Map<string, number>();
+  for (const m of withP) counts.set(m.profile!, (counts.get(m.profile!) || 0) + 1);
+  const max = Math.max(...counts.values());
+  const tied = [...counts.entries()].filter(([, c]) => c === max).map(([p]) => p);
+  // Ties go to the last chosen (latest existing member with that type).
+  for (let i = existing.length - 1; i >= 0; i--) {
+    if (tied.includes(existing[i].profile as string)) return existing[i].profile as (typeof PROFILES)[number];
+  }
+  return tied[0] as (typeof PROFILES)[number];
+}
+export function setAllTravelerTypes(members: PackingMember[], profile: (typeof PROFILES)[number] | ""): PackingMember[] {
+  return members.map(m => {
+    const next: PackingMember = { id: m.id, name: m.name };
+    if (profile) {
+      next.profile = profile;
+      if (isChildProfile(profile)) next.child = true;
+    } else if (m.child) {
+      next.child = true;
+    }
+    return next;
+  });
+}
 export function packingMembers(raw: any = {}, travelerCount?: number): PackingMember[] {
   const existing = Array.isArray(raw?.members) ? raw.members.filter((m: any) => m && typeof m.id === "string" && /^traveler-\d+$/.test(m.id) && typeof m.name === "string") : [];
   const n = Math.max(1, Math.min(20, Math.round(Number(travelerCount) || existing.length || 1)));
+  const inherit = inheritProfile(existing);
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    return { id, name: (found?.name?.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found?.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found?.profile as string) ? { profile: found!.profile } : {}) };
+    if (found) return { id, name: (found.name.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found.profile as string) ? { profile: found.profile } : {}) };
+    return { id, name: `Traveler ${i + 1}`, ...(inherit ? { profile: inherit, ...(isChildProfile(inherit) ? { child: true } : {}) } : {}) };
   });
 }
 export function packingSettings(raw: any = {}, plan?: any): PackingSettings {
@@ -225,7 +254,10 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   const lows = [...usable.map((d: any) => d.tmin), w?.stats?.minLow, ...(w?.legs || []).map((l: any) => l.stats?.minLow)].filter(Number.isFinite);
   const highs = [...usable.map((d: any) => d.tmax), w?.stats?.maxHigh, ...(w?.legs || []).map((l: any) => l.stats?.maxHigh)].filter(Number.isFinite);
   const lo = lows.length ? Math.min(...lows) : null, hi = highs.length ? Math.max(...highs) : null;
-  const rain = usable.some((d: any) => d.precipProb >= 40 || d.precipMm >= 1 || /rain|snow|shower|sleet|drizzle|storm/i.test(d.summary || "")) || w?.stats?.rainyDays > 0 || w?.legs?.some((l: any) => l.stats?.rainyDays > 0);
+  const kinds = usable.map((d: any) => precipKind(d, true));
+  const rain = kinds.includes("rain") || kinds.includes("mixed") || (w?.stats?.rainyDays > 0 && kinds.every((k: string) => k === "none")) || (w?.legs || []).some((l: any) => l.stats?.rainyDays > 0);
+  const snow = kinds.includes("snow") || kinds.includes("mixed") || w?.stats?.snowDays > 0 || (w?.legs || []).some((l: any) => l.stats?.snowDays > 0);
+  const skiTrip = (kits.includes("ski") || /ski|snowboard/i.test(`${input.purpose || ""} ${input.interests || ""} ${(input.presets || []).join(" ")}`));
   const basis = w?.source === "forecast" ? "available forecast (not a guarantee)" : w?.source === "typical" ? "seasonal estimates, not a forecast" : "mixed/unknown weather basis — verify forecast";
   const covered = usable.length, partial = !!plan.capped || covered < days;
   const uncertain = w?.source !== "forecast" || partial;
@@ -275,16 +307,17 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (lo !== null && lo < 15) each(C, "Light sweater / fleece", coldReason);
   if (lo !== null && lo <= 0) { each(C, "Hat, gloves & scarf", coldReason, 1, { essential: coldEssential }, "all"); each(C, "Thermal base layers", coldReason, 2, { essential: coldEssential }); }
   if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason, 1, {}, "all"); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
-  if (rain || kits.includes("hiking")) each(C, "Packable waterproof shell", kits.includes("hiking") && !rain ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : "Hiking — exposed conditions can change; check route-specific weather"}`, 1, { essential: rainEssential && rain });
-  if (lo !== null && lo <= 0 && rain) each(C, "Waterproof boots with grip", `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential });
+  const shellReason = snow && !rain ? (skiTrip ? "Fresh snow — waterproof shell and warm layers, not an umbrella" : "Snow expected — waterproof shell and warm layers, not an umbrella") : kits.includes("hiking") && !rain && !snow ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : snow ? "Snow expected — waterproof shell and warm layers, not an umbrella" : "Hiking — exposed conditions can change; check route-specific weather"}`;
+  if (rain || snow || kits.includes("hiking")) each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
+  if (snow || (lo !== null && lo <= 0 && rain)) each(C, "Waterproof boots with grip", snow ? (skiTrip ? "Snow underfoot — waterproof boots or snow boots; dress warm" : "Snow expected — waterproof boots or snow boots, not an umbrella") : `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential || (!uncertain && snow) });
   each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful", 1, {}, "adults");
   each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
-  add(H, "Small first-aid / blister kit", "Choose supplies appropriate to your needs", 1, { bag: "personal" });
+  add(H, "Small first-aid / blister kit", members.length > 4 ? `Choose supplies appropriate to your needs · pack ${Math.max(1, Math.ceil(members.length / 8))} for a group of ${members.length}` : "Choose supplies appropriate to your needs", Math.max(1, Math.ceil(members.length / 8)), { bag: "personal" });
   if (hi !== null && hi >= 18 || kits.includes("hiking") || kits.includes("ski") || kits.includes("beach")) each(H, "Sunscreen & sunglasses", "Sun protection can matter even in cool weather; follow product guidance (check age suitability)", 1, {}, "all");
   if (lo !== null && lo <= 8) each(H, "Lip balm & moisturiser", coldReason);
   each(E, "Phone & charger", "Daily navigation and communication", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
   each(E, "Power bank (if needed)", driving ? "Useful on the road; keep it accessible" : "Verify carrier/security battery rules, ratings and permitted bag; assignment is not clearance", 1, { bag: "personal" }, "adults");
-  if (!plan.trip?.domestic) add(E, "Plug adapter(s) & voltage check", "Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage");
+  if (!plan.trip?.domestic) { const nAd = Math.max(1, Math.ceil(members.length / 3)); add(E, "Plug adapter(s) & voltage check", `Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage · about 1 per 3 travelers = ${nAd}`, nAd); }
   if (kits.includes("photography")) add(E, "Camera, battery & memory card", driving ? "Photography interest — keep spares from heat and view when parked" : "Photography interest — verify spare battery transport rules");
   if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", driving ? "Business plans; keep it out of sight when the car is parked" : "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
@@ -337,6 +370,19 @@ export function updatePackingItem(list: PackingList, id: string, patch: Partial<
   if (patch.stage !== undefined) { i.stage = patch.stage; i.checked = patch.stage === "packed"; }
   else if (patch.checked !== undefined) { i.checked = patch.checked; i.stage = patch.checked ? "packed" : (i.stage === "need-to-buy" ? "need-to-buy" : "ready"); }
   if (Object.keys(patch).some(k => !["checked", "skipped", "stage"].includes(k))) i.edited = true;
+  return out;
+}
+/** One clone, many check/stage updates — used by Simple-mode group "mark all packed". Skipped items are left alone. */
+export function updatePackingItems(list: PackingList, ids: string[], patch: Partial<PackingItem>, readOnly = false): PackingList {
+  const out = structuredClone(list); if (readOnly) return out;
+  const want = new Set(ids);
+  for (const i of packingItems(out)) {
+    if (!want.has(i.id) || i.skipped) continue;
+    Object.assign(i, patch); if (patch.quantity !== undefined) i.quantity = quantity(patch.quantity);
+    if (patch.stage !== undefined) { i.stage = patch.stage; i.checked = patch.stage === "packed"; }
+    else if (patch.checked !== undefined) { i.checked = patch.checked; i.stage = patch.checked ? "packed" : (i.stage === "need-to-buy" ? "need-to-buy" : "ready"); }
+    if (Object.keys(patch).some(k => !["checked", "skipped", "stage"].includes(k))) i.edited = true;
+  }
   return out;
 }
 export function removePackingItem(list: PackingList, id: string, readOnly = false): PackingList {
@@ -398,6 +444,42 @@ export function simpleLists(list: PackingList): { adults: SimpleRow[]; kids: Sim
     (childIds.has(owner) || kidsKit ? kids : adults).push(row);
   }
   return { adults, kids: childIds.size || kids.length ? kids : null };
+}
+
+export interface SimpleGroup { key: string; name: string; quantity: number | null; rows: SimpleRow[]; packed: number; total: number }
+export type SimpleEntry = { kind: "group"; group: SimpleGroup } | { kind: "shared"; row: SimpleRow };
+function finishGroup(g: SimpleGroup): SimpleGroup {
+  const active = g.rows.filter(r => !r.item.skipped);
+  const qtys = [...new Set(g.rows.map(r => r.item.quantity))];
+  return { ...g, name: g.rows[0].item.item, quantity: qtys.length === 1 ? qtys[0] : null, packed: active.filter(r => r.item.checked).length, total: active.length };
+}
+/** Collapse identical personal items in a Simple-mode list (Adults or Kids). Shared rows stay ungrouped, in place. */
+export function groupSimpleRows(rows: SimpleRow[]): { entries: SimpleEntry[]; groups: SimpleGroup[]; shared: SimpleRow[] } {
+  const seen = new Map<string, SimpleGroup>(), entries: SimpleEntry[] = [];
+  for (const r of rows) {
+    if (r.shared) { entries.push({ kind: "shared", row: r }); continue; }
+    if (r.item.skipped) {
+      entries.push({ kind: "group", group: finishGroup({ key: r.item.id, name: r.item.item, quantity: r.item.quantity, rows: [r], packed: 0, total: 0 }) });
+      continue;
+    }
+    const k = identity(r.item.item);
+    const existing = seen.get(k);
+    if (existing) existing.rows.push(r);
+    else {
+      const g: SimpleGroup = { key: k, name: r.item.item, quantity: r.item.quantity, rows: [r], packed: 0, total: 0 };
+      seen.set(k, g);
+      entries.push({ kind: "group", group: g });
+    }
+  }
+  const finished = new Map([...seen.values()].map(g => [g.key, finishGroup(g)]));
+  for (const e of entries) if (e.kind === "group") { const f = finished.get(e.group.key); if (f) e.group = f; }
+  return { entries, groups: [...finished.values()], shared: entries.filter((e): e is { kind: "shared"; row: SimpleRow } => e.kind === "shared").map(e => e.row) };
+}
+export function simpleGroupLabel(g: SimpleGroup): string {
+  const n = g.rows.length;
+  if (n <= 1) return `${g.quantity ?? g.rows[0]?.item.quantity ?? 1} × ${g.name}`;
+  if ((g.quantity ?? 1) === 1) return `${g.name} ×${n}`;
+  return g.quantity != null ? `${g.quantity} × ${g.name} · ${n} people` : `${g.name} · ${n} people`;
 }
 
 /** Repair (v1.10.0): travelers who own no items at all — e.g. pre-1.8 lists whose rows all migrated to traveler-1,
