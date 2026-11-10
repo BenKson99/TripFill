@@ -12,6 +12,7 @@ import { budget } from "./budget.js";
 import { getFx } from "./fx.js";
 import { tripFacts } from "./trip.js";
 import { resolveTravelMode } from "../shared/travel.js";
+import { resolveHomeCity } from "./home.js";
 import { mountShare, shareStore } from "./share.js";
 import { buildMulti } from "./multi.js";
 import { presetsOf, presetItinerary } from "./presets.js";
@@ -72,8 +73,7 @@ app.post("/api/generate", async (req, res) => {
       if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 20 * runnerUp)) return res.json({ needsChoice: true, matches });
       place = (distinct[0] || matches[0]); (inp as any)._matches = matches;
     }
-    let home = inp.home as Place | undefined;
-    if (!home && (inp as any).homeCity) home = (await geocode((inp as any).homeCity))[0];
+    const home = await resolveHomeCity(inp);
     const prelim = home ? tripFacts(home, place, inp.start) : null;
     const travelMode = resolveTravelMode(inp, prelim?.distanceKm);
     inp.travelMode = travelMode;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.12.1 — Home city on Generate
+
+- Pressing Generate now uses whatever is typed in Home city, even if the lookup has not finished. The typed name is sent and resolved on the server, the same way Destination is. If the city cannot be found, an error is shown in the form and under the Home city field, instead of building a plan with no home.
+
 ## 1.12.0 — Flying or Driving
 
 - The Plan form has a **How are you getting there?** choice: Flying or Driving. It is saved with the plan, including share links and JSON import/export. Old plans without a choice default to Driving when the home–destination distance is under about 300 km, otherwise Flying. With no home city the default is Flying, matching previous behaviour.

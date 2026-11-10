@@ -15,7 +15,8 @@ import { downloadIcs } from "./ics";
 import { DAY_COLORS, MapView, pinsFor } from "./MapView";
 import { exportPlan, parsePlan, readSaved, savePlan, normalizePreferences, MAX_PLAN_BYTES, safeUrl, weatherLabel } from "../shared/portable";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
-import { HomeCityField, Snapshot, useHomeCity } from "./Home";
+import { HomeCityField, Snapshot, useHomeCity, placeLabel } from "./Home";
+import { homeGenerateFields } from "../shared/homeCity";
 import { defaultPrep, mergePrepForMode } from "./Prep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
 
@@ -74,6 +75,8 @@ export default function App() {
   const T = (s: string) => (s || "").replace(/\{t:(-?[\d.]+)\}/g, (_m, v) => deg(Number(v))).replace(/(-?\d+(?:\.\d+)?)°C\b/g, (_m, v) => deg(Number(v)));
   const [layout, setLayout] = useLayout(Object.keys(TITLES));
   const [homeCity, setHomeCity] = useHomeCity();
+  const [homeText, setHomeText] = useState(() => homeCity ? placeLabel(homeCity) : "");
+  const [homeErr, setHomeErr] = useState("");
   const [home, setHome, homeExplicit] = useHomeCurrency(homeCity?.countryCode || plan?.trip?.home?.countryCode);
   const { fx, busy: fxBusy, refresh: fxRefresh } = useFx();
   const online = useOnline() && !(fx as Any)?.offline;
@@ -118,11 +121,17 @@ export default function App() {
 
   async function generate(place?: Any, legsOverride?: Any[]) {
     const legs = (legsOverride || form.legs || []).filter((l: Any) => l.destination?.trim());
-    setErr(""); setLoading(true); setMatches(null);
+    setErr(""); setHomeErr(""); setLoading(true); setMatches(null);
     try {
-      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, today: plus(0), allowPast: form.start < plus(0) || undefined, legs: legs.length ? legs : undefined, place, home: homeCity || undefined, fxForce: new URLSearchParams(location.search).get("fxForce") || undefined }) });
+      const homeFields = homeGenerateFields(homeText, homeCity);
+      const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, today: plus(0), allowPast: form.start < plus(0) || undefined, legs: legs.length ? legs : undefined, place, ...homeFields, fxForce: new URLSearchParams(location.search).get("fxForce") || undefined }) });
       const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Failed");
+      if (!r.ok) {
+        if (/home city/i.test(j.error || "")) setHomeErr(j.error);
+        throw new Error(j.error || "Failed");
+      }
+      setHomeErr("");
+      if (j.trip?.home) { setHomeCity(j.trip.home); setHomeText(placeLabel(j.trip.home)); }
       if (j.needsChoice) setMatches(j.matches); else { recoveryPending.current = false; setPlan(j); setShareMsg(""); setShareUrl(""); }
     } catch (e: Any) { setErr(e.message); } finally { setLoading(false); }
   }
@@ -264,7 +273,7 @@ export default function App() {
         <fieldset className="wide presets"><legend>Trip type <small className="muted">(pick any)</small></legend>
           {PRESETS.map(([k, l]) => <label key={k} className={"chip" + ((form.presets || []).includes(k) ? " on" : "")}><input type="checkbox" data-preset={k} checked={(form.presets || []).includes(k)} onChange={e => setForm({ ...form, presets: e.target.checked ? [...(form.presets || []), k] : (form.presets || []).filter((x: string) => x !== k) })} />{l}</label>)}
         </fieldset>
-        <HomeCityField value={homeCity} onChange={setHomeCity} />
+        <HomeCityField value={homeCity} onChange={setHomeCity} text={homeText} onText={t => { setHomeText(t); setHomeErr(""); }} error={homeErr} />
         <TravelModeField value={form.travelMode === "driving" ? "driving" : "flying"} onChange={m => setForm({ ...form, travelMode: m })} hint={plan ? "Applies when you press Generate — it does not change the plan already on the page. To update this plan without a new weather fetch, use the travel card or ⚙ Settings → Packing." : "Approximate drive times are not a road route. Old trips without a saved choice default to Driving under about 300 km, otherwise Flying."} />
         <label className="wide">Interests<input placeholder="food, museums, hiking, photography…" value={form.interests} onChange={e => setForm({ ...form, interests: e.target.value })} /></label>
         <button disabled={loading || !online}>{!online ? "Offline — connect to generate" : loading ? "Building your plan… (~10s)" : "Generate plan"}</button>
