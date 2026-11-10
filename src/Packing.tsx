@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { TravelerFields, editTraveler } from "./Travelers";
+import { TravelModeField } from "./TravelMode";
+import { resolveTravelMode, type TravelMode } from "../shared/travel";
+
 import { Settings } from "lucide-react";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
-import { ACTIVITY_KITS, BAGS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, PROFILES, PROFILE_LABELS, type Profile, type SimpleRow, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
+import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, bagLabel, bagsFor, type SimpleRow, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
 
 const KIT_LABELS: Record<ActivityKit, string> = {
   beach: "Beach & swim", hiking: "Hiking", ski: "Ski", business: "Business",
@@ -11,9 +14,11 @@ const KIT_LABELS: Record<ActivityKit, string> = {
 };
 const stageLabel = (i: PackingItem) => i.skipped ? "Not needed" : i.checked || i.stage === "packed" ? "Packed" : i.stage === "need-to-buy" ? "Need to buy" : "Ready";
 
-export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = null, openSettings, simple = false, onSimpleChange }: { plan: any; readOnly: boolean; simple?: boolean; onSimpleChange?: (on: boolean) => void; settingsSlot?: HTMLElement | null; openSettings?: () => void; onChange: (list: PackingList) => void; T: (s: string) => string }) {
+export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = null, openSettings, simple = false, onSimpleChange, onTravelMode }: { plan: any; readOnly: boolean; onTravelMode?: (m: TravelMode) => void; simple?: boolean; onSimpleChange?: (on: boolean) => void; settingsSlot?: HTMLElement | null; openSettings?: () => void; onChange: (list: PackingList) => void; T: (s: string) => string }) {
   const p: PackingList = plan.packing;
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
+  const travelMode: TravelMode = resolveTravelMode(plan.input, plan.trip?.distanceKm);
+  const setTravelMode = (m: TravelMode) => { if (!readOnly) onTravelMode?.(m); };
   const [search, setSearch] = useState(""), [category, setCategory] = useState("all"), [status, setStatus] = useState("all"), [bag, setBag] = useState("all");
   const [owner, setOwner] = useState("all");
   const [name, setName] = useState(""), [newGroup, setNewGroup] = useState("Clothing"), [newQty, setNewQty] = useState(1), [newOwner, setNewOwner] = useState(SHARED);
@@ -33,12 +38,12 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const renderGroups = (groups: typeof p.groups, printing = false) => groups.map(g => { const gp = packingProgress(scoped(p.groups.find(x => x.group === g.group)?.items || g.items)); return <section key={g.group} className="packing-category" aria-label={g.group}>
     <header><h3>{g.group}</h3><span className="muted small">{gp.packed}/{gp.total} packed</span></header>
     {g.items.map(i => <article key={i.id} className={`packing-item${i.checked ? " packed" : ""}${i.skipped ? " skipped" : ""}`} data-testid={printing ? undefined : "packing-item"} data-item-id={i.id}>
-      {printing ? <><span>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span><div><b>{i.quantity} × {i.item}</b><div className="small">{i.bag} · {stageLabel(i)}{i.essential ? " · Essential" : " · Optional"}{i.lastMinute ? " · Departure day" : ""} · {ownerLabel(p, i.owner || SHARED)}</div><small>{T(i.reason)}</small></div></> : <>
+      {printing ? <><span>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span><div><b>{i.quantity} × {i.item}</b><div className="small">{bagLabel(i.bag, travelMode)} · {stageLabel(i)}{i.essential ? " · Essential" : " · Optional"}{i.lastMinute ? " · Departure day" : ""} · {ownerLabel(p, i.owner || SHARED)}</div><small>{T(i.reason)}</small></div></> : <>
         <div className="packing-check"><ChecklistCheckbox aria-label={`Pack ${i.item}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => edit(i.id, { checked: e.target.checked })} /></div>
         <div className="packing-content">
           <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={i.item} onChange={item => edit(i.id, { item: item.slice(0, 300) })} />
             <div className="packing-meta"><label>Qty<input aria-label={`Quantity for ${i.item}`} type="number" min={1} max={99} value={i.quantity} onChange={e => edit(i.id, { quantity: quantity(Number(e.target.value)) })} /></label>
-              <label>Bag<select aria-label={`Bag for ${i.item}`} value={i.bag} onChange={e => edit(i.id, { bag: e.target.value as PackingItem["bag"] })}>{BAGS.map(b => <option key={b} value={b}>{b === "personal" ? "Personal item" : b === "carry-on" ? "Carry-on" : b === "checked" ? "Checked bag" : "Unassigned"}</option>)}</select></label>
+              <label>Bag<select aria-label={`Bag for ${i.item}`} value={i.bag} onChange={e => edit(i.id, { bag: e.target.value as PackingItem["bag"] })}>{bagsFor(travelMode, i.bag).map(b => <option key={b} value={b}>{bagLabel(b, travelMode)}</option>)}</select></label>
               <label>List<select aria-label={`List for ${i.item}`} value={i.owner || SHARED} onChange={e => edit(i.id, { owner: e.target.value })}><option value={SHARED}>Shared</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
               <label>Status<select aria-label={`Status for ${i.item}`} value={i.checked ? "packed" : (i.stage || "ready")} onChange={e => edit(i.id, { stage: e.target.value as Stage })}><option value="need-to-buy">Need to buy</option><option value="ready">Ready</option><option value="packed">Packed</option></select></label>
               <label>Category<select aria-label={`Category for ${i.item}`} value={g.group} onChange={e => change(movePackingItem(p, i.id, e.target.value))}>{[...new Set(["Clothing", "Documents & Money", "Toiletries & Health", "Electronics", "Comfort & Extras", "Activities", ...p.groups.map(x => x.group)])].map(x => <option key={x}>{x}</option>)}</select></label>
@@ -56,7 +61,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
   if (simple) return <div className="packing-workspace packing-simple" data-testid="packing-workspace">
     {toggle}
-    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} />, settingsSlot)}
+    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} />, settingsSlot)}
     <SimpleLists p={p} readOnly={readOnly} onCheck={(id, checked) => edit(id, { checked })} />
   </div>;
   return <div className="packing-workspace" data-testid="packing-workspace">
@@ -68,13 +73,13 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     <div className="packing-readiness" aria-live="polite">{!progress.total ? "Your list is empty or all items are not needed. Add an item or restore a skipped one." : progress.packed === progress.total ? "✓ Everything on your active list is packed. Check Before you leave separately." : `${progress.total - progress.packed} items to go · ${toBuy} to buy · ${readyN} ready · ${departure} for departure day · ${pending} unpacked essentials.`}</div>
     <p className="muted small">Suggestions use available weather only ({plan.weather.source === "forecast" ? "forecast, not guaranteed" : plan.weather.source === "typical" ? "seasonal estimates, not a forecast" : "mixed / unknown basis"}). Weather-dependent items are marked Essential only when the forecast clearly supports them; otherwise they stay Optional because the weather is uncertain. Check the latest forecast for every stop. {plan.capped || tripDays(plan.input) > (plan.weather.days?.length || 0) ? "Weather may cover only part of this trip; quantities still use the full date range. Later legs may have no weather data." : ""}</p>
     <div className="packing-people noprint" role="tablist" aria-label="Packing lists">{owners.map(o => { const tabItems = o.id === "all" ? all : all.filter(i => (i.owner || SHARED) === o.id); const tab = packingProgress(tabItems); return <button key={o.id} type="button" role="tab" aria-selected={owner === o.id} className={owner === o.id ? "" : "ghost"} onClick={() => { setOwner(o.id); if (o.id !== "all") setNewOwner(o.id); }}>{o.name}<span className="muted"> {tab.packed}/{tab.total}</span></button>; })}</div>
-    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} />, settingsSlot)}
+    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} />, settingsSlot)}
     {openSettings && <div className="packing-settings-link noprint"><button type="button" className="ghost" data-testid="packing-settings-open" onClick={openSettings}><Settings size={16} />Packing settings: laundry, rewear, travelers & kits</button></div>}
     <div className="packing-filters noprint" role="search" aria-label="Filter packing list">
       <label>Find an item<input type="search" placeholder="Search items or reasons…" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All categories</option>{p.groups.map(g => <option key={g.group}>{g.group}</option>)}</select></label>
       <label>Show<select value={status} onChange={e => setStatus(e.target.value)}>{[["all", "All items"], ["unpacked", "Still to pack"], ["need-to-buy", "Need to buy"], ["ready", "Ready"], ["packed", "Packed"], ["essential", "Essentials"], ["departure-day", "Departure day"], ["skipped", "Not needed"]].map(([v, s]) => <option key={v} value={v}>{s}</option>)}</select></label>
-      <label>Bag<select value={bag} onChange={e => setBag(e.target.value)}><option value="all">All bags</option>{BAGS.map(b => <option key={b}>{b}</option>)}</select></label>
+      <label>Bag<select value={bag} onChange={e => setBag(e.target.value)}><option value="all">All bags</option>{bagsFor(travelMode).map(b => <option key={b} value={b}>{bagLabel(b, travelMode)}</option>)}</select></label>
     </div>
     {message && <p className="packing-message noprint" role="status">{message}</p>}
     {!readOnly && p.lastRemoved && <div className="packing-undo noprint"><span>Last removed: {p.lastRemoved.item.item}</span><button className="ghost" onClick={() => { change(undoPackingRemoval(p)); setMessage("Item restored with its quantity, bag and packed status."); }}>Undo removal</button></div>}
@@ -92,7 +97,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     {!!p.leaveAtHome.length && <details><summary>Notes from your older list · leave at home</summary><ul>{p.leaveAtHome.map(i => <li key={i.id}>{i.item} — {T(i.reason || "")}</li>)}</ul><p className="small muted">These older suggestions are not requirements. Review them against your own needs and current rules.</p></details>}
   </div>;
 }
-export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage }: { plan: any; p: PackingList; readOnly: boolean; change: (next: PackingList) => void; setMessage: (m: string) => void }) {
+export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, travelMode = "flying", onTravelMode }: { plan: any; p: PackingList; readOnly: boolean; change: (next: PackingList) => void; setMessage: (m: string) => void; travelMode?: TravelMode; onTravelMode?: (m: TravelMode) => void }) {
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
   const kits = p.settings.activityKits ?? inferActivityKits(plan);
   const changeSettings = (patch: Partial<PackingList["settings"]>) => change({ ...p, settings: { ...p.settings, ...patch } });
@@ -100,7 +105,8 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage }: 
     {readOnly && <p className="muted small">Shared plan: settings are view-only.</p>}
       <fieldset disabled={readOnly} className="packing-edit">
         <div className="packing-settings-grid"><label>Laundry plan<select value={p.settings.laundryEvery ?? "none"} onChange={e => changeSettings({ laundryEvery: e.target.value === "none" ? null : Number(e.target.value) })}><option value="none">No laundry arranged</option>{Array.from({ length: 30 }, (_, n) => n + 1).map(n => <option key={n} value={n}>Wash every {n} day{n > 1 ? "s" : ""}</option>)}</select></label>
-        <label>Luggage preference<select value={p.settings.luggage} onChange={e => changeSettings({ luggage: e.target.value as "all" | "carry-on" })}><option value="all">Any luggage · assign bags myself</option><option value="carry-on">Carry-on only · cabin bags</option></select></label>
+        <TravelModeField value={travelMode} onChange={onTravelMode} disabled={readOnly} hint="Changing this updates travel labels and packing suggestions. Your edits, checks and removals stay." />
+        <label>Luggage preference<select value={p.settings.luggage} onChange={e => changeSettings({ luggage: e.target.value as "all" | "carry-on" })}><option value="all">Any luggage · assign bags myself</option><option value="carry-on">{travelMode === "driving" ? "Day bags only · keep bags with you" : "Carry-on only · cabin bags"}</option></select></label>
         <label>Rewear tops<select value={p.settings.rewearTopsEvery ?? 1} onChange={e => changeSettings({ rewearTopsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label>
         <label>Rewear bottoms<select value={p.settings.rewearBottomsEvery ?? 3} onChange={e => changeSettings({ rewearBottomsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label></div>
         <label className="packing-flag"><input type="checkbox" checked={p.settings.includeSpares !== false} onChange={e => changeSettings({ includeSpares: e.target.checked })} />Add a spare pair of underwear and socks</label>
@@ -110,7 +116,7 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage }: 
         <p className="muted small">Settings are saved with this trip. Nothing changes automatically: refresh suggestions when ready. Refresh updates only untouched suggestions and adds missing ones; it keeps your edits, checks, not-needed items and removals, and never deletes old items. Review any older suggestions yourself.</p>
         <button onClick={() => { change(mergeSuggestions(p, suggestPacking(plan, p.settings))); setMessage("Suggestions refreshed. Your edits, packed status and removals were kept. Review older items; nothing was deleted."); }}>Refresh suggestions</button>
         {tripDays(plan.input) > 14 && <p className="warn small">Long trip: tops are capped at 14, underwear/socks at 31 and bottoms at 7. With no laundry arranged you must plan rewear, washing, resupply or edit these quantities. We do not assume facilities.</p>}
-        <p className="muted small">Bag labels are organization only, not size/weight checks or approval to fly. Verify current airline, airport security, battery/liquid and destination rules yourself, including connecting flights. Check plug/voltage and entry requirements with official sources.</p>
+        <p className="muted small">{travelMode === "driving" ? "Bag labels are organization only, not size or weight checks. Check your vehicle's load, local driving, parking and toll rules, and battery or liquid rules if you take a ferry or cross a border. Check plug/voltage and entry requirements with official sources." : "Bag labels are organization only, not size/weight checks or approval to fly. Verify current airline, airport security, battery/liquid and destination rules yourself, including connecting flights. Check plug/voltage and entry requirements with official sources."}</p>
         {!readOnly && <div className="packing-personal"><h3>Your personal essentials</h3><p className="muted small">Mark items Essential, then save that selection as a reusable template on this browser only. Saving replaces the previous template; checks, trip reasons and removed items are not saved. Avoid sensitive or medical details. The template is not shared; applied items become part of the trip snapshot.</p>
           <div className="chips"><button className="ghost" onClick={() => { try { const template = makeEssentials(p); if (!template.items.length) throw new Error("Mark at least one active item Essential first."); if (localStorage.getItem(TEMPLATE_KEY) && !confirm("Replace your browser's personal essentials template with this trip's Essential items?")) return; localStorage.setItem(TEMPLATE_KEY, JSON.stringify(parseEssentials(JSON.stringify(template)))); setMessage(`Saved ${template.items.length} personal essentials in this browser.`); } catch (e: any) { setMessage(e.message || "Could not save personal essentials."); } }}>Save essentials</button>
           <button className="ghost" onClick={() => { try { const text = localStorage.getItem(TEMPLATE_KEY); if (!text) throw new Error("No essentials template yet. Mark items Essential and save one first."); change(applyEssentials(p, parseEssentials(text))); setMessage("Personal essentials applied. Matching items were kept without duplicates or reset checks; missing items were added unpacked."); } catch (e: any) { setMessage(e.message); } }}>Apply essentials</button>

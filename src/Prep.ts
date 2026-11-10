@@ -1,4 +1,5 @@
 // "Before you leave" checklist — built on the client so older saved/shared plans get one too.
+import { resolveTravelMode } from "../shared/travel.js";
 const PLUGS: Record<string, string> = {
   US: "A/B", CA: "A/B", MX: "A/B", JP: "A/B", BR: "C/N", AR: "C/I", CL: "C/L", CO: "A/B", PE: "A/B/C", UY: "C/F/I/L", CR: "A/B", DO: "A/B",
   GB: "G", IE: "G", MT: "G", CY: "G", HK: "G", SG: "G", MY: "G", AE: "G", QA: "G", SA: "G", KE: "G", NG: "D/G",
@@ -32,10 +33,24 @@ export function defaultPrep(plan: any): PrepItem[] {
   out.push([`Download offline maps for ${(plan.legs?.length > 1 ? plan.legs.map((l: any) => l.place.name) : [plan.place?.name]).join(", ")}`]);
   out.push(["Save tickets, bookings & insurance docs offline"]);
   out.push(["Share itinerary & emergency contacts with someone at home"]);
-  out.push(["Online check-in / confirm transport to the airport"]);
+  if (resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving") {
+    out.push(["Check the car: tyres, lights, fluids and papers", "also insurance and breakdown cover"]);
+    out.push(["Plan the route, fuel or charging stops, parking and tolls"]);
+    out.push(["Confirm parking at your stay and any city driving or toll rules"]);
+  } else {
+    out.push(["Online check-in / confirm transport to the airport"]);
+  }
   out.push(["Hold mail / packages or ask a neighbour"]);
   out.push(["Arrange plant & pet care"]);
   out.push(["Empty the fridge, take out trash"]);
   out.push(["Set thermostat, unplug appliances, lock up"]);
   return out.map(([task, why], i) => ({ id: "prep" + i, task, why, done: false }));
+}
+
+/** Add any missing mode-specific tasks; never delete or uncheck existing ones. */
+export function mergePrepForMode(plan: any): PrepItem[] {
+  const cur = [...(plan.prep || defaultPrep(plan))];
+  const fresh = defaultPrep({ ...plan, prep: undefined });
+  for (const t of fresh) if (!cur.some(x => x.task === t.task)) cur.push({ ...t, id: "prep-" + t.task.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) });
+  return cur;
 }

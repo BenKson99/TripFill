@@ -389,3 +389,10 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .travelers-q{border:1px solid var(--line);border-radius:14px;padding:12px 16px 16px;margin:0;min-width:0}
 .travelers-q legend{font-weight:650;padding:0 6px}
 .traveler-fields{display:grid;gap:10px}
+
+/* v1.12.0 travel mode */
+.travel-mode{border:1px solid var(--line);border-radius:14px;padding:12px 16px 16px;margin:0;min-width:0}
+.travel-mode legend{font-weight:650;padding:0 6px}
+.travel-mode .seg{margin-top:6px}.travel-mode .seg button{min-height:42px;min-width:6.5rem}
+.snap-mode{grid-column:1/-1;margin-top:8px}
+@media(max-width:700px){.travel-mode .seg{display:flex;flex-wrap:wrap;width:100%}.travel-mode .seg button{flex:1 1 8rem}}

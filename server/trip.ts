@@ -1,5 +1,6 @@
 import type { Place } from "./weather.js";
 import { countryInfo } from "./countries.js";
+import { resolveTravelMode, travelTimeLabel, type TravelMode } from "../shared/travel.js";
 
 export interface TripFacts {
   home: Place; domestic: boolean; distanceKm: number; flightHours: number | null; flightLabel: string;
@@ -21,17 +22,11 @@ export function tzOffsetMin(tz: string, isoDate: string): number | null {
     return Math.round((asUtc - d.getTime()) / 60000);
   } catch { return null; }
 }
-const hm = (h: number) => { const H = Math.floor(h), M = Math.round((h - H) * 60 / 5) * 5; return M === 60 ? `${H + 1}h` : M ? (H ? `${H}h ${M}m` : `${M}m`) : `${H}h`; };
-
-export function tripFacts(home: Place, dest: Place, start: string): TripFacts {
+export function tripFacts(home: Place, dest: Place, start: string, modeOrInput?: TravelMode | { travelMode?: unknown } | null): TripFacts {
   const domestic = !!home.countryCode && home.countryCode === dest.countryCode;
   const km = Math.round(haversineKm(home, dest));
-  // Typical jet block time ≈ 30 min taxi/climb/descent + cruise at ~800 km/h over great-circle × 1.05 routing
-  let flightHours: number | null = null, flightLabel: string;
-  // Straight-line drive time; across a border (e.g. Mendoza → Santiago over the Andes) roads can be far longer
-  const xb = "; straight-line distance ÷ 80 km/h, not road-routed; roads/borders can take much longer";
-  if (km < 300) flightLabel = `${km} km — closer by road or rail (~${hm(km / 80)} drive${xb})`;
-  else { flightHours = 0.5 + (km * 1.05) / 800; flightLabel = `~${hm(flightHours)} nonstop flight (approx., ${km.toLocaleString("en-US")} km great-circle)${km < 700 ? `; or ~${hm(km / 80)} by road (straight-line ÷ 80 km/h, not routed)` : ""}`; }
+  const mode: TravelMode = modeOrInput == null ? "flying" : resolveTravelMode(modeOrInput, km);
+  const { flightHours, flightLabel } = travelTimeLabel(km, mode);
   let tzDiffHours: number | null = null, tzLabel = "Time difference unknown";
   if (home.timezone && dest.timezone) {
     const a = tzOffsetMin(home.timezone, start), b = tzOffsetMin(dest.timezone, start);

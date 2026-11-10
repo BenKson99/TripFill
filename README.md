@@ -45,7 +45,8 @@ Copy `.env.example` to `.env`. If `OPENAI_API_KEY` is set, highlight description
 - Rates are mid-market and for guidance only. Card and exchange rates will differ.
 
 ## v1.0 features
-- **Home city** — set once in the form (geocoded, saved in this browser). Drives domestic vs international (passport/visa, local cash and plug-adapter items only for international trips), an approximate nonstop flight time (great-circle distance; drive estimate for short hops), time difference on your travel dates, your default home currency, and the Trip Snapshot.
+- **How are you getting there?** — Flying or Driving, set in the Plan form (and changeable later on the travel card or in Packing settings). Old plans without a saved choice default to Driving when the home distance is under about 300 km, otherwise Flying.
+- **Home city** — set once in the form (geocoded, saved in this browser). Drives domestic vs international (passport/visa, local cash and plug-adapter items only for international trips), an approximate travel time (nonstop flight estimate, or an unrouted drive time if you choose Driving), time difference on your travel dates, your default home currency, and the Trip Snapshot.
 - **Share link** — *Copy share link* packs the whole plan into the URL (`#plan=…`, lz-string). New links are always self-contained, including larger plans (up to 100,000 URL characters); beyond that, use JSON export. There is no silent fallback to temporary server storage. Recipients get a read-only view with *Import as my plan*. Links are snapshots — no live collaboration, no sync.
 - **Trip types** — multi-select Beach, Hiking, Ski, City, Business, With kids, Road trip. Each adds packing items with reasons and tweaks the itinerary (e.g. hike on the driest day, work mornings, car pick-up).
 - **Map** — Leaflet + OpenStreetMap tiles (attribution shown, scroll-zoom off, low tile use). Pins coloured by itinerary day, click for details; a collapsible/reorderable section like the others.
@@ -54,7 +55,7 @@ Copy `.env.example` to `.env`. If `OPENAI_API_KEY` is set, highlight description
 - **Multi-city** — *+ Add another city* with a travel day per city. Weather, highlights, food and budget per leg; itinerary stitched with travel days; packing merged; per-leg budgets plus a grand total in your home currency. Leave it empty for the normal single-city flow.
 
 ### More limitations
-- Flight times are rough nonstop estimates (0.5 h + distance/800 km/h with routing factor), not schedules.
+- Flight times are rough nonstop estimates (0.5 h + distance/800 km/h with routing factor), not schedules. Drive times are straight-line distance ÷ 80 km/h and are not a road route.
 - Extra multi-city legs auto-pick the best nearby match; use "not it?" in the route strip to switch. Max 14 days total.
 - Map pins need Wikidata coordinates; tiles need the network.
 - .ics events are floating all-day dates; the date you leave home may differ from Day 1 for long-haul trips.

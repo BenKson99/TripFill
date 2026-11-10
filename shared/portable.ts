@@ -1,4 +1,5 @@
 import { validatePacking, migratePacking, syncPackingMembers, fillEmptyTravelers } from "./packing.js";
+import { isTravelMode, resolveTravelMode } from "./travel.js";
 import LZ from "lz-string";
 export const MAX_PLAN_BYTES = 750_000;
 export const MAX_LINK_CHARS = 100_000;
@@ -54,7 +55,8 @@ export function validatePlan(raw: any): any {
   // Early versions serialized travelers from an input as a string. Migrated below before validation in parsePlan.
   if (p.input.dietaryNeeds !== undefined && !["none", "vegetarian", "vegan", "gluten_free", "halal"].includes(p.input.dietaryNeeds)) fail("Unsupported dietary preference.");
   if (p.input.walkingTolerance !== undefined && !["low", "standard", "high"].includes(p.input.walkingTolerance)) fail("Unsupported walking tolerance.");
-  p.input = { ...p.input, ...normalizePreferences(p.input) };
+  if (p.input.travelMode !== undefined && !isTravelMode(p.input.travelMode)) fail("Unsupported travel mode. Use flying or driving.");
+  p.input = { ...p.input, ...normalizePreferences(p.input), travelMode: resolveTravelMode(p.input, p.trip?.distanceKm) };
   if (!["forecast", "typical", "mixed"].includes(p.weather.source)) fail("Invalid weather source in plan.");
   for (const day of p.weather.days) if (day.typical === undefined && p.weather.source !== "mixed") day.typical = p.weather.source === "typical";
   if (p.input.presets?.some((x: any) => typeof x !== "string")) fail("Invalid trip types.");

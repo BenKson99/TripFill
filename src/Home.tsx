@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { resolveTravelMode, type TravelMode } from "../shared/travel";
+import { TravelModeField } from "./TravelMode";
 type Any = any;
 export const HOME_CITY_KEY = "tripfill:homeCity";
 export const placeLabel = (p: Any) => [p.name, p.admin1 && p.admin1 !== p.name ? p.admin1 : null, p.country].filter(Boolean).join(", ");
@@ -29,7 +31,7 @@ export function HomeCityField({ value, onChange }: { value: Any | null; onChange
     } catch { setState("Geocoding failed"); }
   }
   return (
-    <label className="wide">Home city <small className="muted">(optional — for flight time, time difference, domestic/intl.)</small>
+    <label className="wide">Home city <small className="muted">(optional — for travel time, time difference, domestic/intl.)</small>
       <input data-testid="home-city" placeholder="e.g. Detroit" value={q} onChange={e => setQ(e.target.value)} onBlur={resolve}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); resolve(); } }} />
       {state && <small className="muted">{state}</small>}
@@ -38,14 +40,16 @@ export function HomeCityField({ value, onChange }: { value: Any | null; onChange
   );
 }
 
-export function Snapshot({ trip, dest }: { trip: Any; dest: Any }) {
-  if (!trip) return <p className="muted small noprint">Add a home city to see flight time, time difference and domestic/international.</p>;
+export function Snapshot({ trip, dest, mode, onMode, readOnly }: { trip: Any; dest: Any; mode?: TravelMode; onMode?: (m: TravelMode) => void; readOnly?: boolean }) {
+  const resolved = mode || resolveTravelMode(undefined, trip?.distanceKm);
+  if (!trip) return <div className="noprint">{onMode && <TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Add a home city for an approximate travel time. Changing the mode updates packing and leave-home tasks without a new weather fetch." />}<p className="muted small">Add a home city to see travel time, time difference and domestic/international.</p></div>;
   return (
     <div className="snap" data-testid="snapshot">
       <div><small>From</small><b>{placeLabel(trip.home)}</b></div>
       <div><small>Trip type</small><b>{trip.domestic ? `Domestic (${dest.country})` : "International"}</b></div>
       <div><small>Travel time</small><b>{trip.flightLabel}</b></div>
       <div><small>Time difference</small><b>{trip.tzLabel}</b>{trip.destTz && <small>{trip.destTz}</small>}</div>
+      {onMode && <div className="snap-mode noprint"><TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Approximate times are not a road route or a booked flight. Changing this updates labels and packing suggestions without a new weather fetch." /></div>}
     </div>
   );
 }

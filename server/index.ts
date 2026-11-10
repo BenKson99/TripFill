@@ -11,6 +11,7 @@ import { packing, itinerary, timeline, type TripInput } from "./plan.js";
 import { budget } from "./budget.js";
 import { getFx } from "./fx.js";
 import { tripFacts } from "./trip.js";
+import { resolveTravelMode } from "../shared/travel.js";
 import { mountShare, shareStore } from "./share.js";
 import { buildMulti } from "./multi.js";
 import { presetsOf, presetItinerary } from "./presets.js";
@@ -73,7 +74,10 @@ app.post("/api/generate", async (req, res) => {
     }
     let home = inp.home as Place | undefined;
     if (!home && (inp as any).homeCity) home = (await geocode((inp as any).homeCity))[0];
-    const facts = home ? tripFacts(home, place, inp.start) : null;
+    const prelim = home ? tripFacts(home, place, inp.start) : null;
+    const travelMode = resolveTravelMode(inp, prelim?.distanceKm);
+    inp.travelMode = travelMode;
+    const facts = home ? tripFacts(home, place, inp.start, travelMode) : null;
     const domestic = !!facts?.domestic;
     const fxForce = process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce;
     const extra = ((inp as any).legs || []).filter((l: any) => l && (l.destination || l.place) && l.start);
@@ -94,7 +98,7 @@ app.post("/api/generate", async (req, res) => {
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
-      timeline: timeline(inp.start, !domestic, todayIso),
+      timeline: timeline(inp.start, !domestic, todayIso, travelMode),
       budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }

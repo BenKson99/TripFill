@@ -1,0 +1,150 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fixture, weather, porto, lisbon } from "./fixtures.js";
+import { resolveTravelMode, travelTimeLabel, departAfternoon, DEPART_FLY, DEPART_DRIVE, DRIVE_DEFAULT_KM, applyTimelineMode, TIMELINE_DRIVE_EXTRA } from "../shared/travel.js";
+import { applyTravelMode } from "../shared/applyTravel.js";
+import { bagLabel, bagsFor, packingItems, suggestPacking, updatePackingItem, removePackingItem, mergeSuggestions } from "../shared/packing.js";
+import { tripFacts } from "../server/trip.js";
+import { itinerary, packing, timeline } from "../server/plan.js";
+import { exportPlan, parsePlan } from "../shared/portable.js";
+import { defaultPrep, mergePrepForMode } from "../src/Prep.js";
+
+const detroit = { id: 1, name: "Detroit", country: "United States", countryCode: "US", lat: 42.33, lon: -83.05, timezone: "America/Detroit" };
+const items = (p: any) => packingItems(p).map(i => i.item);
+const ownBags = (p: any) => [...new Set(packingItems(p).map(i => i.bag))];
+
+test("v1.12: old plans without a mode default by distance; no home stays Flying; explicit choice wins", () => {
+  assert.equal(resolveTravelMode({}, 120), "driving");
+  assert.equal(resolveTravelMode({}, 299), "driving");
+  assert.equal(resolveTravelMode({}, DRIVE_DEFAULT_KM), "flying");
+  assert.equal(resolveTravelMode({}, 800), "flying");
+  assert.equal(resolveTravelMode({}, null), "flying");
+  assert.equal(resolveTravelMode({ travelMode: "flying" }, 50), "flying");
+  assert.equal(resolveTravelMode({ travelMode: "driving" }, 4000), "driving");
+  const short = fixture(); short.trip = { distanceKm: 180, flightLabel: "x", home: detroit, domestic: false, tzLabel: "" };
+  const loaded = parsePlan(JSON.stringify(short));
+  assert.equal(loaded.input.travelMode, "driving");
+  const long = fixture(); long.trip = { distanceKm: 800, flightLabel: "x", home: detroit, domestic: false, tzLabel: "" };
+  assert.equal(parsePlan(JSON.stringify(long)).input.travelMode, "flying");
+  const none = parsePlan(JSON.stringify(fixture()));
+  assert.equal(none.input.travelMode, "flying");
+});
+
+test("v1.12: flying time labels stay exactly as before; driving is an unrouted approximate drive time", () => {
+  const flyShort = travelTimeLabel(180, "flying");
+  assert.equal(flyShort.flightHours, null);
+  assert.match(flyShort.flightLabel, /^180 km — closer by road or rail \(~2h 15m drive; straight-line distance ÷ 80 km\/h, not road-routed/);
+  const flyLong = travelTimeLabel(800, "flying");
+  assert.equal(flyLong.flightHours, 0.5 + (800 * 1.05) / 800);
+  assert.match(flyLong.flightLabel, /nonstop flight \(approx\., 800 km great-circle\)/);
+  assert.ok(!flyLong.flightLabel.includes("or ~"), "800 km has no drive alternative");
+  const flyMid = travelTimeLabel(500, "flying");
+  assert.match(flyMid.flightLabel, /nonstop flight/); assert.match(flyMid.flightLabel, /or ~/);
+  const drive = travelTimeLabel(800, "driving");
+  assert.match(drive.flightLabel, /^~10h drive \(approx\., 800 km great-circle, not a road route\)/);
+  assert.ok(!drive.flightLabel.includes("nonstop flight"));
+  const factsFly = tripFacts(detroit, porto, "2026-11-10", "flying");
+  assert.match(factsFly.flightLabel, /nonstop flight/);
+  const factsDrive = tripFacts(detroit, porto, "2026-11-10", "driving");
+  assert.match(factsDrive.flightLabel, /drive \(approx\./); assert.match(factsDrive.flightLabel, /not a road route/);
+  assert.equal(factsFly.distanceKm, factsDrive.distanceKm);
+});
+
+test("v1.12: itinerary, timeline and prep follow the choice", () => {
+  const inp: any = { ...fixture().input, travelMode: "flying" };
+  const flyDays = itinerary(inp, weather, [], []);
+  const last = flyDays[flyDays.length - 1];
+  assert.equal(last.afternoon, DEPART_FLY);
+  inp.travelMode = "driving";
+  assert.equal(itinerary(inp, weather, [], [])[flyDays.length - 1].afternoon, DEPART_DRIVE);
+  const flyT = timeline("2026-12-01", true, "2026-09-01", "flying").map(t => t.task);
+  const driveT = timeline("2026-12-01", true, "2026-09-01", "driving").map(t => t.task);
+  assert.ok(flyT.includes("Book flights/transport and accommodation") && flyT.includes("Online check-in; charge devices; pack"));
+  assert.ok(!flyT.includes(TIMELINE_DRIVE_EXTRA));
+  assert.ok(driveT.includes("Confirm the route, vehicle and accommodation") && driveT.includes("Check the car (tyres, fluids, lights), charge or fuel up, pack") && driveT.includes(TIMELINE_DRIVE_EXTRA));
+  const p = fixture(); p.input.travelMode = "flying";
+  const flyPrep = defaultPrep(p).map(t => t.task);
+  p.input.travelMode = "driving";
+  const drivePrep = defaultPrep(p).map(t => t.task);
+  assert.ok(flyPrep.includes("Online check-in / confirm transport to the airport"));
+  assert.ok(!drivePrep.includes("Online check-in / confirm transport to the airport"));
+  assert.ok(drivePrep.includes("Check the car: tyres, lights, fluids and papers"));
+  assert.ok(drivePrep.includes("Plan the route, fuel or charging stops, parking and tolls"));
+});
+
+test("v1.12: packing while Flying is unchanged; Driving uses car bags, road items and adapted wording", () => {
+  const fly = packing({ ...fixture().input, travelMode: "flying" }, weather, porto, 6);
+  const drive = packing({ ...fixture().input, travelMode: "driving", travelers: 3, members: [{ id: "traveler-1", name: "A" }, { id: "traveler-2", name: "B", profile: "girl", child: true }, { id: "traveler-3", name: "C", profile: "infant", child: true }] } as any, weather, porto, 6);
+  assert.ok(!items(fly).includes("Car emergency kit") && !items(fly).includes("Road snacks & drinking water"));
+  assert.ok(ownBags(fly).every(b => ["unassigned", "personal", "carry-on", "checked"].includes(b)));
+  assert.ok(items(drive).includes("Car emergency kit") && items(drive).includes("Road snacks & drinking water") && items(drive).includes("Car charger / phone mount") && items(drive).includes("Driving licence & vehicle documents") && items(drive).includes("Car entertainment (playlists, games, chargers)"));
+  const snacks = packingItems(drive).find(i => i.item === "Road snacks & drinking water")!;
+  assert.equal(snacks.bag, "cooler");
+  const kit = packingItems(drive).find(i => i.item === "Car emergency kit")!;
+  assert.equal(kit.bag, "car");
+  const stroller = packingItems(drive).find(i => i.item === "Baby carrier or travel stroller")!;
+  assert.match(stroller.reason, /car-seat/); assert.ok(!/gate-check/.test(stroller.reason));
+  const flyStroller = packing({ ...fixture().input, travelMode: "flying", travelers: 1, members: [{ id: "traveler-1", name: "Baby", profile: "infant", child: true }] } as any, weather, porto, 6);
+  assert.match(packingItems(flyStroller).find(i => i.item === "Baby carrier or travel stroller")!.reason, /gate-check/);
+  assert.equal(bagLabel("personal", "flying"), "Personal item");
+  assert.equal(bagLabel("personal", "driving"), "Day bag");
+  assert.deepEqual(bagsFor("driving"), ["unassigned", "day-bag", "car", "cooler"]);
+  assert.ok(bagsFor("driving", "carry-on").includes("carry-on"));
+});
+
+test("v1.12: switching mode keeps edits, checks and removals, adds driving suggestions, and is idempotent; no weather fetch", () => {
+  const p = fixture(); p.input.travelMode = "flying"; p.trip = { distanceKm: 800, flightLabel: travelTimeLabel(800, "flying").flightLabel, home: detroit, domestic: false, tzLabel: "" };
+  p.packing = suggestPacking(p, { laundryEvery: null, luggage: "all" });
+  p.itinerary = itinerary(p.input, weather, [], []);
+  p.timeline = timeline(p.input.start, true, "2026-10-01", "flying");
+  p.prep = defaultPrep(p);
+  const passport = packingItems(p.packing).find(i => /Passport/.test(i.item))!;
+  p.packing = updatePackingItem(p.packing, passport.id, { checked: true });
+  const sleep = packingItems(p.packing).find(i => i.item === "Sleepwear")!;
+  p.packing = updatePackingItem(p.packing, sleep.id, { item: "Silk PJs" });
+  const socks = packingItems(p.packing).find(i => i.item === "Socks")!;
+  p.packing = removePackingItem(p.packing, socks.id);
+  p.itinerary[p.itinerary.length - 1].notes = "Custom note";
+  const beforeJson = JSON.stringify(p);
+  const next = applyTravelMode(p, "driving");
+  next.prep = mergePrepForMode(next);
+  assert.equal(JSON.stringify(p), beforeJson, "source plan is not mutated");
+  assert.equal(next.input.travelMode, "driving");
+  assert.match(next.trip.flightLabel, /drive \(approx\./);
+  assert.equal(next.itinerary[next.itinerary.length - 1].afternoon, DEPART_DRIVE);
+  assert.equal(next.itinerary[next.itinerary.length - 1].notes, "Custom note");
+  const afterItems = packingItems(next.packing);
+  assert.equal(afterItems.find(i => i.id === passport.id)!.checked, true);
+  assert.equal(afterItems.find(i => i.id === sleep.id)!.item, "Silk PJs");
+  assert.ok(!afterItems.some(i => i.id === socks.id));
+  assert.ok(afterItems.some(i => i.item === "Car emergency kit"));
+  assert.ok(next.prep.some((t: any) => t.task.includes("Check the car")));
+  assert.ok(next.prep.some((t: any) => t.task === "Online check-in / confirm transport to the airport"), "existing flying prep is kept");
+  assert.ok(next.timeline.some((t: any) => t.task.includes("Check the car (tyres")));
+  const again = applyTravelMode(next, "driving");
+  assert.equal(packingItems(again.packing).length, packingItems(next.packing).length);
+  const back = applyTravelMode(next, "flying");
+  assert.match(back.trip.flightLabel, /nonstop flight/);
+  assert.equal(back.itinerary[back.itinerary.length - 1].afternoon, DEPART_FLY);
+  assert.ok(packingItems(back.packing).some(i => i.item === "Car emergency kit"), "switching back does not delete driving items");
+});
+
+test("v1.12: travel mode is saved, imported, exported and rejected when invalid; budget.ts is untouched", () => {
+  const p = fixture(); p.input.travelMode = "driving"; p.trip = { distanceKm: 500, flightLabel: "x", home: detroit, domestic: false, tzLabel: "" };
+  const back = parsePlan(exportPlan(p));
+  assert.equal(back.input.travelMode, "driving");
+  const bad = JSON.parse(JSON.stringify(p)); bad.input.travelMode = "train";
+  assert.throws(() => parsePlan(JSON.stringify(bad)), /travel mode/);
+  const budget = readFileSync(new URL("../server/budget.ts", import.meta.url), "utf8");
+  assert.ok(budget.includes("flight"), "budget file was not part of this change");
+});
+test("v1.12: questionnaire and packing settings source include How are you getting there?; budget file was not edited", async () => {
+  const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
+  assert.ok(app.indexOf("<TravelModeField") > app.indexOf("<HomeCityField") && app.indexOf("<TravelModeField") < app.indexOf("Offline — connect to generate"));
+  const field = readFileSync(new URL("../src/TravelMode.tsx", import.meta.url), "utf8");
+  assert.ok(field.includes("How are you getting there?") && field.includes('role="radiogroup"'));
+  assert.ok(app.includes("onTravelMode={changeTravelMode}"));
+  const pack = readFileSync(new URL("../src/Packing.tsx", import.meta.url), "utf8");
+  assert.ok(pack.includes("Day bags only · keep bags with you") && pack.includes("approval to fly"));
+});

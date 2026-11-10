@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.12.0 — Flying or Driving
+
+- The Plan form has a **How are you getting there?** choice: Flying or Driving. It is saved with the plan, including share links and JSON import/export. Old plans without a choice default to Driving when the home–destination distance is under about 300 km, otherwise Flying. With no home city the default is Flying, matching previous behaviour.
+- Travel time, multi-city hop labels, the depart-day itinerary line, the pre-trip timeline and the Before you leave checklist all follow the choice. Driving shows an approximate unrouted drive time. Flying wording is unchanged.
+- You can change the mode after generating a plan on the travel card or in ⚙ Settings → Packing, with no new weather fetch. Labels and packing suggestions update; your edits, checks, removals and custom itinerary notes are kept. Existing flying prep tasks are not deleted.
+- Packing for Driving uses Day bag, Car / trunk, Cooler and Unassigned instead of airline bag names, adapts the “carry-on only” preference and the packing disclaimer, and adds road-trip items (licence and vehicle documents, phone mount/charger, snacks and water, a car emergency kit, and entertainment when children are on the trip). Infant notes no longer mention gate-check. Flying packing is unchanged.
+- Budget is unchanged.
+
 ## 1.11.1 — Default traveler names
 
 - Name boxes in “Who’s traveling?” and ⚙ Settings → Packing start filled with real, editable values: Traveler 1, Traveler 2, Traveler 3 and so on. Added rows continue the sequence. Custom names, types and IDs are kept, including when you lower the count and raise it again.

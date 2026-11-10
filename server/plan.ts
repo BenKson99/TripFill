@@ -1,11 +1,12 @@
 import { suggestPacking } from "../shared/packing.js";
+import { departAfternoon, resolveTravelMode, TIMELINE_DRIVE_EXTRA } from "../shared/travel.js";
 import type { WeatherResult, DayWeather, Place } from "./weather.js";
 import { isRainy, todayIn } from "./weather.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
 
-export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place }
+export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving" }
 export type { PackingItem as PackItem, PackingGroup as PackGroup } from "../shared/packing.js";
 export interface ItinDay { date: string; label: string; weather: string; morning: string; afternoon: string; evening: string; rainyBackup?: string; notes: string }
 export interface Task { id: string; due: string; task: string; done: boolean }
@@ -34,7 +35,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   return days.map((d, i) => {
     const rain = isRainy(d); const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? (d.typical ? `, wet in ${d.precipProb}% of past years` : `, ${d.precipProb}% rain`) : ""}`.trim();
     if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
-    if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: "Last souvenir/coffee stop, then head to the airport/station", evening: "Travel home", notes: "" };
+    if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: "" };
     const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && !(noTrip && x.dayTrip)) || queue.find(x => !(noTrip && x.dayTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
     const slots: string[] = [];
     // A day trip fills the day on dry days; never on rainy days
@@ -63,21 +64,22 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   });
 }
 
-export function timeline(start: string, international: boolean, todayIso?: string): Task[] {
+export function timeline(start: string, international: boolean, todayIso?: string, travelMode?: "flying" | "driving"): Task[] {
   const t = (k: number, task: string): Task => ({ id: id(), due: addDays(start, -k), task, done: false });
   const today = todayIso || todayIn();
   const list = [
     t(60, international ? "Check passport validity & visa/entry rules" : "Confirm ID is valid"),
-    t(45, "Book flights/transport and accommodation"),
+    t(45, travelMode === "driving" ? "Confirm the route, vehicle and accommodation" : "Book flights/transport and accommodation"),
     t(30, international ? "Buy travel insurance; check vaccinations/health advice" : "Consider travel insurance"),
     t(21, "Book must-do tickets & any restaurant reservations"),
     t(14, international ? "Tell your bank you're travelling; order some local currency" : "Tell your bank you're travelling"),
     t(7, "Check the forecast & finalise packing list"),
     t(3, international ? "Download offline maps, tickets and translation pack" : "Download offline maps and tickets"),
     t(2, "Arrange pet/plant care, hold mail"),
-    t(1, "Online check-in; charge devices; pack"),
+    t(1, travelMode === "driving" ? "Check the car (tyres, fluids, lights), charge or fuel up, pack" : "Online check-in; charge devices; pack"),
     t(0, international ? "Departure day — passport, phone, wallet, keys" : "Departure day — ID, phone, wallet, keys"),
   ];
+  if (travelMode === "driving") list.splice(list.length - 2, 0, t(3, TIMELINE_DRIVE_EXTRA));
   return list.map(x => x.due < today ? { ...x, due: today, task: x.task + " (overdue — do now)" } : x);
 }
 
