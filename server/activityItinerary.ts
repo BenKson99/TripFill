@@ -27,7 +27,11 @@ function hlFor(id: ActivityId, hl: Highlight[]): Highlight[] {
     if (h.ski && id === "ski") return true;
     if ((id === "beach" || id === "surf") && isRealBeach(h)) return true;
     const blob = `${h.name} ${h.type || ""} ${h.description || ""}`.toLowerCase();
-    if (id === "museums") return /museum|gallery|art/.test(blob);
+    if (id === "museums") {
+      if ((h as any).activity === "museums") return true;
+      if (/\b(waterfront|harbour|harbor|aquarium|zoo)\b/i.test(blob)) return false;
+      return /\b(museums?|art museums?|art galleries|gallery)\b/i.test(`${h.name} ${h.type || ""}`);
+    }
     if (id === "heritage") return /castle|cathedral|heritage|historic|ruin|palace/.test(blob);
     if (id === "food") return /restaurant|food|market/.test(blob);
     if (id === "shopping") return /market|shop|bazaar/.test(blob);
@@ -40,9 +44,17 @@ function hlFor(id: ActivityId, hl: Highlight[]): Highlight[] {
     if (id === "spa") return /spa|hot spring|onsen|bath/.test(blob);
     if (id === "parks") return /theme park|water park|amusement/.test(blob);
     if (id === "shows") return /theatre|theater|concert|festival|opera/.test(blob);
-    if (id === "nightlife") return /bar|club|nightlife/.test(blob);
+    if (id === "nightlife") {
+      if (/coffee|caf[eé]/i.test(h.name) && !/\b(bar|club|pub|tavern)\b/i.test(h.name)) return false;
+      if ((h as any).activity === "nightlife") return true;
+      return /\b(bar|bars|club|nightclub|nightlife|pub|tavern)\b/i.test(blob);
+    }
     if (id === "boat") return /marina|harbour|harbor|kayak|boat/.test(blob);
-    if (id === "dive") return /dive|snorkel|scuba/.test(blob);
+    if (id === "dive") {
+      if (/aquarium|zoo|oceanarium/i.test(blob)) return false;
+      if ((h as any).activity === "dive") return true;
+      return /\b(dive|diving|snorkel|snorkeling|scuba)\b/i.test(blob);
+    }
     if (id === "camping") return /camp/.test(blob);
     if (id === "cycling") return /bike|cycle/.test(blob);
     if (id === "climbing") return /climb|crag/.test(blob);
@@ -69,6 +81,7 @@ function activityLabel(id: ActivityId, h?: Highlight) {
     if (h && isRealBeach(h)) return `${def.emoji} ${h.name}`;
     return id === "surf" ? `${def.emoji} Surf time at a nearby beach` : `${def.emoji} Beach time at a nearby beach`;
   }
+  if (id === "dive" && !h) return `${def.emoji} Guided snorkel or dive trip (book an operator)`;
   if (h) return h.dayTrip ? `${def.emoji} ${def.label}: ${h.name}${driveLabel(h) ? ` (${driveLabel(h)})` : ""}` : `${def.emoji} ${h.name}`;
   return `${def.emoji} ${def.label}`;
 }
@@ -100,10 +113,17 @@ export function stripUnsuitableActivities(days: ItinDay[], unfit: ActivityId[]) 
   }
 }
 
-function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string) {
+function dayMentionsPlace(d: ItinDay | undefined, name: string) {
+  if (!d || !name) return false;
+  const blob = `${d.morning} ${d.afternoon} ${d.evening}`.toLowerCase();
+  return blob.includes(name.toLowerCase());
+}
+
+function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay) {
   const list = (id === "beach" || id === "surf") ? hlFor(id, hl).filter(isRealBeach) : hlFor(id, hl);
-  const h = list.find(x => !used.has(x.name) && isRealisticDayTrip(x, inp, { name: placeName }))
-    || list.find(x => isRealisticDayTrip(x, inp, { name: placeName }));
+  const ok = (x: Highlight) => isRealisticDayTrip(x, inp, { name: placeName }) && !dayMentionsPlace(day, x.name);
+  const h = list.find(x => !used.has(x.name) && ok(x))
+    || list.find(x => ok(x));
   if (h) used.add(h.name);
   return h;
 }
@@ -125,22 +145,31 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
   const bump = (d: ItinDay) => load.set(d.date, (load.get(d.date) || 0) + 1);
 
   // Claim slots already filled by presets, and attach a real beach name to generic beach wording.
-  for (const d of mid) {
-    if (mentions(d, "beach") || mentions(d, "surf")) {
+  // Keep at most one preset beach/surf afternoon so tasting and other afternoon activities can land.
+  const beachDays = mid.filter(d => mentions(d, "beach") || mentions(d, "surf"));
+  for (const [i, d] of beachDays.entries()) {
+    if (i === 0) {
       taken.add(`${d.date}:afternoon`);
       bump(d);
       if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
         const id: ActivityId = /Surf time/.test(d.afternoon) && fit.includes("surf") ? "surf" : "beach";
-        const h = pickPlace(id, hl, usedHl, inp, placeName);
+        const h = pickPlace(id, hl, usedHl, inp, placeName, d);
         if (h) d.afternoon = activityLabel(id, h);
       }
+    } else if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
+      d.afternoon = "Explore a market or local street";
+      d.notes = (d.notes || "").split(" · ").filter(x => x && x !== "beach").join(" · ");
     }
+  }
+  for (const d of mid) {
     if (mentions(d, "ski")) { taken.add(`${d.date}:morning`); bump(d); }
     if (mentions(d, "hiking") && /🥾/.test(d.morning)) { taken.add(`${d.date}:morning`); bump(d); }
   }
 
+  const alreadyHas = (id: ActivityId) => mid.some(d => mentions(d, id));
   const toPlace = fit.filter(id => {
-    if (id === "ski" && mid.some(d => mentions(d, "ski"))) return false;
+    if (id === "ski" && alreadyHas("ski")) return false;
+    if ((id === "beach" || id === "surf") && alreadyHas(id)) return false;
     return true;
   }).sort((a, b) => {
     const ra = { morning: 0, afternoon: 1, evening: 2, flex: 3 }[ACTIVITY_BY_ID[a].slot] ?? 3;
@@ -171,7 +200,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
   }
 
   for (const a of assignments) {
-    const h = pickPlace(a.id, hl, usedHl, inp, placeName);
+    const h = pickPlace(a.id, hl, usedHl, inp, placeName, a.day);
     const text = activityLabel(a.id, h);
     if (a.slot === "evening") a.day.evening = `${text}; ${a.day.evening}`;
     else if (a.slot === "morning") a.day.morning = text;

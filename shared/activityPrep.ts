@@ -41,8 +41,13 @@ export function mergeActivityTimeline(list: TimelineTask[], plan: any, todayIso?
   const cur = [...(list || [])];
   const start = plan.input?.start;
   if (!start) return cur;
+  const foodOn = resolveActivities(plan.input || {}).includes("food");
+  if (foodOn) {
+    for (const x of cur) x.task = withFoodReservations(x.task);
+  }
   for (const t of activityTimelineTasks(plan.input, start, todayIso, plan.weather, plan.place?.name)) {
-    if (!cur.some(x => x.task === t.task || x.id === t.id)) cur.push(t);
+    if (foodOn && RESTAURANT_TASK.test(normalizePrepTask(t.task)) && cur.some(x => TICKETS_TASK.test(normalizePrepTask(x.task)))) continue;
+    if (!cur.some(x => x.task === t.task || x.id === t.id || tasksOverlap(x.task, t.task))) cur.push(t);
   }
   return cur.sort((a, b) => a.due.localeCompare(b.due) || a.task.localeCompare(b.task));
 }
@@ -51,8 +56,17 @@ export function normalizePrepTask(task: string) {
   return (task || "").replace(/\s*\(overdue — do now\)\s*/gi, "").trim().toLowerCase();
 }
 
+const TICKETS_TASK = /book must-do tickets(?:\s*(&|and)\s*(any )?restaurant reservations)?/i;
+const RESTAURANT_TASK = /reserve popular restaurants/i;
+
 export function tasksOverlap(a: string, b: string) {
-  return normalizePrepTask(a) === normalizePrepTask(b);
+  const na = normalizePrepTask(a), nb = normalizePrepTask(b);
+  if (na === nb) return true;
+  return (TICKETS_TASK.test(na) && RESTAURANT_TASK.test(nb)) || (TICKETS_TASK.test(nb) && RESTAURANT_TASK.test(na));
+}
+
+function withFoodReservations(task: string) {
+  return task.replace(/Book must-do tickets & any restaurant reservations/i, "Book must-do tickets and reserve popular restaurants");
 }
 
 /** Activity tasks belong on the dated timeline; drop the same wording from the checklist. */

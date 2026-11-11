@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, memo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { TravelerFields, editTraveler, setAllTypes } from "./Travelers";
 import { TravelModeField } from "./TravelMode";
@@ -31,8 +31,17 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const [message, setMessage] = useState("");
   const [mountedSimple, setMountedSimple] = useState(simple);
   const [mountedDetailed, setMountedDetailed] = useState(!simple);
-  if (simple && !mountedSimple) setMountedSimple(true);
-  if (!simple && !mountedDetailed) setMountedDetailed(true);
+  // Defer the first mount of the other pane by a frame so the toggle paints before grouping/rendering hundreds of rows.
+  useEffect(() => {
+    if (simple && !mountedSimple) {
+      const id = requestAnimationFrame(() => setMountedSimple(true));
+      return () => cancelAnimationFrame(id);
+    }
+    if (!simple && !mountedDetailed) {
+      const id = requestAnimationFrame(() => setMountedDetailed(true));
+      return () => cancelAnimationFrame(id);
+    }
+  }, [simple, mountedSimple, mountedDetailed]);
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
   const TRef = useRef(T); TRef.current = T;
   const edit = useCallback((id: string, patch: Partial<PackingItem>) => { if (!readOnly) onChangeRef.current(updatePackingItem(p, id, patch)); }, [readOnly, p]);

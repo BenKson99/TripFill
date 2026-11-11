@@ -93,11 +93,12 @@ app.post("/api/generate", async (req, res) => {
     }
     const acts = resolveActivities(inp);
     const skiOn = acts.includes("ski") || presetsOf(inp).includes("ski");
-    const [weather, places, osm] = await Promise.all([
+    const [weather, places] = await Promise.all([
       getWeather(place, inp.start, end, false, todayIso),
       getPlaces(place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 }),
-      osmActivities(place, acts),
     ]);
+    // After Wikipedia/Wikidata place lookups, so the activity SPARQL is not crowded out.
+    const osm = await osmActivities(place, acts);
     places.highlights = mergeActivityPlaces(places.highlights, osm);
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
     const aiPolished = await polish(places.highlights);

@@ -430,14 +430,15 @@ export function isSeriousPeak(h: { name?: string; type?: string; description?: s
   const typ = `${h.type || ""} ${h.description || ""}`;
   if (/\b(museum|gallery|viewpoint|lake|village|cable|gondola|funicular|bahn|church|chapel|spa)\b/i.test(`${name} ${typ}`) && !/\b(peak|summit)\b/i.test(typ)) return false;
   if (/\b(peak|summit|four-?thousander)\b/i.test(typ)) return true;
-  if (/\b(matterhorn|breithorn|zinalrothorn|gabelhorn|weisshorn|dent blanche|monte rosa|mont rosa|liskamm|lyskamm|t[äa]schhorn|castor|pollux|h[öo]rnli|monte rosa hut)\b/i.test(name)) return true;
+  if (/\b(matterhorn|breithorn|zinalrothorn|gabelhorn|weisshorn|dent blanche|monte rosa|mont rosa|liskamm|lyskamm|t[äa]schhorn|castor|pollux|h[öo]rnli|monte rosa hut|riffelhorn)\b/i.test(name)) return true;
+  if (/\b\w+horn\b/i.test(name) && !/\b(museum|gallery|church|village|lake|restaurant|hotel|bar)\b/i.test(`${name} ${typ}`)) return true;
   if (/\b(hut|hütte|refuge|cabane)\b/i.test(name) && /alpin|mountain|glacier|hut/i.test(`${name} ${typ}`)) return true;
   return false;
 }
 
 /** In-town or lift-accessible rest-day sights (museums, viewpoints, lakes, villages, cable cars). */
 export function isRestDayFriendly(h: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string; ski?: boolean }) {
-  if (h.ski || isSeriousPeak(h)) return false;
+  if (h.ski || isSeriousPeak(h) || isAdminOrReligiousOrg(h)) return false;
   const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
   return h.indoor === true || h.setting === "indoor"
     || /\b(museum|gallery|viewpoint|lake|village|old town|church|chapel|cable|gondola|funicular|bahn|garden|spa|shop|market|promenade|square|plaza|railway|train)\b/i.test(blob);
@@ -458,4 +459,22 @@ export function isSkiSector(h: { name?: string; ski?: boolean }) {
   if (h.ski) return true;
   if (isSeriousPeak(h as any)) return false;
   return SKI_SECTOR.test(h.name || "");
+}
+
+/** Dioceses, bishoprics and other administrative or religious organizations — not visitor sights. */
+export function isAdminOrReligiousOrg(h: { name?: string; type?: string; description?: string }) {
+  const name = h.name || "";
+  const blob = `${name} ${h.type || ""} ${h.description || ""}`;
+  if (/\b(cathedral|basilica|church|chapel|abbey|mosque|synagogue|temple|shrine|monastery)\b/i.test(name) && !/\b(diocese|archdiocese|bishopric)\b/i.test(name)) return false;
+  return /\b(diocese|archdiocese|archbishopric|bishopric|vicariate|eparchy|synod|deanery|curia|episcopal see)\b/i.test(blob)
+    || /\b(religious (organization|organisation|order|administration)|administrative (territorial )?entity|civil parish|municipality of|government agency)\b/i.test(blob);
+}
+
+/** Drop raw OSM suffixes such as "decauville" from venue and ski-sector names. */
+export function cleanVenueName(name: string) {
+  return (name || "")
+    .replace(/\bdecauville\b/ig, "")
+    .replace(/\s*[–—-]\s*$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }

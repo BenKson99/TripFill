@@ -40,7 +40,8 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const acts = resolveActivities(inp);
   const skiOn = acts.includes("ski") || presetsOf(inp).includes("ski");
   const built = await Promise.all(legs.map(async (l, k) => {
-    const [weather, pl, osm] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 }), osmActivities(l.place, acts)]);
+    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 })]);
+    const osm = await osmActivities(l.place, acts);
     pl.highlights = mergeActivityPlaces(pl.highlights, osm);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.eats = dietaryEats(pl.eats, inp);

@@ -11,13 +11,13 @@ if (mode === "seed") { await seedPackingQa(join(out, "http-cache")); console.log
 else {
   const base = process.argv[4] || "http://127.0.0.1:8847";
   const u = new URL(base); if (!["127.0.0.1", "localhost"].includes(u.hostname)) throw new Error("QA must target a local server only");
-  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.14.1");
+  const health: any = await (await fetch(`${base}/healthz`)).json(); assert.equal(health.version, "1.14.2");
   const page = await (await fetch(base)).text(); assert.ok(page.includes('/assets/')); const js = page.match(/src="([^\"]+\.js)"/)?.[1]; assert.ok(js); assert.equal((await fetch(`${base}${js}`)).status, 200);
   const report: any[] = [];
   for (const c of qaCases) {
     const input: any = { destination: c.place.name, place: c.place, start: c.start, end: c.end, travelers: 2, purpose: "Leisure", style: "Mix", interests: "", presets: c.presets, today: "2026-11-10", tz: "America/Detroit" };
     if (c.next) input.legs = [{ destination: c.next.name, place: c.next, start: c.nextStart }];
-    const response = await fetch(`${base}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal: AbortSignal.timeout(15000) });
+    const response = await fetch(`${base}/api/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input), signal: AbortSignal.timeout(30000) });
     const raw: any = await response.json(); assert.equal(response.status, 200, raw.error); const plan = parsePlan(JSON.stringify(raw));
     plan.title = `QA FIXTURE — ${c.id} (synthetic weather and places)`;
     const beforeItin = structuredClone(plan.itinerary), beforeBudget = structuredClone(plan.budget);

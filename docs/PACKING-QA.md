@@ -111,6 +111,14 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
 
+## Place quality and slot balance (1.14.2)
+
+Confirm `/healthz` says **1.14.2**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. Mid-trip days should name real beaches (Camps Bay, Clifton or Muizenberg), a real museum (Zeitz MOCAA or Iziko) rather than V&A Waterfront, a named bar for nightlife, tasting in the afternoon, and snorkeling as a dive operator or snorkel beach — not Two Oceans Aquarium. The same place should not appear twice on one day. Food prep should be a single “tickets and reserve popular restaurants” timeline task.
+
+Generate Zermatt, Flying, 3–9 Jan 2027, Skiing (Beach may also be selected; it should be omitted in January). Rest-day options should not be a diocese, that morning’s ski sector, or a climbing peak as a visit (peaks only as “views of …”). Prefer the Matterhorn Museum, a lake, a village, a viewpoint or a Gornergrat railway ride. “Riffelalp decauville” should be cleaned to Riffelalp.
+
+Optional: the first Simple mode toggle should feel closer to later toggles (lists mount on the first switch, but the print copy waits until print).
+
 ## Activity scheduling fixes (1.14.1)
 
 Confirm `/healthz` says **1.14.1**. At most two Generates:

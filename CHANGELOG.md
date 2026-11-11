@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.2 — Place quality and activity slot balance
+
+- Activity venues still use one Overpass request, but each kind now has its own result cap and a 35 km beach radius, so beaches are not dropped by a global 80-element limit. Timeouts are longer, and Wikidata SPARQL fills in beaches, museums, bars and wineries when Overpass is slow or empty (Camps Bay, Clifton, Muizenberg, Zeitz MOCAA, Iziko).
+- Beach is no longer pre-filled on half the mid-trip afternoons. Slots are balanced across the selected activities; tasting stays in the afternoon; nightlife names a real bar or club when one is found.
+- A museum slot must be an actual museum or gallery, not a waterfront whose description happens to contain “art”. The same place is not used twice in one day. Snorkeling never uses an aquarium; if no dive site is found the line is “guided snorkel or dive trip (book an operator)”.
+- Dioceses and other administrative or religious organizations are filtered from all sights. Ski rest days are not the same as that morning’s sector; they prefer museums, lakes, villages, viewpoints or a Gornergrat railway ride, and peaks appear only as “views of …”. Raw OSM names such as “Riffelalp decauville” are cleaned up.
+- When Food is selected, “Book must-do tickets & any restaurant reservations” and “Reserve popular restaurants” merge into one timeline task.
+- The first Simple mode switch defers mounting the lists by a frame, so the toggle can paint before grouping hundreds of rows.
+
 ## 1.14.1 — Activity scheduling and Simple mode fixes
 
 - Unsuitable activities (for example beach in Zermatt in January) are no longer scheduled, packed or prepped; the note stays, and temperatures use the user's °C/°F setting.

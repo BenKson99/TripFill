@@ -3,6 +3,7 @@ import type { Place } from "./weather.js";
 import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
 import { isBroadRegion } from "../shared/region.js";
+import { cleanVenueName, isAdminOrReligiousOrg, isRestDayFriendly, isSkiSector } from "../shared/activities.js";
 export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number; activity?: string }
 
 const WV = "https://en.wikivoyage.org/w/api.php";
@@ -85,7 +86,7 @@ const NOT_SIGHT = /railway station|metro station|subway station|school|universit
 export type Setting = "indoor" | "outdoor" | "mixed";
 // Classes (Wikidata instance-of labels) that are not visitor attractions
 const BAD_CLASS = /massacre|attack|incident|disaster|battle|event|fire\b|riot|stock exchange|skyscraper|office building|office|headquarters|bank|ministry|government|embassy|consulate|company|business|enterprise|corporation|university|college|school|hospital|hotel|railway station|metro station|train station|station|stadium|sports venue|arena|diocese|archdiocese|courthouse|prison|police|parliament building|legislative|city hall|residential|apartment|shopping|department store|organization|broadcaster|research|military|port|airport|interchange|road|street|highway|line|human settlement|administrative|ward|district of|neighborhood|quarter|commercial building|high-rise|tower block|destroyed|demolished|former|trade fair|convention center/i;
-const NAME_BAD = /stock exchange|headquarters|\bHQ\b|ministry|embassy|bank\b|office|university|station|stadium|hotel/i;
+const NAME_BAD = /stock exchange|headquarters|\bHQ\b|ministry|embassy|bank\b|office|university|station|stadium|hotel|diocese|archdiocese|bishopric|episcopal see/i;
 const INDOOR_C = /museum|gallery|theatre|theater|opera house|concert hall|aquarium|oceanarium|library|cinema|planetarium|exhibition|church|cathedral|basilica|chapel|mosque|synagogue|indoor|market hall|arcade/i;
 const MIXED_C = /winery|vineyard|wine estate|palace|castle|monastery|abbey|temple|shrine|fortress|fort\b|citadel|zoo|botanical garden|tower|observation|complex|market|historic site|world heritage|ruins|mausoleum|imperial|royal residence|lift|elevator/i;
 const OUTDOOR_C = /park|garden|square|plaza|bridge|monument|statue|memorial|viewpoint|street|avenue|beach|lake|river|mountain|hill|fountain|gate|arch|cemetery|neighbo|promenade|pier|waterfront|landmark/i;
@@ -249,7 +250,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v13|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
+  return cached(`places|v16|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -293,9 +294,22 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
   const near5 = (a: Highlight, b: Highlight) => a.lat == null || b.lat == null || haversine(a as any, b as any) < 40; // park centroids sit far from the landmark
   const nm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^the /, "");
   // keep the shorter, landmark name ("Table Mountain"), drop the longer umbrella entry
-  highlights = highlights.filter(h => h.ski || !isBroadRegion(h));
-  indoorExtra = indoorExtra.filter(h => !isBroadRegion(h));
-  highlights = highlights.filter(h => !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
+  const tidy = (h: Highlight): Highlight | null => {
+    const name = cleanVenueName(h.name);
+    if (!name || name.length < 3 || isAdminOrReligiousOrg({ ...h, name })) return null;
+    return name === h.name ? h : { ...h, name };
+  };
+  highlights = highlights.map(tidy).filter((h): h is Highlight => !!h).filter(h => h.ski || !isBroadRegion(h));
+  indoorExtra = indoorExtra.map(tidy).filter((h): h is Highlight => !!h).filter(h => !isBroadRegion(h));
+  // Keep a few museums, lakes and villages in the top list so ski rest days are not only peaks.
+  const restful = [...indoorExtra, ...highlights].filter(h => !h.ski && !isSkiSector(h) && isRestDayFriendly(h));
+  const haveN = new Set(highlights.map(h => h.name.toLowerCase()));
+  const boost = restful.filter(h => haveN.has(h.name.toLowerCase()) || (haveN.add(h.name.toLowerCase()), true)).slice(0, 3);
+  if (boost.length) {
+    highlights = [...boost, ...highlights.filter(h => !boost.some(b => b.name.toLowerCase() === h.name.toLowerCase()))];
+  }
+  // Drop "Table Mountain National Park" when "Table Mountain" exists, but keep "Matterhorn Museum".
+  highlights = highlights.filter(h => isRestDayFriendly(h) || !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
   { const seenN = new Set<string>(); highlights = highlights.filter(h => { const k = nm(h.name); if (seenN.has(k)) return false; seenN.add(k); return true; }); }
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));

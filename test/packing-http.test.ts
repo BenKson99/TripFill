@@ -19,7 +19,7 @@ test("seeded production HTTP generates four climates/lengths and roundtrips pack
     });
     const result = await new Promise<string>((resolve, reject) => {
       const qa = spawn(process.execPath, ["--import", "tsx", "scripts/packing-qa.ts", "verify", dir, `http://127.0.0.1:${port}`], { env, stdio: ["ignore", "pipe", "pipe"] }); let output = "";
-      qa.stdout.on("data", c => output += c); qa.stderr.on("data", c => output += c); const timer = setTimeout(() => { qa.kill(); reject(new Error("HTTP fixture verification timed out")); }, 25000);
+      qa.stdout.on("data", c => output += c); qa.stderr.on("data", c => output += c); const timer = setTimeout(() => { qa.kill(); reject(new Error("HTTP fixture verification timed out")); }, 90000);
       qa.on("exit", code => { clearTimeout(timer); code === 0 ? resolve(output) : reject(new Error(output)); });
     });
     assert.ok(result.includes("long-laundry")); const report = JSON.parse(await readFile(join(dir, "report.json"), "utf8")); assert.equal(report.report.length, 4); assert.ok(report.invalidPackingRejected); assert.ok(report.report.every((c: any) => c.generated === 200 && c.planBudgetUnchanged));
