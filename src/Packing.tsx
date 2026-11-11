@@ -16,29 +16,49 @@ const KIT_LABELS: Record<ActivityKit, string> = {
 };
 const stageLabel = (i: PackingItem) => i.skipped ? "Not needed" : i.checked || i.stage === "packed" ? "Packed" : i.stage === "need-to-buy" ? "Need to buy" : "Ready";
 
+
+function LazySelect({ label, value, options, "aria-label": aria, onChange, disabled }: { label: string; value: string; options: { value: string; label: string }[]; "aria-label": string; onChange: (v: string) => void; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const current = options.find(o => o.value === value)?.label || value;
+  if (!open) return <label className="lazy-select">{label}<button type="button" className="ghost lazy-select-btn" aria-label={aria} disabled={disabled} onClick={() => setOpen(true)}>{current}</button></label>;
+  return <label className="lazy-select">{label}<select autoFocus aria-label={aria} value={value} disabled={disabled} onChange={e => { onChange(e.target.value); setOpen(false); }} onBlur={() => setOpen(false)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
+}
+
 export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = null, openSettings, simple = false, onSimpleChange, onTravelMode, onActivities, onRefreshPlan }: { plan: any; readOnly: boolean; onTravelMode?: (m: TravelMode) => void; onActivities?: (ids: ActivityId[]) => void; onRefreshPlan?: () => void; simple?: boolean; onSimpleChange?: (on: boolean) => void; settingsSlot?: HTMLElement | null; openSettings?: () => void; onChange: (list: PackingList) => void; T: (s: string) => string }) {
   const p: PackingList = plan.packing;
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
   const travelMode: TravelMode = resolveTravelMode(plan.input, plan.trip?.distanceKm);
-  const setTravelMode = (m: TravelMode) => { if (!readOnly) onTravelMode?.(m); };
-  const [search, setSearch] = useState(""), [category, setCategory] = useState("all"), [status, setStatus] = useState("all"), [bag, setBag] = useState("all");
-  const [owner, setOwner] = useState("all");
-  const [name, setName] = useState(""), [newGroup, setNewGroup] = useState("Clothing"), [newQty, setNewQty] = useState(1), [newOwner, setNewOwner] = useState(SHARED);
   const [message, setMessage] = useState("");
   const [mountedSimple, setMountedSimple] = useState(simple);
   const [mountedDetailed, setMountedDetailed] = useState(!simple);
   if (simple && !mountedSimple) setMountedSimple(true);
   if (!simple && !mountedDetailed) setMountedDetailed(true);
-  const all = packingItems(p), progress = packingProgress(all), pending = all.filter(i => i.essential && !i.checked && !i.skipped).length;
-  const toBuy = all.filter(i => !i.skipped && i.stage === "need-to-buy").length;
-  const readyN = all.filter(i => !i.skipped && (i.stage || "ready") === "ready" && !i.checked).length;
-  const departure = all.filter(i => !i.skipped && i.lastMinute && !i.checked).length;
-  const kits = p.settings.activityKits ?? inferActivityKits(plan);
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
   const TRef = useRef(T); TRef.current = T;
   const edit = useCallback((id: string, patch: Partial<PackingItem>) => { if (!readOnly) onChangeRef.current(updatePackingItem(p, id, patch)); }, [readOnly, p]);
   const change = useCallback((next: PackingList) => { if (!readOnly) onChangeRef.current(next); }, [readOnly]);
-  const changeSettings = (patch: Partial<PackingList["settings"]>) => change({ ...p, settings: { ...p.settings, ...patch } });
+  const checkMany = useCallback((ids: string[], checked: boolean) => { if (!readOnly) onChangeRef.current(updatePackingItems(p, ids, { checked })); }, [readOnly, p]);
+  const onCheckItem = useCallback((id: string, checked: boolean) => edit(id, { checked }), [edit]);
+  const tFn = useCallback((s: string) => TRef.current(s), []);
+  const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
+  return <div className={`packing-workspace${simple ? " packing-simple" : ""}`} data-testid="packing-workspace">
+    {toggle}
+    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
+    {mountedSimple && <div hidden={!simple} className={simple ? undefined : "noprint"} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
+    {mountedDetailed && <div hidden={simple} className={simple ? "noprint" : undefined} data-testid="packing-detailed-pane">
+      <DetailedPane plan={plan} p={p} readOnly={readOnly} travelMode={travelMode} members={members} T={tFn} openSettings={openSettings} message={message} setMessage={setMessage} change={change} edit={edit} />
+    </div>}
+  </div>;
+}
+
+const DetailedPane = memo(function DetailedPane({ plan, p, readOnly, travelMode, members, T, openSettings, message, setMessage, change, edit }: { plan: any; p: PackingList; readOnly: boolean; travelMode: TravelMode; members: { id: string; name: string }[]; T: (s: string) => string; openSettings?: () => void; message: string; setMessage: (m: string) => void; change: (next: PackingList) => void; edit: (id: string, patch: Partial<PackingItem>) => void }) {
+  const [search, setSearch] = useState(""), [category, setCategory] = useState("all"), [status, setStatus] = useState("all"), [bag, setBag] = useState("all");
+  const [owner, setOwner] = useState("all");
+  const [name, setName] = useState(""), [newGroup, setNewGroup] = useState("Clothing"), [newQty, setNewQty] = useState(1), [newOwner, setNewOwner] = useState(SHARED);
+  const all = packingItems(p), progress = packingProgress(all), pending = all.filter(i => i.essential && !i.checked && !i.skipped).length;
+  const toBuy = all.filter(i => !i.skipped && i.stage === "need-to-buy").length;
+  const readyN = all.filter(i => !i.skipped && (i.stage || "ready") === "ready" && !i.checked).length;
+  const departure = all.filter(i => !i.skipped && i.lastMinute && !i.checked).length;
   const reset = () => { setSearch(""); setStatus("all"); setCategory("all"); setBag("all"); setOwner("all"); };
   const scoped = (items: PackingItem[]) => owner === "all" ? items : items.filter(i => (i.owner || SHARED) === owner);
   const visible = p.groups.filter(g => category === "all" || g.group === category).map(g => ({ ...g, items: filterPacking(g.items, search, status, bag, owner) })).filter(g => g.items.length);
@@ -51,10 +71,10 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
         <div className="packing-content">
           <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={i.item} onChange={item => edit(i.id, { item: item.slice(0, 300) })} />
             <div className="packing-meta"><label>Qty<input aria-label={`Quantity for ${i.item}`} type="number" min={1} max={99} value={i.quantity} onChange={e => edit(i.id, { quantity: quantity(Number(e.target.value)) })} /></label>
-              <label>Bag<select aria-label={`Bag for ${i.item}`} value={i.bag} onChange={e => edit(i.id, { bag: e.target.value as PackingItem["bag"] })}>{bagsFor(travelMode, i.bag).map(b => <option key={b} value={b}>{bagLabel(b, travelMode)}</option>)}</select></label>
-              <label>List<select aria-label={`List for ${i.item}`} value={i.owner || SHARED} onChange={e => edit(i.id, { owner: e.target.value })}><option value={SHARED}>Shared</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
-              <label>Status<select aria-label={`Status for ${i.item}`} value={i.checked ? "packed" : (i.stage || "ready")} onChange={e => edit(i.id, { stage: e.target.value as Stage })}><option value="need-to-buy">Need to buy</option><option value="ready">Ready</option><option value="packed">Packed</option></select></label>
-              <label>Category<select aria-label={`Category for ${i.item}`} value={g.group} onChange={e => change(movePackingItem(p, i.id, e.target.value))}>{[...new Set(["Clothing", "Documents & Money", "Toiletries & Health", "Electronics", "Comfort & Extras", "Activities", ...p.groups.map(x => x.group)])].map(x => <option key={x}>{x}</option>)}</select></label>
+              <LazySelect label="Bag" aria-label={`Bag for ${i.item}`} value={i.bag} options={bagsFor(travelMode, i.bag).map(b => ({ value: b, label: bagLabel(b, travelMode) }))} onChange={v => edit(i.id, { bag: v as PackingItem["bag"] })} />
+              <LazySelect label="List" aria-label={`List for ${i.item}`} value={i.owner || SHARED} options={[{ value: SHARED, label: "Shared" }, ...members.map(m => ({ value: m.id, label: m.name }))]} onChange={v => edit(i.id, { owner: v })} />
+              <LazySelect label="Status" aria-label={`Status for ${i.item}`} value={i.checked ? "packed" : (i.stage || "ready")} options={[{ value: "need-to-buy", label: "Need to buy" }, { value: "ready", label: "Ready" }, { value: "packed", label: "Packed" }]} onChange={v => edit(i.id, { stage: v as Stage })} />
+              <LazySelect label="Category" aria-label={`Category for ${i.item}`} value={g.group} options={[...new Set(["Clothing", "Documents & Money", "Toiletries & Health", "Electronics", "Comfort & Extras", "Activities", ...p.groups.map(x => x.group)])].map(x => ({ value: x, label: x }))} onChange={v => change(movePackingItem(p, i.id, v))} />
               <label className="packing-flag"><input type="checkbox" checked={i.essential} onChange={e => edit(i.id, { essential: e.target.checked })} />Essential</label>
               <label className="packing-flag"><input type="checkbox" checked={i.lastMinute} onChange={e => edit(i.id, { lastMinute: e.target.checked })} />Departure day</label>
               <label className="packing-flag"><input type="checkbox" checked={i.skipped} onChange={e => edit(i.id, { skipped: e.target.checked })} />Not needed</label>
@@ -66,7 +86,8 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
       </>}
     </article>)}
   </section>; });
-  const detailedInner = useMemo(() => <>
+    return <>
+
     <div className="packing-overview">
       <div><span className="eyebrow">A little less to remember</span><h2>Your bags, in order.</h2><p>{tripDays(plan.input)} days · personal items are listed for each of {plan.input.travelers || members.length} traveler(s), with a separate shared list. Clothing quantities are for that traveler and include what they wear in transit.</p></div>
       <div className="packing-score"><b>{progress.percent}%</b><span>{progress.packed} of {progress.total} active items packed</span><progress aria-label="Packing progress" value={progress.packed} max={Math.max(1, progress.total)} /></div>
@@ -96,16 +117,8 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     </div>
     <div className="packing-print">{renderGroups(p.groups, true)}</div>
     {!!p.leaveAtHome.length && <details><summary>Notes from your older list · leave at home</summary><ul>{p.leaveAtHome.map(i => <li key={i.id}>{i.item} — {T(i.reason || "")}</li>)}</ul><p className="small muted">These older suggestions are not requirements. Review them against your own needs and current rules.</p></details>}
-    </>, [p, readOnly, search, category, status, bag, owner, name, newGroup, newQty, newOwner, message, travelMode, members, openSettings, plan, visible, progress, toBuy, readyN, departure, pending, all, T, change, edit, reset]);
-  const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
-  const checkMany = (ids: string[], checked: boolean) => { if (!readOnly) onChange(updatePackingItems(p, ids, { checked })); };
-  return <div className={`packing-workspace${simple ? " packing-simple" : ""}`} data-testid="packing-workspace">
-    {toggle}
-    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
-    {mountedSimple && <div hidden={!simple} className={simple ? undefined : "noprint"} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={(id, checked) => edit(id, { checked })} /></div>}
-    {mountedDetailed && <div hidden={simple} className={simple ? "noprint" : undefined} data-testid="packing-detailed-pane">{detailedInner}</div>}
-  </div>;
-}
+    </>;
+});
 export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, travelMode = "flying", onTravelMode, onActivities, onRefreshPlan }: { plan: any; p: PackingList; readOnly: boolean; change: (next: PackingList) => void; setMessage: (m: string) => void; travelMode?: TravelMode; onTravelMode?: (m: TravelMode) => void; onActivities?: (ids: ActivityId[]) => void; onRefreshPlan?: () => void }) {
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
   const kits = p.settings.activityKits ?? inferActivityKits(plan);
@@ -136,7 +149,7 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
 }
 
 /** Simple mode: whole active lists (ignores detailed search/filters), same item ids, checks only. */
-export function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {
+export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {
   const checkMany = onCheckMany || ((ids: string[], checked: boolean) => ids.forEach(id => onCheck(id, checked)));
   const lists = useMemo(() => simpleLists(p), [p]);
   const adultEntries = useMemo(() => groupSimpleRows(lists.adults), [lists.adults]);
@@ -156,7 +169,7 @@ export function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingL
     <div className="simple-screen noprint">{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</div>
     <div className="packing-print simple-print">{list("Adults", adultEntries, lists.adults, true)}{kidEntries && list("Kids", kidEntries, lists.kids!, true)}</div>
   </>;
-}
+});
 
 const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void }) {
   const i = row.item, label = `${i.quantity} × ${i.item} (Shared)${i.skipped ? " — not needed" : ""}`;

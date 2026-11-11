@@ -411,3 +411,10 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .travel-mode .seg{margin-top:6px}.travel-mode .seg button{min-height:42px;min-width:6.5rem}
 .snap-mode{grid-column:1/-1;margin-top:8px}
 @media(max-width:700px){.travel-mode .seg{display:flex;flex-wrap:wrap;width:100%}.travel-mode .seg button{flex:1 1 8rem}}
+
+@media screen {
+  .packing-screen .packing-item, .packing-screen .packing-category { content-visibility: auto; contain-intrinsic-size: auto 88px; }
+  .simple-screen .simple-list li { content-visibility: auto; contain-intrinsic-size: auto 48px; }
+}
+.lazy-select { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.lazy-select-btn { min-height: 38px; max-width: 150px; text-align: left; font-weight: 500; padding: 6px 10px; }

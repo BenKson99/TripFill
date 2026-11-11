@@ -3,6 +3,7 @@ import type { WeatherResult } from "./weather.js";
 import { isRainy } from "./weather.js";
 import { driveLabel } from "./plan.js";
 import { isBroadRegion } from "../shared/region.js";
+import { isRestDayFriendly, isSeriousPeak, isSkiSector } from "../shared/activities.js";
 
 export const PRESETS = ["beach", "hiking", "ski", "city", "business", "kids", "roadtrip"] as const;
 export type Preset = typeof PRESETS[number];
@@ -20,11 +21,39 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
   const used = new Set<ItinDay>();
   if (ps.includes("business") && ps.includes("ski")) { for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = "⛷ Afternoon skiing (lifts usually close ~4 pm), then après-ski"; tag(d, "business + ski"); } return; }
   if (ps.includes("business")) for (const d of mid) { d.morning = "💼 Meetings / work block"; d.afternoon = d.afternoon.startsWith("💼") ? d.afternoon : `💼 Work, then if time: ${d.afternoon}`; tag(d, "business"); }
-  const fields = hl.filter(h => h.ski);
+  const fields = [...hl.filter(h => h.ski), ...hl.filter(h => !h.ski && isSkiSector(h))]
+    .filter((h, i, a) => a.findIndex(x => x.name === h.name) === i);
   const mentioned = (n: string) => days.some(x => (x.morning + x.afternoon + (x.rainyBackup || "")).includes(n));
-  const spare = hl.filter(h => !h.ski && !mentioned(h.name) && !isBroadRegion(h)); const spareUsed = new Set<string>();
-  if (ps.includes("ski")) for (const [j, d] of mid.entries()) { const f = fields[j % Math.max(1, fields.length)]; const m0 = d.morning; d.morning = f ? `⛷ Ski ${f.name}${f.distanceKm ? ` (${driveLabel(f)})` : ""} — first lifts are quietest` : "⛷ On the slopes (first lifts are quietest)"; let alt = m0 && !/^Free morning/.test(m0) ? m0 : d.afternoon;
-    if (!alt || /^(Explore a market|Long lunch)/.test(alt)) { const s2 = spare.find(h => !spareUsed.has(h.name)); if (s2) { spareUsed.add(s2.name); alt = (s2 as any).dayTrip ? `🚐 Day trip: ${s2.name} (${driveLabel(s2)} each way)` : s2.name; } } d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${alt ? `; or a rest day: ${alt}` : ""}`; tag(d, "ski"); }
+  const spare = hl.filter(h => !h.ski && !isSkiSector(h) && !mentioned(h.name) && !isBroadRegion(h)); const spareUsed = new Set<string>();
+  const restDay = () => {
+    const easy = spare.find(h => !spareUsed.has(h.name) && isRestDayFriendly(h));
+    if (easy) { spareUsed.add(easy.name); return (easy as any).dayTrip ? `🚐 Day trip: ${easy.name} (${driveLabel(easy)} each way)` : easy.name; }
+    const peak = spare.find(h => !spareUsed.has(h.name) && isSeriousPeak(h));
+    if (peak) { spareUsed.add(peak.name); return `views of ${peak.name}`; }
+    const s2 = spare.find(h => !spareUsed.has(h.name));
+    if (s2) { spareUsed.add(s2.name); return isSeriousPeak(s2) ? `views of ${s2.name}` : ((s2 as any).dayTrip ? `🚐 Day trip: ${s2.name} (${driveLabel(s2)} each way)` : s2.name); }
+  };
+  const skiMorning = (name: string | undefined, j: number, lone: boolean) => {
+    if (!name) return "⛷ On the slopes (first lifts are quietest)";
+    const drive = "";
+    const variants = [
+      `⛷ Ski ${name}${drive} — first lifts are quietest`,
+      `⛷ Morning on the ${name} slopes`,
+      `⛷ Back at ${name} — try a different run or sector`,
+      `⛷ Ski day at ${name}`,
+      `⛷ Another day on the ${name} slopes`,
+    ];
+    return lone ? variants[j % variants.length] : `⛷ Ski ${name}${drive} — first lifts are quietest`;
+  };
+  if (ps.includes("ski")) for (const [j, d] of mid.entries()) {
+    const f = fields[j % Math.max(1, fields.length)];
+    const m0 = d.morning;
+    d.morning = skiMorning(f?.name, j, fields.length <= 1);
+    let alt = m0 && !/^Free morning/.test(m0) && !isSeriousPeak({ name: m0 }) ? m0 : d.afternoon;
+    if (!alt || /^(Explore a market|Long lunch)/.test(alt) || isSeriousPeak({ name: alt, type: "" })) alt = restDay() || (isSeriousPeak({ name: alt }) ? `views of ${alt}` : alt);
+    if (alt && isSeriousPeak({ name: alt })) alt = `views of ${alt}`;
+    d.afternoon = `⛷ Skiing until ~3:30 pm, then après-ski${alt ? `; or a rest day: ${alt}` : ""}`; tag(d, "ski");
+  }
   if (ps.includes("hiking")) {
     const noTrip = (l: ItinDay[]): ItinDay[] => { const f = l.filter(d => !d.morning.startsWith("🚐")); return f.length ? f : l; };
     const best = [...noTrip(dry.length ? dry : mid)].sort((a, b) => (wx(a)?.precipProb ?? 0) - (wx(b)?.precipProb ?? 0))[0];
@@ -32,8 +61,9 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
   }
   if (ps.includes("beach")) {
     const free = (dry.length ? dry : mid).filter(d => !used.has(d) && !d.morning.startsWith("🚐")); // not the hike day
-    const warm = free.filter(d => (wx(d)?.tmax ?? 0) >= 22);
-    for (const d of (warm.length ? warm : free).slice(0, Math.max(1, Math.ceil(mid.length / 2)))) { d.afternoon = `🏖 Beach time (avoid 12–3 pm sun)${warm.length ? "" : " — may be cool for swimming"}; ${d.afternoon}`; tag(d, "beach"); }
+    const warm = free.filter(d => (wx(d)?.tmax ?? 0) >= 18);
+    // Only schedule on genuinely warm days; real beach names are applied in scheduleActivities.
+    for (const d of warm.slice(0, Math.max(1, Math.ceil(mid.length / 2)))) { d.afternoon = "🏖 Beach time at a nearby beach"; tag(d, "beach"); used.add(d); }
   }
   if (ps.includes("roadtrip") && mid.length) {
     const pool = (dry.length ? dry : mid).filter(x => !used.has(x)); const d = pool[Math.min(1, pool.length - 1)] || mid.find(x => !used.has(x));

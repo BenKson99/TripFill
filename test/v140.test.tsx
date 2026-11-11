@@ -4,10 +4,9 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { fixture, weather } from "./fixtures.js";
 import { ACTIVITIES, ACTIVITY_IDS, detectActivities, resolveActivities, syncActivityInput, packingItemsForActivity, activityFit, weatherAllows, isRealisticDayTrip, type ActivityId } from "../shared/activities.js";
-import { activityPrepItems } from "../shared/activityPrep.js";
+import { activityPrepItems, activityTimelineTasks } from "../shared/activityPrep.js";
 import { applyActivities } from "../shared/applyActivities.js";
 import { packingItems, suggestPacking, mergeSuggestions, updatePackingItem } from "../shared/packing.js";
-import { defaultPrep } from "../src/Prep.js";
 import { encodePlan, decodePlan, exportPlan, parsePlan } from "../shared/portable.js";
 import { ActivityPicker } from "../src/Activities.js";
 import { itinerary } from "../server/plan.js";
@@ -54,9 +53,9 @@ test("v1.14.0: legacy Ski trip type still resolves, packs and preps without inpu
   p.weather = { source: "typical", note: "", days: snowDays, stats: stats(snowDays as any) };
   const items = packingItems(suggestPacking(p));
   assert.ok(items.some(i => /ski jacket|goggles|ski socks/i.test(i.item)), "ski kit from legacy presets");
-  const prep = defaultPrep(p);
-  assert.ok(prep.some(t => /lift pass/i.test(t.task)));
-  assert.ok(prep.some(t => /rental|lesson/i.test(t.task)));
+  const tl = activityTimelineTasks(p.input, p.input.start, "2027-01-01", p.weather, "Zermatt");
+  assert.ok(tl.some((t: any) => /lift pass/i.test(t.task)));
+  assert.ok(tl.some((t: any) => /rental|lesson/i.test(t.task)));
 });
 
 test("v1.14.0: weather gating skips beach on cold or rainy days and notes unfit ski in a warm city", () => {

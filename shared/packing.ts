@@ -1,6 +1,6 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
-import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities } from "./activities.js";
+import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities, suitableActivities } from "./activities.js";
 import { precipKind } from "./precip.js";
 export const BAGS = ["unassigned", "personal", "carry-on", "checked", "day-bag", "car", "cooler"] as const;
 export type Bag = typeof BAGS[number];
@@ -247,7 +247,10 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   const settings = packingSettings(rawSettings ?? plan.packing?.settings, plan);
   const input = plan.input, w = plan.weather, days = tripDays(input), cycle = Math.min(days, settings.laundryEvery ?? days);
   const members = settings.members;
-  const kits = rawSettings === undefined || !Array.isArray(rawSettings.activityKits) ? inferActivityKits(plan) : (settings.activityKits ?? []);
+  const kitsAll = rawSettings === undefined || !Array.isArray(rawSettings.activityKits) ? inferActivityKits(plan) : (settings.activityKits ?? []);
+  const fitIds = new Set(suitableActivities(plan.input, w, plan.place?.name));
+  const kitActivity: Partial<Record<ActivityKit, string>> = { beach: "beach", hiking: "hiking", ski: "ski", photography: "photography", kids: "family", roadtrip: "scenic" };
+  const kits = kitsAll.filter(k => { const id = kitActivity[k]; return !id || !w?.stats && !w?.days || fitIds.has(id as any); });
   const driving = resolveTravelMode(input, plan.trip?.distanceKm) === "driving";
   const mapBag = (b?: Bag): Bag => {
     if (!driving) return b || (settings.luggage === "carry-on" ? "carry-on" : "unassigned");
@@ -331,7 +334,8 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", driving ? "Business plans; keep it out of sight when the car is parked" : "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
   // Activities picker: extra kits (golf, dive, spa, …) plus weather/mode-aware items. Skip when tests pass activityKits: [].
-  const activityIds = plan.input?.activities != null ? resolveActivities(plan.input) : Array.isArray(rawSettings?.activityKits) ? activitiesFromKits(rawSettings.activityKits) : resolveActivities(plan.input);
+  const activityIds0 = plan.input?.activities != null ? resolveActivities(plan.input) : Array.isArray(rawSettings?.activityKits) ? activitiesFromKits(rawSettings.activityKits) : resolveActivities(plan.input);
+  const activityIds = (w?.stats || w?.days) ? activityIds0.filter(id => fitIds.has(id)) : activityIds0;
   const packWarm = hi != null && hi >= 18;
   for (const aid of activityIds) {
     const def = ACTIVITY_BY_ID[aid];

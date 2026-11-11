@@ -34,7 +34,13 @@ test("mixed climate uses extreme days AND departure-leg extrema, with honest rea
 test("selected activities and purpose create real suggestions, deterministic unique IDs", () => {
   const p = fixture(); p.input.presets = ["beach", "hiking", "ski", "business", "roadtrip", "kids"]; p.input.interests = "photography hiking";
   const a = suggestPacking(p), b = suggestPacking(p), names = packingItems(a).map(i => i.item);
-  for (const name of ["Swimwear", "Hiking shoes / trail layers", "Ski jacket & pants", "Laptop & charger", "Car charger / phone mount", "Camera, battery & memory card"]) assert.ok(names.includes(name));
+  for (const name of ["Swimwear", "Hiking shoes / trail layers", "Laptop & charger", "Car charger / phone mount", "Camera, battery & memory card"]) assert.ok(names.includes(name), name);
+  assert.ok(!names.includes("Ski jacket & pants"), "ski kit stays off a warm destination");
+  const snow = structuredClone(p);
+  snow.weather.days = snow.weather.days.map((d: any) => ({ ...d, tmax: 1, tmin: -7, summary: "Often snowy", precipMm: 4 }));
+  snow.weather.stats = { ...snow.weather.stats, avgHigh: 1, avgLow: -7, minLow: -7, snowDays: 6 };
+  const skiNames = packingItems(suggestPacking(snow)).map(i => i.item);
+  assert.ok(skiNames.includes("Ski jacket & pants"));
   assert.deepEqual(a, b); const ids = packingItems(a).map(i => i.id); assert.equal(new Set(ids).size, ids.length);
   assert.equal(names.filter(n => n === "Swimwear").length, 2);
 });

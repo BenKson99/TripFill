@@ -1,6 +1,6 @@
 // "Before you leave" checklist — built on the client so older saved/shared plans get one too.
 import { resolveTravelMode } from "../shared/travel.js";
-import { activityPrepItems } from "../shared/activityPrep.js";
+import { dedupePrepAgainstTimeline } from "../shared/activityPrep.js";
 const PLUGS: Record<string, string> = {
   US: "A/B", CA: "A/B", MX: "A/B", JP: "A/B", BR: "C/N", AR: "C/I", CL: "C/L", CO: "A/B", PE: "A/B/C", UY: "C/F/I/L", CR: "A/B", DO: "A/B",
   GB: "G", IE: "G", MT: "G", CY: "G", HK: "G", SG: "G", MY: "G", AE: "G", QA: "G", SA: "G", KE: "G", NG: "D/G",
@@ -46,9 +46,7 @@ export function defaultPrep(plan: any): PrepItem[] {
   out.push(["Empty the fridge, take out trash"]);
   out.push(["Set thermostat, unplug appliances, lock up"]);
   const base: PrepItem[] = out.map(([task, why], i) => ({ id: "prep" + i, task, why, done: false }));
-  const seen = new Set(base.map(x => x.task));
-  for (const t of activityPrepItems(plan.input)) if (!seen.has(t.task)) { seen.add(t.task); base.push(t); }
-  return base;
+  return dedupePrepAgainstTimeline(base, plan.timeline);
 }
 
 /** Add any missing mode-specific tasks; never delete or uncheck existing ones. */

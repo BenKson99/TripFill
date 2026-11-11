@@ -1,3 +1,4 @@
+import { precipKind, isRainy } from "./precip.js";
 /** One table of vacation activities — packing, prep, itinerary hints and place tags. Easy to extend. */
 export const ACTIVITY_IDS = [
   "ski", "hiking", "food", "beach", "sightseeing", "museums", "heritage", "shopping",
@@ -355,16 +356,34 @@ export function isRealisticDayTrip(h: { dayTrip?: boolean; driveMin?: number; di
 }
 
 export type FitCtx = { avgHigh?: number; minLow?: number; snowy?: boolean; rainyShare?: number; placeName?: string };
+/** Client-side `{t:N}` placeholders convert to °C or °F from the user's unit setting. */
+export const fitTemp = (c: number) => `{t:${Math.round(c)}}`;
+
+export function fitContextFromWeather(w: any, placeName?: string): FitCtx {
+  const days = w?.days || [];
+  const snowy = days.some((d: any) => { const k = precipKind(d); return k === "snow" || k === "mixed"; }) || (w?.stats?.snowDays > 0);
+  const rainyShare = days.length ? days.filter((d: any) => isRainy(d)).length / days.length : 0;
+  return { avgHigh: w?.stats?.avgHigh, minLow: w?.stats?.minLow, snowy, rainyShare, placeName };
+}
+
+/** Selected activities that fit this destination and season (all of them when no weather is available). */
+export function suitableActivities(input: any, w?: any, placeName?: string): ActivityId[] {
+  const ids = resolveActivities(input);
+  if (!w?.stats && !w?.days) return ids;
+  const ctx = fitContextFromWeather(w, placeName);
+  return ids.filter(id => activityFit(id, ctx).ok);
+}
+
 export function activityFit(id: ActivityId, ctx: FitCtx): { ok: boolean; note?: string } {
   const name = ctx.placeName || "this destination";
   const high = ctx.avgHigh;
   const low = ctx.minLow;
   if (id === "ski") {
     if (ctx.snowy || (low != null && low <= 2) || (high != null && high <= 8)) return { ok: true };
-    return { ok: false, note: `Skiing & snowboarding usually isn't possible in ${name} in this season${high != null ? ` (highs around ${Math.round(high)}°)` : ""}. We didn't add ski days — turn the activity off if you don't need the packing list.` };
+    return { ok: false, note: `Skiing & snowboarding usually isn't possible in ${name} in this season${high != null ? ` (highs around ${fitTemp(high)})` : ""}. We didn't add ski days — turn the activity off if you don't need the packing list.` };
   }
   if (id === "beach" || id === "surf" || id === "dive") {
-    if (high != null && high < 18) return { ok: false, note: `${ACTIVITY_BY_ID[id].label} is a stretch in ${name} with highs around ${Math.round(high)}° — we didn't schedule it as a main outing.` };
+    if (high != null && high < 18) return { ok: false, note: `${ACTIVITY_BY_ID[id].label} is a stretch in ${name} with highs around ${fitTemp(high)} — we didn't schedule it as a main outing.` };
     return { ok: true };
   }
   if (id === "golf" && high != null && high < 8) return { ok: false, note: `Golf is likely off-season in ${name} in this weather. We didn't schedule a tee time.` };
@@ -401,4 +420,42 @@ export function packingItemsForActivity(def: ActivityDef, ctx: { driving: boolea
     }
     return it;
   });
+}
+
+
+/** Famous alpine climbs, high huts and summit-class terrain — not a rest-day outing. */
+export function isSeriousPeak(h: { name?: string; type?: string; description?: string; ski?: boolean }) {
+  if (h.ski) return false;
+  const name = h.name || "";
+  const typ = `${h.type || ""} ${h.description || ""}`;
+  if (/\b(museum|gallery|viewpoint|lake|village|cable|gondola|funicular|bahn|church|chapel|spa)\b/i.test(`${name} ${typ}`) && !/\b(peak|summit)\b/i.test(typ)) return false;
+  if (/\b(peak|summit|four-?thousander)\b/i.test(typ)) return true;
+  if (/\b(matterhorn|breithorn|zinalrothorn|gabelhorn|weisshorn|dent blanche|monte rosa|mont rosa|liskamm|lyskamm|t[äa]schhorn|castor|pollux|h[öo]rnli|monte rosa hut)\b/i.test(name)) return true;
+  if (/\b(hut|hütte|refuge|cabane)\b/i.test(name) && /alpin|mountain|glacier|hut/i.test(`${name} ${typ}`)) return true;
+  return false;
+}
+
+/** In-town or lift-accessible rest-day sights (museums, viewpoints, lakes, villages, cable cars). */
+export function isRestDayFriendly(h: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string; ski?: boolean }) {
+  if (h.ski || isSeriousPeak(h)) return false;
+  const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
+  return h.indoor === true || h.setting === "indoor"
+    || /\b(museum|gallery|viewpoint|lake|village|old town|church|chapel|cable|gondola|funicular|bahn|garden|spa|shop|market|promenade|square|plaza|railway|train)\b/i.test(blob);
+}
+
+/** A real swimming beach, not a waterfront, harbour or generic bay highlight. */
+export function isRealBeach(h: { name?: string; type?: string; activity?: string; description?: string }) {
+  if (/\b(waterfront|harbour|harbor|marina|promenade|v\s*&\s*a|victoria\s*&\s*alfred)\b/i.test(h.name || "")) return false;
+  if (h.activity === "beach" || h.activity === "surf") return true;
+  const typ = (h.type || "").toLowerCase().replace(/_/g, " ");
+  if (/(^|\b|,\s*)beach(\b|,|$)/.test(typ) && !/waterfront/.test(typ)) return true;
+  if (/\bbeach(es)?\b/i.test(h.name || "") && !/waterfront/i.test(h.name || "")) return true;
+  return false;
+}
+
+const SKI_SECTOR = /\b(ski\s*(area|resort)|glacier paradise|gornergrat|sunnegga|blauherd|theodul|trockener steg|klein matterhorn|schwarzsee|schwarzee|unterrothorn|riffelalp|findeln|rothorn)\b/i;
+export function isSkiSector(h: { name?: string; ski?: boolean }) {
+  if (h.ski) return true;
+  if (isSeriousPeak(h as any)) return false;
+  return SKI_SECTOR.test(h.name || "");
 }

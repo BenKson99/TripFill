@@ -22,6 +22,7 @@ import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
 import { defaultPrep, mergePrepForMode } from "./Prep";
+import { dedupePrepAgainstTimeline } from "../shared/activityPrep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
 
 // Plans saved before 1.4.0 had `food` dish arrays; they simply show the regenerate hint
@@ -165,7 +166,7 @@ export default function App() {
     food: (() => { const E = eatsOf(plan); return `${E.restaurants.length} restaurants · ${E.cafes.length} coffee shops${E.restaurants.length ? " · " + E.restaurants.slice(0, 2).map((f: Any) => f.name).join(", ") + "…" : ""}`; })(),
     packing: `${packingProgress(packItems).packed}/${packingProgress(packItems).total} active items packed`,
     itinerary: `${plan.itinerary.length} days · ${plan.input.style} pace`,
-    prep: (() => { const pr = plan.prep || defaultPrep(plan); return `${pr.length} tasks, ${pr.filter((t: Any) => t.done).length} done`; })(),
+    prep: (() => { const pr = dedupePrepAgainstTimeline(plan.prep || defaultPrep(plan), plan.timeline); return `${pr.length} tasks, ${pr.filter((t: Any) => t.done).length} done`; })(),
     timeline: `${plan.timeline.length} tasks, ${plan.timeline.filter((t: Any) => t.done).length} done · next: ${(plan.timeline.find((t: Any) => !t.done) || {}).task || "all done"}`,
     budget: plan.legs?.length > 1 ? (() => { const parts = plan.legs.map((lg: Any) => { const L = lg.budget.currency; const t = lg.budget.lines.reduce((s: number, l: Any) => s + (Number(l.total) || 0), 0); const x = crossRate(fx, home, L); return { s: money(t, L), h: L === home ? t : x ? t / x : null }; }); const all = parts.every((p: Any) => p.h != null); return `${parts.map((p: Any) => '~' + p.s).join(' + ')}${all ? ` ≈ ${money(parts.reduce((a: number, p: Any) => a + p.h, 0), home)} total` : ''} estimate`; })() : (() => { const L = plan.budget.currency; const tot = plan.budget.lines.reduce((s: number, l: Any) => s + (Number(l.total) || 0), 0); const x = crossRate(fx, home, L); return `~${money(tot, L)}${x && home !== L ? ` ≈ ${money(tot / x, home)}` : ""} estimate`; })(),
   } : {};
@@ -215,7 +216,7 @@ export default function App() {
     </>,
     prep: <>
           <p className="muted small">Tick these off in the days before you go — saved with this plan.</p>
-          {(plan.prep || defaultPrep(plan)).map((t: Any, i: number) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep[i].task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.splice(i, 1); })}>×</button></div>)}
+          {dedupePrepAgainstTimeline(plan.prep || defaultPrep(plan), plan.timeline).map((t: Any) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep = p.prep.filter((x: Any) => x.id !== t.id); })}>×</button></div>)}
           <button className="add noprint" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.push({ id: crypto.randomUUID(), task: "New task", done: false }); })}>+ add</button>
     </>,
     timeline: <>
@@ -296,7 +297,7 @@ export default function App() {
           </div>
           {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <small className="muted noprint"> · not it? {lg.alternatives.slice(0, 3).map((a: Any, ai: number) => <a key={ai} href="#" onClick={e => { e.preventDefault(); const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }}>{a.name}, {a.country}</a>).reduce((acc: Any[], x: Any, i: number) => i ? [...acc, " · ", x] : [x], [])}</small>}</span>)}</div>}
           <Snapshot trip={plan.trip} dest={plan.place} mode={resolveTravelMode(plan.input, plan.trip?.distanceKm)} onMode={changeTravelMode} readOnly={!!readOnly} />
-          {plan.activityNotes?.length > 0 && <div className="muted small" data-testid="activity-notes">{plan.activityNotes.map((n: string, i: number) => <p key={i}>{n}</p>)}</div>}
+          {plan.activityNotes?.length > 0 && <div className="muted small" data-testid="activity-notes">{plan.activityNotes.map((n: string, i: number) => <p key={i}>{T(n)}</p>)}</div>}
           {plan.capped && <p className="warn">Trips longer than 14 days: weather & itinerary cover the first 14 days.</p>}
         </section>
 

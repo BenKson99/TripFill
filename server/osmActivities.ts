@@ -69,18 +69,20 @@ async function osmActivities0(p: Place): Promise<Highlight[]> {
   return Promise.any(["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"].map(one)).catch(() => []);
 }
 
-export function mergeActivityPlaces(highlights: Highlight[], extra: Highlight[], cap = 8): Highlight[] {
+export function mergeActivityPlaces(highlights: Highlight[], extra: Highlight[], cap = 24): Highlight[] {
   const have = new Set(highlights.map(h => h.name.toLowerCase()));
   const added: Highlight[] = [];
   const per = new Map<string, number>();
-  for (const h of extra) {
+  const tryAdd = (h: Highlight, limit: number) => {
     const k = (h as any).activity || h.type || "";
     const n = per.get(k) || 0;
-    if (n >= 3 || have.has(h.name.toLowerCase())) continue;
+    if (n >= limit || have.has(h.name.toLowerCase()) || added.length >= cap) return;
     have.add(h.name.toLowerCase());
     per.set(k, n + 1);
     added.push(h);
-    if (added.length >= cap) break;
-  }
+  };
+  // First pass: at least one place per activity/kind so tasting, nightlife, beaches and dive shops are not crowded out.
+  for (const h of extra) tryAdd(h, 1);
+  for (const h of extra) tryAdd(h, 3);
   return [...highlights, ...added];
 }

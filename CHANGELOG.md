@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.14.1 — Activity scheduling and Simple mode fixes
+
+- Unsuitable activities (for example beach in Zermatt in January) are no longer scheduled, packed or prepped; the note stays, and temperatures use the user's °C/°F setting.
+- Beach slots use real OSM beaches (Camps Bay, Clifton), not waterfronts; if none are found the day says “Beach time at a nearby beach”.
+- Every selected, suitable activity gets at least one slot when days allow — tasting in the afternoon, nightlife in the evening, snorkeling or diving in the morning — using Overpass places when we have them.
+- Activity prep tasks appear once, on the dated timeline, instead of also repeating in the Before you leave checklist.
+- Ski days rotate between found sectors, or vary the wording when only one is known. Rest days prefer museums, viewpoints, lakes and villages; serious peaks become “views of …”.
+- Simple mode no longer rebuilds the hidden detailed list (memoized pane, lazy bag/owner/status selects, content-visibility). Target: under 300ms after the first paint.
+
 ## 1.14.0 — Vacation activities
 
 - A compact **What do you want to do?** picker lists the 25 most common vacation activities (Skiing & snowboarding through Family & kid attractions). The eight most popular show first, with **Show all 25**. Free-text Interests stay, and obvious phrases such as “beginner ski lessons” or “wine” tick the matching activity.
