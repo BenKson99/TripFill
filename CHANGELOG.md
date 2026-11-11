@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.14.0 — Vacation activities
+
+- A compact **What do you want to do?** picker lists the 25 most common vacation activities (Skiing & snowboarding through Family & kid attractions). The eight most popular show first, with **Show all 25**. Free-text Interests stay, and obvious phrases such as “beginner ski lessons” or “wine” tick the matching activity.
+- Each activity has a shared definition for packing, timed prep (lift passes, lessons, dive certification, tee times, tickets, permits, restaurant reservations, fishing licences, campsites) and itinerary placement, including a gentle note when the activity doesn’t fit the place or season.
+- Place lookups reuse one combined OpenStreetMap query alongside the existing sources — not 25 extra calls. Day trips stay realistic: flying and car-free towns (for example Zermatt) no longer get long “~2h drive” rest-day suggestions.
+- The legacy Ski (and other) trip types still work in old plans and share links. Activities are stored on the plan, in share links and in JSON import/export, and can be changed later in Packing settings without a weather refetch; Refresh suggestions keeps edits and ticks.
+- Simple mode’s first toggle no longer rebuilds the hidden detailed list (memoized pane), so large groups stay snappy.
+
 ## 1.13.1 — Snow labels, umbrellas, ranges, faster Simple toggle
 
 - Snow and mixed itinerary notes no longer sit under an ☔ backup label. They use a ❄️ snow or ❄️ mixed label; rainy days still use ☔ backup.

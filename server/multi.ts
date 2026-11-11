@@ -5,7 +5,11 @@ import { packing, itinerary, timeline, type TripInput, type ItinDay } from "./pl
 import { budget } from "./budget.js";
 import { tripFacts, haversineKm } from "./trip.js";
 import { resolveTravelMode } from "../shared/travel.js";
-import { presetsOf, presetItinerary } from "./presets.js";
+import { presetsOf } from "./presets.js";
+import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
+import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
+import { resolveActivities } from "../shared/activities.js";
+import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 export interface LegIn { destination: string; start: string; place?: Place }
 const fmt = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
@@ -33,8 +37,11 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const travelMode = resolveTravelMode(inp, prelim?.distanceKm);
   inp.travelMode = travelMode;
   const travelers = Math.max(1, Number(inp.travelers) || 1); const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
+  const acts = resolveActivities(inp);
+  const skiOn = acts.includes("ski") || presetsOf(inp).includes("ski");
   const built = await Promise.all(legs.map(async (l, k) => {
-    const [weather, pl] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
+    const [weather, pl, osm] = await Promise.all([getWeather(l.place, l.start, l.end, false, todayIso), getPlaces(l.place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 }), osmActivities(l.place, acts)]);
+    pl.highlights = mergeActivityPlaces(pl.highlights, osm);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.eats = dietaryEats(pl.eats, inp);
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.eats.restaurants.forEach(f => f.leg = l.place.name); pl.eats.cafes.forEach(f => f.leg = l.place.name);
@@ -42,7 +49,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
     const rot = pl.eats.restaurants.length ? prior % pl.eats.restaurants.length : 0;
     const R0 = pl.eats.restaurants; const legFood = [...R0.slice(rot), ...R0.slice(0, rot)];
-    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); presetItinerary(it, ps, weather, preferredHighlights(pl.highlights, inp)); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra); runActivitySchedule(it, inp, weather, preferredHighlights(pl.highlights, inp), ps, l.place.name); walkingNotes(it, inp);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start, travelMode) : null;
     // Leg 1 carries the round trip from home (open-jaw ≈ round trip); later legs carry the one-way hop from the previous city
     const hop = k ? (fromPrev ? { km: fromPrev.distanceKm, roundTrip: false, from: legs[k - 1].place.name } : undefined) : (home ? { km: tripFacts(home, l.place, l.start, travelMode).distanceKm, roundTrip: true, from: home.name } : undefined);
@@ -82,6 +89,6 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     trip: home ? tripFacts(home, first, inp.start, travelMode) : null,
     legs: built.map((L, k) => ({ place: L.place, alternatives: alts[k] || [], start: L.start, end: L.end, nights: L.nights, budget: L.budget, fromPrev: L.fromPrev && { flightLabel: L.fromPrev.flightLabel, distanceKm: L.fromPrev.distanceKm, tzLabel: L.fromPrev.tzLabel, domestic: L.fromPrev.domestic } })),
     weather, highlights: built.flatMap(L => L.places.highlights), eats, sources: [...new Set(built.flatMap(L => L.places.sources))], guideUrl: built[0].places.guideUrl,
-    packing: pk, itinerary: days, timeline: timeline(inp.start, !domestic, todayIso, travelMode), budget: built[0].budget,
+    packing: pk, itinerary: days, timeline: mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso), activityNotes: [...new Set(built.flatMap(L => activityNotes(inp, L.weather, L.place.name)))], budget: built[0].budget,
   };
 }

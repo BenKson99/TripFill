@@ -3,7 +3,7 @@ import type { Place } from "./weather.js";
 import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
 import { isBroadRegion } from "../shared/region.js";
-export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number }
+export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number; activity?: string }
 
 const WV = "https://en.wikivoyage.org/w/api.php";
 async function wikitext(title: string): Promise<{ title: string; text: string } | null> {

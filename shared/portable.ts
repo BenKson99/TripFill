@@ -1,5 +1,6 @@
 import { validatePacking, migratePacking, syncPackingMembers, fillEmptyTravelers } from "./packing.js";
 import { isTravelMode, resolveTravelMode } from "./travel.js";
+import { isActivityId, syncActivityInput } from "./activities.js";
 import LZ from "lz-string";
 export const MAX_PLAN_BYTES = 750_000;
 export const MAX_LINK_CHARS = 100_000;
@@ -41,7 +42,7 @@ export function validatePlan(raw: any): any {
   let p = clean(raw);
   if (p.format !== undefined) { if (p.format !== "tripfill" || p.schemaVersion !== 1) fail("Unsupported export version. Update TripFill or use a version 1 export."); p = p.plan; }
   check(p, {
-    place, generatedAt: "string", title: "string?", input: { destination: "string", start: "date", end: "date", travelers: "number?", purpose: "string?", style: "string?", interests: "string?", presets: "array?" },
+    place, generatedAt: "string", title: "string?", input: { destination: "string", start: "date", end: "date", travelers: "number?", purpose: "string?", style: "string?", interests: "string?", presets: "array?", activities: "array?" },
     weather: { source: "string", note: "string", days: [{ date: "date", tmax: "number", tmin: "number", summary: "string", typical: "boolean?", receivedAt: "string?", precipProb: "number?", leg: "string?" }], stats: { avgHigh: "number", avgLow: "number", minLow: "number", maxHigh: "number", rainyDays: "number" } },
     highlights: [{ name: "string", description: "string", source: "string?", setting: "string?", type: "string?", lat: "number?", lon: "number?", leg: "string?" }],
     packing: { groups: [{ group: "string", items: [item] }], leaveAtHome: [item] },
@@ -60,6 +61,12 @@ export function validatePlan(raw: any): any {
   if (!["forecast", "typical", "mixed"].includes(p.weather.source)) fail("Invalid weather source in plan.");
   for (const day of p.weather.days) if (day.typical === undefined && p.weather.source !== "mixed") day.typical = p.weather.source === "typical";
   if (p.input.presets?.some((x: any) => typeof x !== "string")) fail("Invalid trip types.");
+  if (p.input.activities !== undefined) {
+    if (!Array.isArray(p.input.activities) || p.input.activities.some((x: any) => typeof x !== "string")) fail("Invalid activities.");
+    p.input.activities = p.input.activities.filter(isActivityId);
+  }
+  p.input = syncActivityInput(p.input);
+  if (p.activityNotes !== undefined) check(p.activityNotes, ["string"], "plan.activityNotes");
   if (p.input.legs !== undefined) check(p.input.legs, [{ destination: "string", start: "date" }], "plan.input.legs");
   if (p.matches !== undefined) check(p.matches, [place], "plan.matches");
   if (p.prep !== undefined) check(p.prep, [{ id: "string", task: "string", done: "boolean", why: "string?" }], "plan.prep");

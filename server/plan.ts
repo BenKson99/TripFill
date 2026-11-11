@@ -4,11 +4,12 @@ import type { WeatherResult, DayWeather, Place } from "./weather.js";
 import { isRainy, todayIn } from "./weather.js";
 import { precipKind, itineraryPrecipCopy, precipProbLabel } from "../shared/precip.js";
 import { isBroadRegion } from "../shared/region.js";
+import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
 
-export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving" }
+export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
 export type { PackingItem as PackItem, PackingGroup as PackGroup } from "../shared/packing.js";
 export interface ItinDay { date: string; label: string; weather: string; morning: string; afternoon: string; evening: string; rainyBackup?: string; notes: string }
 export interface Task { id: string; due: string; task: string; done: boolean }
@@ -36,14 +37,14 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   const queue = [...hl]; const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
   const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
   return days.map((d, i) => {
-    const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
+    const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
     const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? `, ${d.precipProb}%${precipProbLabel(d, kind)}`.replace("sampled years", "past years") : ""}`.trim();
     if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: "" };
     const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && !(noTrip && x.dayTrip)) || queue.find(x => !(noTrip && x.dayTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
     const slots: string[] = [];
     // A day trip fills the day on dry days; never on rainy days
-    const trip = !rain && style !== "Slow" ? queue.find(x => x.dayTrip) : undefined;
+    const trip = !rain && style !== "Slow" ? queue.find(x => x.dayTrip && isRealisticDayTrip(x, inp, { name: inp.destination })) : undefined;
     const fullDays = days.length - 2;
     const cityLeft = queue.filter(x => !x.dayTrip).length;
     if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); const near = trip.lat != null ? queue.find(x => x !== trip && x.lat != null && dist(x, trip) < 15) : undefined;

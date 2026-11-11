@@ -1,5 +1,6 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
+import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities } from "./activities.js";
 import { precipKind } from "./precip.js";
 export const BAGS = ["unassigned", "personal", "carry-on", "checked", "day-bag", "car", "cooler"] as const;
 export type Bag = typeof BAGS[number];
@@ -107,6 +108,7 @@ export function inferActivityKits(plan: any): ActivityKit[] {
   if (/kids|family/.test(text)) kits.push("kids");
   if (/roadtrip/.test(text)) kits.push("roadtrip");
   if (/photo|camera/.test(text)) kits.push("photography");
+  for (const k of kitsFromActivities(resolveActivities(plan?.input)) as ActivityKit[]) if (!kits.includes(k)) kits.push(k);
   return kits;
 }
 export function inheritProfile(existing: PackingMember[]): (typeof PROFILES)[number] | undefined {
@@ -328,6 +330,21 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (kits.includes("photography")) add(E, "Camera, battery & memory card", driving ? "Photography interest — keep spares from heat and view when parked" : "Photography interest — verify spare battery transport rules");
   if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", driving ? "Business plans; keep it out of sight when the car is parked" : "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
+  // Activities picker: extra kits (golf, dive, spa, …) plus weather/mode-aware items. Skip when tests pass activityKits: [].
+  const activityIds = plan.input?.activities != null ? resolveActivities(plan.input) : Array.isArray(rawSettings?.activityKits) ? activitiesFromKits(rawSettings.activityKits) : resolveActivities(plan.input);
+  const packWarm = hi != null && hi >= 18;
+  for (const aid of activityIds) {
+    const def = ACTIVITY_BY_ID[aid];
+    if (!def) continue;
+    for (const it of packingItemsForActivity(def, { driving, snow, warm: packWarm, cycle })) {
+      const opts: Partial<PackingItem> = {};
+      if (it.essential != null) opts.essential = it.essential;
+      if (it.bag) opts.bag = it.bag;
+      if (it.lastMinute != null) opts.lastMinute = it.lastMinute;
+      if (it.who === "shared") add(it.group, it.item, it.reason, it.qty ?? 1, opts);
+      else each(it.group, it.item, it.reason, it.qty ?? 1, opts, (it.who || "notInfant") as Who);
+    }
+  }
   each(X, "Reusable water bottle", driving ? "Refill where drinking water is safe" : "Refill where drinking water is safe; empty before security if required");
   add(X, "Day bag / tote", "Daily essentials"); if (rain && !snow) add(X, "Compact umbrella", `${basis} · handy for rain and drizzle in town; the shell still covers heavier weather${uncertaintyNote}`, 1);
   add(X, "Laundry / worn-clothes bag", settings.laundryEvery ? "Laundry planned — confirm facilities and drying time" : "Separate worn clothing; no washing facilities assumed");

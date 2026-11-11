@@ -15,7 +15,11 @@ import { resolveTravelMode } from "../shared/travel.js";
 import { resolveHomeCity } from "./home.js";
 import { mountShare, shareStore } from "./share.js";
 import { buildMulti } from "./multi.js";
-import { presetsOf, presetItinerary } from "./presets.js";
+import { presetsOf } from "./presets.js";
+import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
+import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
+import { resolveActivities, syncActivityInput } from "../shared/activities.js";
+import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 // Minimal .env loader (no dependency)
 try { for (const l of fs.readFileSync(".env", "utf8").split("\n")) { const m = l.match(/^\s*([A-Z_]+)\s*=\s*(.*)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; } } catch { /* no .env */ }
@@ -54,6 +58,7 @@ app.post("/api/generate", async (req, res) => {
   try {
     const inp = req.body as TripInput & { place?: Place };
     Object.assign(inp, normalizePreferences(inp));
+    Object.assign(inp, syncActivityInput(inp));
     if (!validDate(inp.start) || !validDate(inp.end) || inp.end < inp.start || Number(inp.end.slice(0, 4)) - Number(inp.start.slice(0, 4)) > 2) return res.status(400).json({ error: "Valid start and end dates required" });
     const clientTz = typeof (inp as any).tz === "string" ? (inp as any).tz : undefined;
     const clientToday = validDate((inp as any).today) ? (inp as any).today : undefined;
@@ -86,19 +91,27 @@ app.post("/api/generate", async (req, res) => {
       if (m.highlights.length) await polish(m.highlights);
       return res.json({ input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], generatedAt: new Date().toISOString(), ...m });
     }
-    const [weather, places] = await Promise.all([getWeather(place, inp.start, end, false, todayIso), getPlaces(place, { ski: presetsOf(inp).includes("ski"), want: inp.style === "Packed" || presetsOf(inp).includes("ski") ? 20 : 14 })]);
+    const acts = resolveActivities(inp);
+    const skiOn = acts.includes("ski") || presetsOf(inp).includes("ski");
+    const [weather, places, osm] = await Promise.all([
+      getWeather(place, inp.start, end, false, todayIso),
+      getPlaces(place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 }),
+      osmActivities(place, acts),
+    ]);
+    places.highlights = mergeActivityPlaces(places.highlights, osm);
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
     const aiPolished = await polish(places.highlights);
     places.eats = dietaryEats(places.eats, inp);
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
     const pk = packing(inp, weather, place, nights, domestic);
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra); presetItinerary(it, ps, weather, preferredHighlights(places.highlights, inp)); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
-      timeline: timeline(inp.start, !domestic, todayIso, travelMode),
+      timeline: mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso),
+      activityNotes: activityNotes(inp, weather, place.name),
       budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }
