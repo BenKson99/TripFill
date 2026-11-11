@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.13.1 — Snow labels, umbrellas, ranges, faster Simple toggle
+
+- Snow and mixed itinerary notes no longer sit under an ☔ backup label. They use a ❄️ snow or ❄️ mixed label; rainy days still use ☔ backup.
+- When snow is expected, packing now suggests **Insulated snow boots** instead of “Waterproof boots with grip”. Refresh still follows the existing rules: unedited suggestions are renamed in place and ticks, skips and owners are kept; edited rows are left alone.
+- A **Compact umbrella** is suggested again as an optional shared item for rainy, non-snow trips (for example light rain or drizzle in a city). This is not a 1.13.0 regression: the umbrella last appeared in pre-1.7 packing and was dropped when the packing studio replaced that list with a waterproof shell. Snow trips still do not get an umbrella.
+- Broad region and range entities (mountain ranges, massifs, names like “Swiss Alps”, country-scale areas) are filtered out of highlights and day-trip candidates, so they no longer appear as “🚐 Day trip: Swiss Alps”. Specific peaks, museums and in-town sights are kept. The places cache key is now v13.
+- Toggling Simple mode no longer tears down or rebuilds the full detailed packing list (hundreds of rows for a large group). Each view is mounted the first time you need it and then hidden, and Simple still only renders people lists when a row is expanded, so the toggle should feel instant.
+
 ## 1.13.0 — Big groups, snow vs rain, set everyone
 
 - Simple packing mode now collapses identical personal items in a group (Adults or Kids) into one row, such as “Passport ×16”, with a compact “5/16 packed” count, an expand-to-tick-people control, and “Mark all packed”. Ticks still update each traveler’s underlying item, so detailed mode, export and share stay consistent. Shared items stay as single rows. Toggling Simple with a large group is instant. Detailed mode has a “Show only” / “My list” focus. Shared quantities such as plug adapters scale with group size (about one per three travelers).

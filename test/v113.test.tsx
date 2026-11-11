@@ -62,7 +62,7 @@ test("v1.13.0: snow packing suggests a shell and snow boots, not an umbrella; pl
   const list = suggestPacking(p, { laundryEvery: null, luggage: "all", members, activityKits: ["ski"] } as any);
   const items = packingItems(list);
   const shell = items.find(i => i.item === "Packable waterproof shell")!;
-  const boots = items.find(i => i.item === "Waterproof boots with grip")!;
+  const boots = items.find(i => i.item === "Insulated snow boots")!;
   assert.ok(shell && boots);
   assert.match(shell.reason, /waterproof shell and warm layers, not an umbrella/i);
   assert.match(boots.reason, /snow boots/i);

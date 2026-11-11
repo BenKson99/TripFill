@@ -23,6 +23,10 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const [owner, setOwner] = useState("all");
   const [name, setName] = useState(""), [newGroup, setNewGroup] = useState("Clothing"), [newQty, setNewQty] = useState(1), [newOwner, setNewOwner] = useState(SHARED);
   const [message, setMessage] = useState("");
+  const [mountedSimple, setMountedSimple] = useState(simple);
+  const [mountedDetailed, setMountedDetailed] = useState(!simple);
+  if (simple && !mountedSimple) setMountedSimple(true);
+  if (!simple && !mountedDetailed) setMountedDetailed(true);
   const all = packingItems(p), progress = packingProgress(all), pending = all.filter(i => i.essential && !i.checked && !i.skipped).length;
   const toBuy = all.filter(i => !i.skipped && i.stage === "need-to-buy").length;
   const readyN = all.filter(i => !i.skipped && (i.stage || "ready") === "ready" && !i.checked).length;
@@ -60,13 +64,11 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   </section>; });
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
   const checkMany = (ids: string[], checked: boolean) => { if (!readOnly) onChange(updatePackingItems(p, ids, { checked })); };
-  if (simple) return <div className="packing-workspace packing-simple" data-testid="packing-workspace">
+  return <div className={`packing-workspace${simple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} />, settingsSlot)}
-    <SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={(id, checked) => edit(id, { checked })} />
-  </div>;
-  return <div className="packing-workspace" data-testid="packing-workspace">
-    {toggle}
+    {mountedSimple && <div hidden={!simple} className={simple ? undefined : "noprint"} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={(id, checked) => edit(id, { checked })} /></div>}
+    {mountedDetailed && <div hidden={simple} className={simple ? "noprint" : undefined} data-testid="packing-detailed-pane">
     <div className="packing-overview">
       <div><span className="eyebrow">A little less to remember</span><h2>Your bags, in order.</h2><p>{tripDays(plan.input)} days · personal items are listed for each of {plan.input.travelers || members.length} traveler(s), with a separate shared list. Clothing quantities are for that traveler and include what they wear in transit.</p></div>
       <div className="packing-score"><b>{progress.percent}%</b><span>{progress.packed} of {progress.total} active items packed</span><progress aria-label="Packing progress" value={progress.packed} max={Math.max(1, progress.total)} /></div>
@@ -74,7 +76,6 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     <div className="packing-readiness" aria-live="polite">{!progress.total ? "Your list is empty or all items are not needed. Add an item or restore a skipped one." : progress.packed === progress.total ? "✓ Everything on your active list is packed. Check Before you leave separately." : `${progress.total - progress.packed} items to go · ${toBuy} to buy · ${readyN} ready · ${departure} for departure day · ${pending} unpacked essentials.`}</div>
     <p className="muted small">Suggestions use available weather only ({plan.weather.source === "forecast" ? "forecast, not guaranteed" : plan.weather.source === "typical" ? "seasonal estimates, not a forecast" : "mixed / unknown basis"}). Weather-dependent items are marked Essential only when the forecast clearly supports them; otherwise they stay Optional because the weather is uncertain. Check the latest forecast for every stop. {plan.capped || tripDays(plan.input) > (plan.weather.days?.length || 0) ? "Weather may cover only part of this trip; quantities still use the full date range. Later legs may have no weather data." : ""}</p>
     <div className="packing-people noprint" role="tablist" aria-label="Packing lists">{owners.map(o => { const tabItems = o.id === "all" ? all : all.filter(i => (i.owner || SHARED) === o.id); const tab = packingProgress(tabItems); return <button key={o.id} type="button" role="tab" aria-selected={owner === o.id} className={owner === o.id ? "" : "ghost"} onClick={() => { setOwner(o.id); if (o.id !== "all") setNewOwner(o.id); }}>{o.name}<span className="muted"> {tab.packed}/{tab.total}</span></button>; })}</div>
-    {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} />, settingsSlot)}
     {openSettings && <div className="packing-settings-link noprint"><button type="button" className="ghost" data-testid="packing-settings-open" onClick={openSettings}><Settings size={16} />Packing settings: laundry, rewear, travelers & kits</button></div>}
     <div className="packing-filters noprint" role="search" aria-label="Filter packing list">
       <label>Find an item<input type="search" placeholder="Search items or reasons…" value={search} onChange={e => setSearch(e.target.value)} /></label>
@@ -97,6 +98,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     </div>
     <div className="packing-print">{renderGroups(p.groups, true)}</div>
     {!!p.leaveAtHome.length && <details><summary>Notes from your older list · leave at home</summary><ul>{p.leaveAtHome.map(i => <li key={i.id}>{i.item} — {T(i.reason || "")}</li>)}</ul><p className="small muted">These older suggestions are not requirements. Review them against your own needs and current rules.</p></details>}
+    </div>}
   </div>;
 }
 export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, travelMode = "flying", onTravelMode }: { plan: any; p: PackingList; readOnly: boolean; change: (next: PackingList) => void; setMessage: (m: string) => void; travelMode?: TravelMode; onTravelMode?: (m: TravelMode) => void }) {

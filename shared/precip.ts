@@ -52,3 +52,9 @@ export function itineraryPrecipCopy(kind: PrecipKind, ski: boolean, indoorName?:
   if (kind === "rain") return indoorName ? `Rain likely — indoor / partly-covered sights first` : "Rain likely — indoor / partly-covered sights first";
   return indoorName ? `If it rains: ${indoorName}` : "If it rains: café, museum or covered market";
 }
+
+export function backupSlotLabel(kind: PrecipKind): string {
+  if (kind === "snow") return "❄️ snow";
+  if (kind === "mixed") return "❄️ mixed";
+  return "☔ backup";
+}

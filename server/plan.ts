@@ -3,6 +3,7 @@ import { departAfternoon, resolveTravelMode, TIMELINE_DRIVE_EXTRA } from "../sha
 import type { WeatherResult, DayWeather, Place } from "./weather.js";
 import { isRainy, todayIn } from "./weather.js";
 import { precipKind, itineraryPrecipCopy, precipProbLabel } from "../shared/precip.js";
+import { isBroadRegion } from "../shared/region.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
@@ -28,6 +29,7 @@ export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = []): ItinDay[] {
   hl = preferredHighlights(hl, inp);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
+  hl = hl.filter(h => !isBroadRegion(h)); extraIndoor = extraIndoor.filter(h => !isBroadRegion(h));
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
   hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
   const outdoorF = outdoor.filter(h => !h.ski);

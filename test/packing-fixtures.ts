@@ -24,7 +24,7 @@ export async function seedPackingQa(cacheDir: string) {
       const opts = c.presets.includes("ski"), want = opts ? 20 : 14;
       const highlights = Array.from({ length: 12 }, (_, i) => ({ name: `QA ONLY ${l.place.name} sight ${i + 1}`, type: "museum", description: "Synthetic fixture — not a real venue", source: "Deterministic QA fixture", setting: "indoor", indoor: true, lat: l.place.lat, lon: l.place.lon }));
       const eats = { restaurants: Array.from({ length: 4 }, (_, i) => ({ name: `QA ONLY restaurant ${i + 1}`, kind: "restaurant", source: "Deterministic QA fixture" })), cafes: [] };
-      await put(`places|v12|${l.place.name}|${l.place.lat.toFixed(3)},${l.place.lon.toFixed(3)}|${opts}|${want}`, { highlights, eats, indoorExtra: [], sources: ["Deterministic QA fixture — synthetic, not travel advice"] });
+      await put(`places|v13|${l.place.name}|${l.place.lat.toFixed(3)},${l.place.lon.toFixed(3)}|${opts}|${want}`, { highlights, eats, indoorExtra: [], sources: ["Deterministic QA fixture — synthetic, not travel advice"] });
     }
   }
 }

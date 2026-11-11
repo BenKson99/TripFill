@@ -2,6 +2,7 @@ import { getJSON, UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
 import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
+import { isBroadRegion } from "../shared/region.js";
 export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number }
 
 const WV = "https://en.wikivoyage.org/w/api.php";
@@ -214,11 +215,14 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   // Ski fields: classed as ski resorts, or a top search hit for "ski area" that is a mountain/range (Coronet Peak, The Remarkables)
   const NOT_ALPINE = /cross-country|nordic|terrain park|snow ?park|snow ?farm|heli-?ski|snowfields?\b|tubing|hillclimb|road\b/i;
   const isSki = (r: typeof rows[number]) => ski.has(r.id) && !NOT_ALPINE.test(r.name + " " + r.desc + " " + r.classes.join(" ")) && (SKI_C.test(r.classes.join("; ")) || /ski/i.test(r.desc) || (skiOrder.indexOf(r.id) < 5 && /mountain|range|peak|snowfield/i.test(r.classes.join("; ") + r.desc)));
-  pool.sort((a, b) => score(b) - score(a));
+  const keepPlace = (r: typeof rows[number]) => isSki(r) || !isBroadRegion({ name: r.name, type: r.classes.join(", "), description: r.desc, classes: r.classes });
+  rows = rows.filter(keepPlace);
+  const ranked = pool.filter(keepPlace);
+  ranked.sort((a, b) => score(b) - score(a));
   // Ski areas first when skiing, then the rest; max 4 day trips so the city still leads
   const skis = rows.filter(isSki).sort((a, b) => (score(b) - skiOrder.indexOf(b.id) * 0.4) - (score(a) - skiOrder.indexOf(a.id) * 0.4)).slice(0, 4);
   let trips = 0;
-  const rest = pool.filter(r => !skis.includes(r) && !isSki(r)).filter(r => !(km(r) > 15) || trips++ < 4);
+  const rest = ranked.filter(r => !skis.includes(r) && !isSki(r)).filter(r => !(km(r) > 15) || trips++ < 4);
   const top = [...skis, ...rest].slice(0, want);
   const ex = await getJSON<any>(`https://en.wikipedia.org/w/api.php?action=query&prop=extracts&exintro=1&explaintext=1&exsentences=2&exlimit=20&redirects=1&titles=${top.map(t => encodeURIComponent(t.title)).join("|")}&format=json&formatversion=2`).catch(() => null);
   const byTitle = new Map<string, string>();
@@ -245,7 +249,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v12|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
+  return cached(`places|v13|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -289,6 +293,8 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
   const near5 = (a: Highlight, b: Highlight) => a.lat == null || b.lat == null || haversine(a as any, b as any) < 40; // park centroids sit far from the landmark
   const nm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/^the /, "");
   // keep the shorter, landmark name ("Table Mountain"), drop the longer umbrella entry
+  highlights = highlights.filter(h => h.ski || !isBroadRegion(h));
+  indoorExtra = indoorExtra.filter(h => !isBroadRegion(h));
   highlights = highlights.filter(h => !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
   { const seenN = new Set<string>(); highlights = highlights.filter(h => { const k = nm(h.name); if (seenN.has(k)) return false; seenN.add(k); return true; }); }
   // Prefer items with real descriptions

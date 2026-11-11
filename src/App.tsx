@@ -14,7 +14,7 @@ import { InstallButton, useOnline } from "./Pwa";
 import { downloadIcs } from "./ics";
 import { DAY_COLORS, MapView, pinsFor } from "./MapView";
 import { exportPlan, parsePlan, readSaved, savePlan, normalizePreferences, MAX_PLAN_BYTES, safeUrl, weatherLabel } from "../shared/portable";
-import { precipProbLabel } from "../shared/precip";
+import { precipProbLabel, precipKind, backupSlotLabel } from "../shared/precip";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
@@ -206,7 +206,7 @@ export default function App() {
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
             {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
-            {d.rainyBackup && <div className="slot"><span>☔ backup</span><Editable value={d.rainyBackup} onChange={v => upd(p => { p.itinerary[i].rainyBackup = v; })} /></div>}
+            {d.rainyBackup && <div className="slot"><span>{backupSlotLabel(precipKind(plan.weather.days.find((w: Any) => w.date === d.date) || {}))}</span><Editable value={d.rainyBackup} onChange={v => upd(p => { p.itinerary[i].rainyBackup = v; })} /></div>}
             <div className="slot"><span>notes</span><Editable value={d.notes} onChange={v => upd(p => { p.itinerary[i].notes = v; })} /></div>
           </div>)}
     </>,

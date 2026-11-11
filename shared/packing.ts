@@ -50,7 +50,14 @@ export interface PackingList {
 const key = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 export const identity = (s: string) => key(s.replace(/\s*×\s*\d+\b/, ""));
 // A legacy combined row already covers both suggestions. Never duplicate it on refresh.
-const itemNames = (name: string) => identity(name) === "underwear-socks" ? ["underwear-socks", "underwear", "socks"] : [identity(name)];
+const BOOT_IDS = ["insulated-snow-boots", "waterproof-boots-with-grip"];
+const itemNames = (name: string) => {
+  const id = identity(name);
+  if (id === "underwear-socks") return ["underwear-socks", "underwear", "socks"];
+  if (BOOT_IDS.includes(id)) return BOOT_IDS;
+  return [id];
+};
+
 // Deterministic 64-bit tombstones keep removed custom labels out of distributed snapshots.
 const nameKey = (name: string) => { let hash = 14695981039346656037n; for (const c of name) { hash ^= BigInt(c.codePointAt(0)!); hash = BigInt.asUintN(64, hash * 1099511628211n); } return `name-${hash.toString(16)}`; };
 const ownerOf = (i: { owner?: string }) => i.owner || SHARED;
@@ -309,7 +316,7 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason, 1, {}, "all"); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
   const shellReason = snow && !rain ? (skiTrip ? "Fresh snow — waterproof shell and warm layers, not an umbrella" : "Snow expected — waterproof shell and warm layers, not an umbrella") : kits.includes("hiking") && !rain && !snow ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : snow ? "Snow expected — waterproof shell and warm layers, not an umbrella" : "Hiking — exposed conditions can change; check route-specific weather"}`;
   if (rain || snow || kits.includes("hiking")) each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
-  if (snow || (lo !== null && lo <= 0 && rain)) each(C, "Waterproof boots with grip", snow ? (skiTrip ? "Snow underfoot — waterproof boots or snow boots; dress warm" : "Snow expected — waterproof boots or snow boots, not an umbrella") : `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential || (!uncertain && snow) });
+  if (snow || (lo !== null && lo <= 0 && rain)) each(C, snow ? "Insulated snow boots" : "Waterproof boots with grip", snow ? (skiTrip ? "Snow underfoot — insulated snow boots; dress warm" : "Snow expected — insulated snow boots, not an umbrella") : `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential || (!uncertain && snow) });
   each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful", 1, {}, "adults");
   each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
   add(H, "Small first-aid / blister kit", members.length > 4 ? `Choose supplies appropriate to your needs · pack ${Math.max(1, Math.ceil(members.length / 8))} for a group of ${members.length}` : "Choose supplies appropriate to your needs", Math.max(1, Math.ceil(members.length / 8)), { bag: "personal" });
@@ -322,7 +329,8 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", driving ? "Business plans; keep it out of sight when the car is parked" : "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
   each(X, "Reusable water bottle", driving ? "Refill where drinking water is safe" : "Refill where drinking water is safe; empty before security if required");
-  add(X, "Day bag / tote", "Daily essentials"); add(X, "Laundry / worn-clothes bag", settings.laundryEvery ? "Laundry planned — confirm facilities and drying time" : "Separate worn clothing; no washing facilities assumed");
+  add(X, "Day bag / tote", "Daily essentials"); if (rain && !snow) add(X, "Compact umbrella", `${basis} · handy for rain and drizzle in town; the shell still covers heavier weather${uncertaintyNote}`, 1);
+  add(X, "Laundry / worn-clothes bag", settings.laundryEvery ? "Laundry planned — confirm facilities and drying time" : "Separate worn clothing; no washing facilities assumed");
   if (settings.laundryEvery) add(X, "Laundry supplies (if needed)", `Wash every ${settings.laundryEvery} days — arrange facilities; check product transport rules`);
   if (kits.includes("beach")) { each(A, "Swimwear", "Beach / swimming activity selected", Math.min(2, days)); each(A, "Beach towel / sarong", "Check whether accommodation provides one"); each(A, "Sandals", "Beach / swimming activity selected"); }
   if (kits.includes("hiking")) { each(A, "Hiking shoes / trail layers", "Hiking activity — choose gear for the actual route and check conditions"); each(A, "Daypack, trail snacks & water capacity", "Hiking activity — tailor water and supplies to the route, not a fixed universal amount"); add(A, "Offline trail map & headlamp", "Hiking activity — know your route and daylight limits"); }
