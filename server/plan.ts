@@ -9,7 +9,8 @@ import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
 import { familyDinnerList, CASUAL_DINNER_FALLBACK } from "../shared/familyEats.js";
-import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2, isNatureDestination, sunsetViewpointLine } from "../shared/family.js";
+import { tripHasKids, hasChildUnder, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2, isNatureDestination, sunsetViewpointLine, altitudeNote } from "../shared/family.js";
+import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, visitorCenterName, campsiteSetupLine, curatedParkSights, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
 import { formatShortDuration } from "../shared/distance.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
@@ -37,19 +38,32 @@ export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm
   const how = h.driveSrc === "osrm" ? "traffic not included" : "rough estimate, traffic not included";
   return `~${short} drive, ${how}`;
 };
-export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string; flightHours?: number | null; tzDiffHours?: number | null; destName?: string };
+export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string; flightHours?: number | null; tzDiffHours?: number | null; destName?: string; elevationM?: number };
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = [], opts: ItineraryOpts = {}): ItinDay[] {
   hl = preferredHighlights(hl, inp);
+  const destName = opts.destName || inp.destination;
+  const youngDrive = hasChildUnder(6, inp);
+  const parkSights = curatedParkSights(destName).map(s => ({
+    name: s.name, description: s.description || "A kid-friendly stop in the park.", indoor: !!s.indoor,
+    setting: s.setting, type: s.type, source: "TripFill",
+  } as Highlight));
+  for (const s of parkSights) if (!hl.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) hl = [s, ...hl];
+  const sourceHighlights = hl;
+  const lightAddOnOnly = (h: Highlight) => /platform\s*9|double-?decker|hop-?on hop-?off|watch wildlife from a distance|stargazing after dark|set up at (?:your )?camp/i.test(h.name || "");
+  const activityOk = (h: Highlight) => !isLodgingOrStay(h) && !isDestinationItself(h.name, destName) && !isVagueSight(h) && !isOffParkBase(h.name, destName) && isNearBase(h, { smallChild: youngDrive }) && !(hasChildUnder(8, inp) && isHikeInOrInnerCanyon(h)) && !lightAddOnOnly(h);
+
+  const activityHl = hl.filter(activityOk);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
   const kids = tripHasKids(inp);
-  food = kids ? familyDinnerList(food, true) : food;
+  const nearFood = food.filter(e => isNearBase(e as any, { smallChild: youngDrive }) && !isOffParkBase(e?.name, destName));
+  food = kids ? familyDinnerList(nearFood.length ? nearFood : food, true) : (nearFood.length ? nearFood : food);
   const dinnerName = (i: number) => food.length ? food[i % food.length].name : (kids ? CASUAL_DINNER_FALLBACK : "");
   const dinnerTag = (i: number) => {
     const f = food[i % Math.max(food.length, 1)];
     return food.length && f?.tag && f.tag !== "restaurant" ? ` (${f.tag})` : "";
   };
   const perDay = kids ? 1 : style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
-  hl = hl.filter(h => !isBroadRegion(h)); extraIndoor = extraIndoor.filter(h => !isBroadRegion(h));
+  hl = activityHl.filter(h => !isBroadRegion(h)); extraIndoor = extraIndoor.filter(h => !isBroadRegion(h) && activityOk(h as Highlight));
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
   hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
   const outdoorF = outdoor.filter(h => !h.ski);
@@ -61,6 +75,34 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   });
   const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
   const label = (h: Highlight) => farDayTrip(h) ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
+  const vcName = visitorCenterName([...extraIndoor, ...sourceHighlights], destName);
+  const previewBlob = (h: Highlight) => `${h.name} ${h.type || ""} ${h.description || ""}`;
+  const previewSafe = (h: Highlight) => {
+    const blob = previewBlob(h);
+    if (farDayTrip(h) || h.setting === "outdoor" || h.indoor === false) return false;
+    if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
+    if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|wildlife from a distance|stargazing/i.test(blob)) return false;
+    return !!(h.indoor || h.setting === "indoor" || /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(blob));
+  };
+  const previewNearby = (h: Highlight) => previewSafe(h) && (h.driveMin == null || h.driveMin <= 25);
+  const previewPrefer = (h: Highlight) => previewNearby(h) && /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(previewBlob(h));
+  const takeIndoorForBackup = () => extraIndoor.find(h => h?.name && !usedBackup.has(h.name) && previewPrefer(h))
+    || extraIndoor.find(h => h?.name && !usedBackup.has(h.name) && previewNearby(h))
+    || queue.find(h => !h.dayTrip && !h.ski && !usedBackup.has(h.name) && previewPrefer(h))
+    || queue.find(h => !h.dayTrip && !h.ski && !usedBackup.has(h.name) && previewNearby(h));
+  const reservedByIndex = new Map<number, string>();
+  const midIdx = days.map((_, i) => i).filter(i => i !== 0 && i !== days.length - 1);
+  for (const i of midIdx.filter(i => ["rain", "mixed"].includes(precipKind(days[i])))) {
+    const h = takeIndoorForBackup();
+    if (h) {
+      usedBackup.add(h.name);
+      if (queue.includes(h)) queue.splice(queue.indexOf(h), 1);
+      reservedByIndex.set(i, h.name);
+    } else if (vcName && !usedBackup.has(vcName)) {
+      usedBackup.add(vcName);
+      reservedByIndex.set(i, vcName);
+    }
+  }
   return days.map((d, i) => {
     const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
     const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? `, ${d.precipProb}%${precipProbLabel(d, kind)}`.replace("sampled years", "past years") : ""}`.trim();
@@ -72,22 +114,25 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     const lag = jetLagNote(opts.destName || inp.destination, opts.tzDiffHours);
     if (i === 0) {
       const morning = overnight ? overnightDay1Morning(stop, driveMin) : drivingLong ? KIDS_DRIVE_DAY : flyNight ? OVERNIGHT_FLY_DAY1 : "Travel & check in";
+      const sunset = isNatureDestination(opts.destName || inp.destination) ? sunsetViewpointLine(sourceHighlights) : "Easy walk around your neighbourhood";
+      const camp = !overnight && !drivingLong && !flyNight ? campsiteSetupLine(sourceHighlights, inp.interests || "") : undefined;
       const afternoon = overnight
         ? `Overnight in ${overnightStopName(stop)} — no need to reach ${inp.destination || "your destination"} today`
         : drivingLong
           ? "Check in & rest — skip the neighbourhood walk today"
           : flyNight
             ? "Sleep on the plane — you'll arrive tomorrow"
-            : (isNatureDestination(opts.destName || inp.destination) ? sunsetViewpointLine(hl) : "Easy walk around your neighbourhood");
-      const notes = [overnight && !stop ? "Consider an overnight stop around the midpoint" : "", lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ");
+            : (camp ? ( /sunset/i.test(sunset) ? `${camp}; then ${sunset}` : camp ) : sunset);
+      const alt = !flyNight && !overnight ? altitudeNote(opts.elevationM ?? w.elevationM) : "";
+      const notes = [overnight && !stop ? "Consider an overnight stop around the midpoint" : "", lag, alt, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ");
       const tag = overnight ? "Drive" : flyNight ? "Fly" : "Arrive";
       return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : (dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay"), notes };
     }
     if (overnight && i === 1 && days.length > 2) {
-      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay", notes: holidayNote(d.date, opts.countryCode) || "" };
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay", notes: [altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
     }
     if (flyNight && i === 1 && days.length > 2) {
-      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerName(0) ? `Early dinner nearby: ${dinnerName(0)}` : "Early dinner near your stay", notes: [lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerName(0) ? `Early dinner nearby: ${dinnerName(0)}` : "Early dinner near your stay", notes: [lag, altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
     }
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" };
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
@@ -109,21 +154,26 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     const backupBlob = (h: Highlight) => `${h.name} ${h.type || ""} ${h.description || ""}`;
     const safeIndoor = (h: Highlight) => {
       const blob = backupBlob(h);
-      if (farDayTrip(h) || h.setting === "outdoor") return false;
+      if (farDayTrip(h) || h.setting === "outdoor" || h.indoor === false) return false;
+      if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
       if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|plateau point trail to the river|wildlife from a distance|stargazing|day hike|rim or easy walk/i.test(blob)) return false;
       return !!(h.indoor || h.setting === "indoor" || /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(blob));
     };
     const nearbyIndoor = (h: Highlight) => safeIndoor(h) && (h.driveMin == null || h.driveMin <= 25);
     const preferBackup = (h: Highlight) => nearbyIndoor(h) && /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(backupBlob(h));
-    const bh = rain ? undefined : extraIndoor.find(h => !usedBackup.has(h.name) && preferBackup(h)) || extraIndoor.find(h => !usedBackup.has(h.name) && nearbyIndoor(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && preferBackup(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && nearbyIndoor(h));
-    if (bh) { usedBackup.add(bh.name); if (queue.includes(bh)) queue.splice(queue.indexOf(bh), 1); }
-    const backup = bh?.name;
+    let backup = reservedByIndex.get(i);
+    if (!backup) {
+      const bh = extraIndoor.find(h => !usedBackup.has(h.name) && preferBackup(h)) || extraIndoor.find(h => !usedBackup.has(h.name) && nearbyIndoor(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && preferBackup(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && nearbyIndoor(h));
+      if (bh) { usedBackup.add(bh.name); if (queue.includes(bh)) queue.splice(queue.indexOf(bh), 1); backup = bh.name; }
+      else if (kind === "rain" || kind === "mixed") backup = vcName && !usedBackup.has(vcName) ? vcName : vcName;
+    }
+    const named = kind === "snow" ? undefined : backup;
     return {
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,
       morning: slots[0] || "Free morning — wander a new neighbourhood",
       afternoon: slots.slice(1).join(" → ") || (style === "Slow" ? "Long lunch & downtime" : "Explore a market or local street"),
       evening: dinnerName(i) ? `Dinner: ${dinnerName(i)}${dinnerTag(i)}` : (kids ? CASUAL_DINNER_FALLBACK : "Dinner somewhere local"),
-      rainyBackup: itineraryPrecipCopy(kind, ski, rain ? undefined : backup),
+      rainyBackup: itineraryPrecipCopy(kind, ski, named),
       notes: holidayNote(d.date, opts.countryCode) || "",
     };
   });

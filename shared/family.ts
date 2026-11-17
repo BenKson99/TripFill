@@ -12,6 +12,64 @@ export function isMajorAttraction(h: { name?: string; type?: string; description
   return MAJOR_PARK.test(blob);
 }
 
+const FULL_OR_HALF_DAY = /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|universal studios|magic kingdom|epcot|animal kingdom|hollywood studios|disneyland|disney\s*world|seaworld|busch gardens|islands of adventure|volcano bay|aquatica|safari park/i;
+const BIG_SIGHT = /tower of london|buckingham palace|kensington palace|palace of whitehall|british museum|natural history museum|science museum|victoria and albert|\bv&a\b|national gallery|tate modern|tate britain|westminster abbey|st paul'?s cathedral|madame tussauds|london eye|the shard|colosseum|eiffel|louvre|notre-?dame|statue of liberty|met(?:ropolitan)? museum|smithsonian|\bcastles?\b|\bpalaces?\b|cathedral|acropolis/i;
+const LIGHT_ACTIVITY = /platform\s*9|double-?decker|hop-?on hop-?off|playground|play park|hyde park|st\.? james'?s? park|green park|regent'?s park|kensington gardens|short (?:rim |easy )?walk|rim trail|easy walk|market|ice cream|picnic|hotel pool|quiet rest|rest in the shade|set up at (?:your )?camp|sunset at|tower bridge|garden walk|nature trail|boardwalk|tide pools?|paved/i;
+const REST_SLOT = /hotel pool|quiet rest|rest in the shade|long lunch|downtime|check in & rest|keep today light/i;
+
+export function slotText(text?: string): string {
+  return (text || "").replace(/^[\s\W]*(?:then\s+)?/i, "").trim();
+}
+
+export function isFullOrHalfDayAttraction(text?: string): boolean {
+  const t = slotText(text);
+  return !!t && (FULL_OR_HALF_DAY.test(t) || isMajorAttraction(t));
+}
+
+export function isBigSight(text?: string): boolean {
+  const t = slotText(text);
+  if (!t) return false;
+  if (isFullOrHalfDayAttraction(t)) return true;
+  if (LIGHT_ACTIVITY.test(t) && !BIG_SIGHT.test(t)) return false;
+  return BIG_SIGHT.test(t);
+}
+
+export function isLightActivity(text?: string): boolean {
+  const t = slotText(text);
+  if (!t) return false;
+  if (isFullOrHalfDayAttraction(t)) return false;
+  if (isBigSight(t) && !LIGHT_ACTIVITY.test(t)) return false;
+  return LIGHT_ACTIVITY.test(t) || REST_SLOT.test(t);
+}
+
+export function isRestSlot(text?: string): boolean {
+  return REST_SLOT.test(slotText(text));
+}
+
+export function splitAddOns(text?: string): string[] {
+  return (text || "").split(/\s*;\s*then\s+|\s*→\s*/i).map(s => s.trim()).filter(Boolean);
+}
+
+export function joinAddOns(parts: string[]): string {
+  const clean = parts.map(s => s.trim()).filter(Boolean);
+  if (!clean.length) return "";
+  return clean.slice(1).reduce((s, p) => `${s}; then ${p}`, clean[0]);
+}
+
+export const HIGH_ALT_FT = 6500;
+
+export function elevationFeet(elevationM?: number | null): number | undefined {
+  if (elevationM == null || !Number.isFinite(elevationM)) return;
+  return elevationM * 3.28084;
+}
+
+export function altitudeNote(elevationM?: number | null): string | undefined {
+  const ft = elevationFeet(elevationM);
+  if (ft == null || ft < HIGH_ALT_FT) return;
+  const rounded = Math.max(HIGH_ALT_FT, Math.round(ft / 500) * 500);
+  return `You're up high (~${rounded.toLocaleString("en-US")} ft) — drink extra water and take it slow the first day`;
+}
+
 export function interestBrands(interests = ""): string[] {
   return BRANDS.filter(b => b.test.test(interests)).map(b => b.id);
 }
@@ -109,7 +167,19 @@ export function softenHikesForKidsAndHeat<T extends { date?: string; morning: st
 }
 
 export function sunsetViewpointLine(highlights: { name?: string; type?: string; description?: string }[] = []): string {
-  const v = highlights.find(h => /viewpoint|overlook|lookout|sunset|rim point|mather point|yavapai|hopi point|desert view/i.test(`${h.name || ""} ${h.type || ""} ${h.description || ""}`));
+  const scored = highlights.map(h => {
+    const name = h.name || "";
+    const blob = `${name} ${h.type || ""} ${h.description || ""}`;
+    if (!/viewpoint|overlook|lookout|sunset|rim point|mather point|yavapai|hopi point|desert view/i.test(blob)) return { h, s: -1 };
+    let s = 0;
+    if (/\b(point|overlook|lookout)\b/i.test(name)) s += 6;
+    if (/\bviewpoint\b/i.test(h.type || "")) s += 4;
+    if (/mather point|hopi point|yavapai point|desert view/i.test(name)) s += 4;
+    if (/sunset/i.test(blob)) s += 2;
+    if (/museum|visitor|studio|geology/i.test(blob) && !/\b(point|overlook|lookout)\b/i.test(name)) s -= 8;
+    return { h, s };
+  }).filter(x => x.s >= 0).sort((a, b) => b.s - a.s);
+  const v = scored[0]?.h;
   return v?.name ? `Sunset at ${v.name}` : "Sunset at a viewpoint";
 }
 
@@ -205,24 +275,119 @@ function stripAlsoNearbyMajor(text: string): string {
   return (text || "").replace(/\s*Also nearby: [\s\S]*$/i, "").trim();
 }
 
-/** One major attraction per mid-trip day; afternoon becomes pool/rest if a second major slipped in. */
-export function paceItineraryForKids<T extends { morning: string; afternoon: string; evening?: string; notes?: string; label?: string }>(days: T[], input: any): T[] {
+function kidPaceNote(d: { morning: string; afternoon: string }): string {
+  const parts = splitAddOns(d.afternoon);
+  const lightAfternoon = !d.afternoon || isRestSlot(d.afternoon) || (parts.length <= 1 && isLightActivity(d.afternoon));
+  if (isFullOrHalfDayAttraction(d.morning) && isRestSlot(d.afternoon)) return "with kids — one main attraction per day";
+  if (isFullOrHalfDayAttraction(d.morning) && lightAfternoon) return "with kids — a half-day outing and a light afternoon";
+  if (isBigSight(d.morning) && isRestSlot(d.afternoon)) return "with kids — one main attraction per day";
+  if (isBigSight(d.morning) && lightAfternoon) return "with kids — one main attraction and a short add-on";
+  if (isBigSight(d.morning) && !isBigSight(d.afternoon)) return "with kids — a big sight and something lighter in the afternoon";
+  return "with kids — keep the day light";
+}
+
+function replaceKidNote(notes: string | undefined, line: string): string {
+  const cleaned = (notes || "").replace(/\s*·\s*with kids — [^·]+/g, "").replace(/^with kids — [^·]+(?:\s*·\s*)?/i, "").trim();
+  return cleaned ? `${cleaned} · ${line}` : line;
+}
+
+function outdoorLightFrom(highlights: { name?: string; type?: string; description?: string; setting?: string }[], used: Set<string>): string | undefined {
+  const hit = highlights.find(h => {
+    if (!h.name || used.has(h.name.toLowerCase())) return false;
+    const blob = `${h.name} ${h.type || ""} ${h.description || ""}`;
+    return /playground|play park|\bpark\b|garden|green|meadow|boardwalk|paved|viewpoint|rim trail/i.test(blob) && !/national park$|bar|nightclub/i.test(blob);
+  });
+  return hit?.name;
+}
+
+/** Pace family days: one full/half-day outing plus rest or a single light add-on; spread extras. */
+export function paceItineraryForKids<T extends { morning: string; afternoon: string; evening?: string; notes?: string; label?: string }>(
+  days: T[],
+  input: any,
+  highlights: { name?: string; type?: string; description?: string; setting?: string }[] = [],
+): T[] {
   if (!tripHasKids(input) || !days?.length) return days;
+  const young = hasChildUnder(8, input);
+  const maxAddOns = young ? 1 : 2;
+  const leftover: string[] = [];
+  const used = new Set<string>();
+  const remember = (text?: string) => {
+    for (const p of splitAddOns(text)) {
+      const n = slotText(p);
+      if (n) used.add(n.toLowerCase());
+    }
+  };
+
   for (const d of days) {
     if (isTravelOrLeaveDay(d)) continue;
     d.afternoon = stripAlsoNearbyMajor(d.afternoon || "");
-    const morningMajor = isMajorAttraction(d.morning || "");
-    const afternoonMajor = isMajorAttraction(d.afternoon || "");
-    const generic = !d.afternoon || /^(Explore a market|Long lunch|Free morning|Easy walk)/i.test(d.afternoon);
-    if (morningMajor && (afternoonMajor || generic || /Also nearby:/i.test(d.afternoon || ""))) d.afternoon = KIDS_POOL_REST;
-    if (d.evening && !/early dinner/i.test(d.evening)) d.evening = d.evening.replace(/^Dinner:/, "Early dinner:");
-    if (!/one main (sight|attraction)/i.test(d.notes || "")) {
-      d.notes = d.notes ? `${d.notes} · with kids — one main attraction per day` : "with kids — one main attraction per day";
+    const parts = splitAddOns(d.afternoon);
+    const heavyMorning = isFullOrHalfDayAttraction(d.morning);
+    if (heavyMorning) {
+      const filler = (p: string) => /Explore a market|Long lunch|Free morning|Easy walk around|local street/i.test(p);
+      if (isMajorAttraction(d.morning)) {
+        leftover.push(...parts.filter(p => !isRestSlot(p) && !filler(p)));
+        d.afternoon = KIDS_POOL_REST;
+      } else {
+        const lights = parts.filter(p => isLightActivity(p) && !isBigSight(p) && !filler(p));
+        const keep = lights.slice(0, 1);
+        leftover.push(...lights.slice(1), ...parts.filter(p => !keep.includes(p) && !isRestSlot(p) && !isLightActivity(p) && !filler(p)));
+        d.afternoon = keep[0] || KIDS_POOL_REST;
+      }
+    } else if (young && isBigSight(d.morning) && (isBigSight(d.afternoon) || parts.some(p => isBigSight(p)))) {
+      leftover.push(...parts.filter(p => isBigSight(p) || isFullOrHalfDayAttraction(p)));
+      const light = parts.find(p => isLightActivity(p) && !isBigSight(p)) || outdoorLightFrom(highlights, used);
+      d.afternoon = light || KIDS_POOL_REST;
+    } else if (parts.length > maxAddOns) {
+      d.afternoon = joinAddOns(parts.slice(0, maxAddOns));
+      leftover.push(...parts.slice(maxAddOns));
     }
+    if (d.evening && !/early dinner/i.test(d.evening)) d.evening = d.evening.replace(/^Dinner:/, "Early dinner:");
+    remember(d.morning);
+    remember(d.afternoon);
+  }
+
+  const uniqueLeft = leftover.filter((p, i, arr) => isLightActivity(p) && arr.findIndex(x => x.toLowerCase() === p.toLowerCase()) === i && !used.has(slotText(p).toLowerCase()));
+  for (const item of uniqueLeft) {
+    const host = days.find(d => {
+      if (isTravelOrLeaveDay(d)) return false;
+      if (isFullOrHalfDayAttraction(d.morning)) return false;
+      const parts = splitAddOns(d.afternoon);
+      const extras = Math.max(0, parts.length - (d.afternoon ? 1 : 0));
+      if (extras >= maxAddOns) return false;
+      if (isBigSight(d.afternoon) && young) return false;
+      return isRestSlot(d.afternoon) || isLightActivity(d.afternoon) || !d.afternoon || /Explore a market|Long lunch|Free morning|Easy walk/i.test(d.afternoon);
+    });
+    if (!host) break;
+    if (!host.afternoon || isRestSlot(host.afternoon) || /Explore a market|Long lunch|Free morning|Easy walk/i.test(host.afternoon)) host.afternoon = item;
+    else host.afternoon = joinAddOns([...splitAddOns(host.afternoon), item].slice(0, maxAddOns));
+    used.add(slotText(item).toLowerCase());
+  }
+
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    d.notes = replaceKidNote(d.notes, kidPaceNote(d));
   }
   const parkDay = days.find(d => isMajorAttraction(`${d.morning} ${d.afternoon}`) && !isTravelOrLeaveDay(d));
   if (parkDay && !/height limits/i.test(days.map(d => d.notes || "").join(" "))) {
     parkDay.notes = parkDay.notes ? `${parkDay.notes} · Some rides have height limits — check with a grown-up` : "Some rides have height limits — check with a grown-up";
+  }
+  return days;
+}
+
+/** Refresh kid-pacing notes after later passes may have changed a day's slots. */
+export function applyKidPaceNotes<T extends { morning: string; afternoon: string; notes?: string; label?: string }>(days: T[], input: any, highlights: { name?: string; type?: string; description?: string; setting?: string }[] = []): T[] {
+  if (!tripHasKids(input) || !days?.length) return days;
+  const young = hasChildUnder(8, input);
+  const used = new Set<string>();
+  for (const d of days) for (const p of [...splitAddOns(d.morning), ...splitAddOns(d.afternoon)]) if (p) used.add(slotText(p).toLowerCase());
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    if (young && isBigSight(d.morning) && isBigSight(d.afternoon) && !isLightActivity(d.afternoon)) {
+      d.afternoon = outdoorLightFrom(highlights, used) || KIDS_POOL_REST;
+      used.add(slotText(d.afternoon).toLowerCase());
+    }
+    d.notes = replaceKidNote(d.notes, kidPaceNote(d));
   }
   return days;
 }

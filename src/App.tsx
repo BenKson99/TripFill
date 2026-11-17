@@ -31,7 +31,7 @@ import { GrownUpBadge, GrownUpNote, showGrownUpNote } from "./GrownUp";
 import { MoreInfo } from "./MoreInfo";
 import { whatToWear } from "../shared/wear";
 import { highlightReason, sortForFamily } from "../shared/familyPlaces";
-import { tripHasKids, jetLagNote } from "../shared/family";
+import { hasChildUnder, tripHasKids, jetLagNote } from "../shared/family";
 import { groupPrepTasks, prepOwnerHint } from "../shared/prepTiming";
 import { dedupePrepAgainstTimeline } from "../shared/activityPrep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
@@ -227,7 +227,7 @@ export default function App() {
           <div className="wx">{plan.weather.days.map((d: Any, i: number) => <div key={d.date} className={"wxd" + (d.typical ? " typical" : "")}>{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}{d.typical && <small className="wx-typical">Typical weather (not a forecast yet)</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} muted={!!d.typical} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}{(() => { const line = T(whatToWear(d)); const prev = i > 0 ? T(whatToWear(plan.weather.days[i - 1])) : null; return line !== prev ? <small className="wx-wear" data-testid="what-to-wear">What to wear: {line}</small> : null; })()}</div>)}</div>
     </>,
     highlights: <>
-          {(() => { const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const list = sortForFamily(plan.highlights || [], kids); return <ol className="hl">{list.map((h: Any, idx: number) => { const i = plan.highlights.indexOf(h); const prev = list[idx - 1] as Any | undefined; const reason = highlightReason(h, kids); return <li key={i}>{plan.legs?.length > 1 && h.leg !== prev?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
+          {(() => { const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const list = sortForFamily(plan.highlights || [], kids); return <ol className="hl">{list.map((h: Any, idx: number) => { const i = plan.highlights.indexOf(h); const prev = list[idx - 1] as Any | undefined; const reason = highlightReason(h, kids, { smallChild: hasChildUnder(8, plan.input, plan.packing?.settings?.members) }); return <li key={i}>{plan.legs?.length > 1 && h.leg !== prev?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
             <Editable value={h.name} onChange={v => upd(p => { p.highlights[i].name = v; })} /><span className={"tag " + (h.setting || (h.indoor ? "indoor" : "outdoor"))}>{h.setting || (h.indoor ? "indoor" : "outdoor")}</span>{reason && <small className="muted hl-reason"> {reason}</small>}
             <Editable multiline value={h.description} onChange={v => upd(p => { p.highlights[i].description = v; })} />
             <small className="muted">Source: {h.url ? <a href={safeUrl(h.url)} target="_blank" rel="noopener noreferrer">{h.source}</a> : h.source} · check official site for hours & prices</small>

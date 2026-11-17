@@ -49,7 +49,7 @@ export function precipProbLabel(d: PrecipDay, kind = precipKind(d)): string {
 export function itineraryPrecipCopy(kind: PrecipKind, ski: boolean, indoorName?: string): string {
   if (kind === "snow") return ski ? "Fresh snow, great for skiing; dress warm" : "Snow likely — dress warm and wear shoes with grip";
   if (kind === "mixed") return ski ? "Mixed snow and rain possible — check conditions; dress warm" : indoorName ? `Mixed rain and snow — waterproof layers; indoor option: ${indoorName}` : "Mixed rain and snow — waterproof layers; indoor sights if it turns to rain";
-  if (kind === "rain") return indoorName ? `Rain likely — indoor / partly-covered sights first` : "Rain likely — indoor / partly-covered sights first";
+  if (kind === "rain") return indoorName ? `Rain likely — try ${indoorName}` : "Rain likely — indoor / partly-covered sights first";
   return indoorName ? `If it rains: ${indoorName}` : "If it rains: café, museum or covered market";
 }
 

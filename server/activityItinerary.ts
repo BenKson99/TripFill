@@ -10,7 +10,8 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, softenHikesForKidsAndHeat } from "../shared/family.js";
+import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns } from "../shared/family.js";
+import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, curatedParkSights, visitorCenterName, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
 import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups } from "../shared/interestVenues.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
@@ -239,7 +240,18 @@ const PRESET_ACTIVITY: Record<string, ActivityId | undefined> = {
 export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherResult, hl: Highlight[], ps: Preset[], placeName?: string) {
   const ctx = fitContext(w, placeName);
   const fit = suitableActivities(inp, w, placeName);
-  const usable = hl.filter(h => !h.dayTrip || isRealisticDayTrip(h, inp, { name: placeName }));
+  const youngDrive = hasChildUnder(6, inp);
+  const dest = placeName || inp.destination;
+  const parkSights = curatedParkSights(dest).map(s => ({
+    name: s.name, description: s.description || "A kid-friendly stop in the park.", indoor: !!s.indoor,
+    setting: s.setting, type: s.type, source: "TripFill",
+  } as Highlight));
+  const merged = [...hl];
+  for (const s of parkSights) if (!merged.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) merged.unshift(s);
+  const small = hasChildUnder(8, inp);
+  const usable = merged.filter(h => (!h.dayTrip || isRealisticDayTrip(h, inp, { name: placeName }))
+    && !isLodgingOrStay(h) && !isDestinationItself(h.name, dest) && !isVagueSight(h) && !isOffParkBase(h.name, dest)
+    && isNearBase(h, { smallChild: youngDrive }) && !(small && isHikeInOrInnerCanyon(h)));
   const psFit = ps.filter(p => {
     const id = PRESET_ACTIVITY[p];
     if (!id) return true;
@@ -249,13 +261,44 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   scheduleActivities(days, inp, w, usable, placeName);
   stripUnsuitableActivities(days, resolveActivities(inp).filter(id => !activityFit(id, ctx).ok));
   dedupeItineraryPlaces(days, usable, placeName);
-  fillPreferredParks(days, hl, inp.interests || "");
-  applyInterestVenues(days, inp.interests || "", placeName, hl, isTravelOrLeaveDay);
-  reassignUsedRainBackups(days, usable);
+  fillPreferredParks(days, usable, inp.interests || "");
+  applyInterestVenues(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay);
   fillNamedAfternoons(days, usable, isTravelOrLeaveDay);
-  applyInterestAddOns(days, inp.interests || "", placeName, hl, isTravelOrLeaveDay);
+  applyInterestAddOns(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, { maxAddOns: hasChildUnder(8, inp) ? 1 : 2 });
   replaceVagueNearbySlots(days, usable, inp.interests || "", isTravelOrLeaveDay);
-  paceItineraryForKids(days, inp);
+  paceItineraryForKids(days, inp, usable);
   softenHikesForKidsAndHeat(days, inp, w, placeName);
   replaceVagueNearbySlots(days, usable, inp.interests || "", isTravelOrLeaveDay);
+  reassignUsedRainBackups(days, usable, visitorCenterName(merged, dest));
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    for (const slot of ["morning", "afternoon"] as const) {
+      const parts = splitAddOns(d[slot] || "");
+      if (!parts.length) continue;
+      const cleaned = parts.filter(p => !isDestinationItself(p, dest) && !isLodgingOrStay(p) && !isVagueSight(p));
+      if (cleaned.length === parts.length) continue;
+      if (cleaned.length) { d[slot] = joinAddOns(cleaned); continue; }
+      const next = usable.find(h => h.name && !`${d.morning} ${d.afternoon}`.includes(h.name));
+      d[slot] = next?.name || (slot === "afternoon" ? EASY_RIM_AFTERNOON : EASY_RIM_WALK);
+    }
+  }
+  dedupeItineraryPlaces(days, usable, dest);
+  paceItineraryForKids(days, inp, usable);
+  const vc = visitorCenterName(merged, dest);
+  for (const d of days) {
+    const bak = d.rainyBackup || "";
+    if (!bak) continue;
+    const named = bak.replace(/^If it rains:\s*/i, "").replace(/^Rain likely — try\s*/i, "").trim();
+    if (!named || /café, museum or covered market|the visitor center or a nearby museum/i.test(named)) continue;
+    const hit = usable.find(h => (h.name || "").toLowerCase() === named.toLowerCase()) || merged.find(h => (h.name || "").toLowerCase() === named.toLowerCase());
+    const outdoor = !!(hit && (hit.setting === "outdoor" || hit.indoor === false));
+    const unsuitable = /wildlife from a distance|stargazing|phantom ranch|\b(palace|castle|bridge)\b|hike-?in/i.test(named);
+    const sameDay = `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(named.toLowerCase());
+    if (!outdoor && !unsuitable && !sameDay) continue;
+    const used = new Set(days.flatMap(x => [x.morning, x.afternoon, x.rainyBackup]).map(t => (t || "").toLowerCase()));
+    const alt = usable.find(h => h.name && (h.indoor || h.setting === "indoor") && !used.has(h.name.toLowerCase()) && /visitor (?:centre|center)|museum|gallery|library|studio|hopi house/i.test(`${h.name} ${h.type || ""}`));
+    const replacement = alt?.name || (vc && !sameDay ? vc : "the visitor center or a nearby museum");
+    d.rainyBackup = /^If it rains/i.test(bak) ? `If it rains: ${replacement}` : /^Rain likely/i.test(bak) ? `Rain likely — try ${replacement}` : bak;
+  }
+  applyKidPaceNotes(days, inp, usable);
 }

@@ -1,3 +1,5 @@
+import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
+import { isFullOrHalfDayAttraction, isMajorAttraction } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
@@ -127,6 +129,8 @@ export function isKidAfternoonSight(h: { name?: string; type?: string; setting?:
   const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
   if (/\b(bar|nightclub|pub|cocktail|wine bar|strip)\b/i.test(blob) && !/museum|park/i.test(blob)) return false;
   if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in/i.test(blob)) return false;
+  if (isLodgingOrStay(h)) return false;
+  if (isFullOrHalfDayAttraction(blob) || isMajorAttraction(blob)) return false;
   if (h.dayTrip && typeof h.driveMin === "number" && h.driveMin > 60) return false;
   return LIGHT_SIGHT.test(blob);
 }
@@ -143,9 +147,6 @@ export function namedCampground(highlights: { name?: string; type?: string; desc
 
 function allInterestSlots(interests: string, dest: DestRef | string | undefined, highlights: { name?: string; type?: string; description?: string }[] = []): InterestSlot[] {
   const curated = curatedInterestVenues(interests, dest);
-  if (/camping|campsite|campground/i.test(interests || "")) {
-    curated.push({ name: namedCampground(highlights), kind: "major" });
-  }
   const keyword = keywordInterestHits(interests, highlights).map(h => ({ name: h.name || "", kind: "major" as const }));
   const out: InterestSlot[] = [];
   const seen = new Set<string>();
@@ -202,25 +203,45 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
     if (!d.evening || /dinner/i.test(d.evening)) d.evening = d.evening && /dinner/i.test(d.evening) ? `${next.name}; ${d.evening}` : next.name;
     else d.evening = `${d.evening}; ${next.name}`;
   }
+  const camp = campsiteSetupLine(highlights, interests);
+  if (camp && !days.some(d => /set up at .*camp|your campsite|camp at /i.test(`${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`))) {
+    const d = days[0];
+    if (d && !/set up at |campsite|campground/i.test(d.afternoon || "")) {
+      const aft = (d.afternoon || "").trim();
+      if (!aft || isGenericSlot(aft)) d.afternoon = camp;
+      else if (/^sunset /i.test(aft)) d.afternoon = `${camp}; then ${aft}`;
+      else d.afternoon = `${camp}; then ${aft}`;
+    }
+  }
   return days;
 }
 
-/** Light interest extras (e.g. a double-decker bus) as a short afternoon add-on. */
+/** Light interest extras (e.g. a double-decker bus) as a short afternoon add-on, spread across lighter days. */
 export function applyInterestAddOns<T extends { morning: string; afternoon: string; evening?: string }>(
   days: T[],
   interests: string,
   dest: DestRef | string | undefined,
   highlights: { name?: string; type?: string; description?: string }[] = [],
   isTravel?: (d: T) => boolean,
+  opts: { maxAddOns?: number } = {},
 ): T[] {
   if (!days?.length) return days;
+  const maxAddOns = opts.maxAddOns ?? 2;
   const lights = interestQueue(interests, dest, highlights, []).filter(s => s.kind === "light");
   const mid = days.filter(d => !isTravel?.(d));
+  const addOnCount = (text?: string) => Math.max(0, (text || "").split(/\s*;\s*then\s+/i).filter(Boolean).length - (text ? 1 : 0));
+  const heavyMorning = (text?: string) => /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|day hike|hike continues/i.test(text || "");
   for (const s of lights) {
     if (alreadyUsed(days, s.name)) continue;
-    const host = mid.find(d => d.afternoon && !isBareCategorySlot(d.afternoon) && !isGenericSlot(d.afternoon) && !/Hike continues|Day hike/i.test(d.afternoon))
-      || mid.find(d => !isTravel?.(d));
-    if (!host) break;
+    const free = (d: typeof mid[number]) => isBareCategorySlot(d.afternoon) || isGenericSlot(d.afternoon) || !d.afternoon || /^Explore a market/i.test(d.afternoon || "");
+    const host = mid.find(d => !heavyMorning(d.morning) && free(d) && !/Hike continues|Day hike/i.test(d.afternoon || ""))
+      || mid.find(d => {
+        if (heavyMorning(d.morning)) return false;
+        if (/Hike continues|Day hike/i.test(d.afternoon || "")) return false;
+        return addOnCount(d.afternoon) < maxAddOns;
+      })
+      || mid.find(d => !heavyMorning(d.morning) && addOnCount(d.afternoon) < maxAddOns);
+    if (!host) continue;
     if (!host.afternoon || isGenericSlot(host.afternoon) || /^Explore a market/i.test(host.afternoon)) host.afternoon = s.name;
     else host.afternoon = `${host.afternoon}; then ${s.name}`;
   }
@@ -238,6 +259,7 @@ export function isVagueNearby(text?: string) {
 export function reassignUsedRainBackups<T extends { morning: string; afternoon: string; evening?: string; rainyBackup?: string }>(
   days: T[],
   alternatives: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string }[] = [],
+  fallbackName?: string,
 ): T[] {
   const backupName = (text?: string) => (text || "").replace(/^If it rains:\s*/i, "").trim();
   const inSlots = (name: string) => days.some(d => `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`.toLowerCase().includes(name.toLowerCase()));
@@ -247,8 +269,14 @@ export function reassignUsedRainBackups<T extends { morning: string; afternoon: 
     const named = backupName(bak);
     if (!named || named.length < 4 || !inSlots(named)) continue;
     usedBak.delete(named.toLowerCase());
-    const next = alternatives.find(h => h.name && !inSlots(h.name) && !usedBak.has(h.name.toLowerCase()) && /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(`${h.name} ${h.type || ""} ${h.description || ""}`));
-    const replacement = next?.name || "the visitor center or a nearby museum";
+    const next = alternatives.find(h => {
+      if (!h.name || inSlots(h.name) || usedBak.has(h.name.toLowerCase())) return false;
+      if (h.setting === "outdoor" || h.indoor === false) return false;
+      if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
+      if (/wildlife from a distance|stargazing|phantom ranch|hike-?in|day hike|rim trail|easy walk/i.test(`${h.name || ""} ${h.type || ""} ${h.description || ""}`)) return false;
+      return /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(`${h.name} ${h.type || ""} ${h.description || ""}`);
+    });
+    const replacement = next?.name || fallbackName || "the visitor center or a nearby museum";
     d.rainyBackup = /^If it rains/i.test(bak) ? `If it rains: ${replacement}` : replacement;
     usedBak.add(replacement.toLowerCase());
   }
@@ -271,7 +299,7 @@ export function replaceVagueNearbySlots<T extends { morning: string; afternoon: 
       const text = d[slot];
       if (!isVagueNearby(text) && !isBareCategorySlot(text) && !isGenericSlot(text)) continue;
       if (slot === "morning" && text && !isVagueNearby(text) && !isBareCategorySlot(text) && !isGenericSlot(text)) continue;
-      const next = highlights.find(h => h.name && isKidAfternoonSight(h) && !alreadyUsed(days, h.name, true));
+      const next = highlights.find(h => h.name && isKidAfternoonSight(h) && !isLodgingOrStay(h) && !isVagueSight(h) && !alreadyUsed(days, h.name, true));
       if (next?.name) { d[slot] = next.name; continue; }
       if (campWanted && !usedCamp()) { d[slot] = namedCampground(highlights); continue; }
       if (slot === "afternoon") d.afternoon = "Rest in the shade midday";
@@ -288,7 +316,7 @@ export function fillNamedAfternoons<T extends { morning: string; afternoon: stri
   isTravel?: (d: T) => boolean,
 ): T[] {
   if (!days?.length) return days;
-  const pool = highlights.filter(h => h.name && isKidAfternoonSight(h) && !alreadyUsed(days, h.name!));
+  const pool = highlights.filter(h => h.name && isKidAfternoonSight(h) && !isLodgingOrStay(h) && !isVagueSight(h) && !alreadyUsed(days, h.name!, true));
   let i = 0;
   for (const d of days) {
     if (isTravel?.(d)) continue;

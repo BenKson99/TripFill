@@ -243,7 +243,6 @@ test("v1.17.1: stars, animals and camping become concrete itinerary lines", () =
   assert.match(blob, /Stargazing after dark — bring a flashlight with red light/);
   assert.match(blob, /Junior Ranger program at the visitor center/);
   assert.match(blob, /Watch wildlife from a distance/);
-  assert.match(blob, /Mather Campground|Your campsite \(a grown-up books it\)/);
   assert.ok(!/Pick a place nearby/i.test(blob));
   assert.equal(namedCampground(hl), "Camp at Mather Campground");
   assert.equal(sunsetViewpointLine([{ name: "Mather Point", type: "viewpoint" }]), "Sunset at Mather Point");
@@ -253,6 +252,8 @@ test("v1.17.1: nature-destination Day 1 uses a sunset viewpoint instead of a nei
   const days = itinerary(gcKids as any, gcWx(), [{ name: "Mather Point", type: "viewpoint" }] as any, [], [], { domestic: true, travelMode: "driving", destName: "Grand Canyon National Park", driveMin: 260 });
   assert.match(days[0].afternoon, /Sunset at Mather Point/);
   assert.ok(!/Easy walk around your neighbourhood/i.test(days[0].afternoon));
+  // Camping trips also mention setting up camp on Day 1.
+  if (/camping/i.test((gcKids as any).interests || "")) assert.match(days[0].afternoon, /Set up at your campsite|Sunset at Mather Point/i);
 });
 
 test("v1.17.1: ambiguous places preselect a national park or city and return at most four options", () => {

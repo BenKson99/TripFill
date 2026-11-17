@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.17.2 — Kid pacing, US packing wording, and national-park specifics
+
+- Family days no longer stack a half-day outing with several extras. A full- or half-day attraction (Warner Bros. Studio Tour, theme parks, Windsor Castle as a day trip) is followed by rest or one light activity. With kids under 8, afternoons get at most one add-on; the double-decker and Platform 9¾ move to lighter days. Two big sights are not paired — a park, playground or other small outdoor stop is used instead. The “with kids” note matches the actual day.
+- A “Rain likely” backup now names an indoor place when one is available, preferring a visitor center.
+- Every packing, prep and timeline surface (including print, aria labels and undo) runs through US/UK wording at render time, so a US plan never shows “Driving licence” next to a Start here “Driver's license”.
+- Lodging and campsites no longer fill activity slots. A camping trip mentions “Set up at your campsite” once on Day 1.
+- National-park days and dinners stay within about 40 miles of the resolved base (or about an hour with small kids), so a South Rim plan does not mix in North Rim lodges.
+- The destination name itself is never scheduled as a sight. Vague ensemble names are skipped when a specific alternative exists. A short curated list of kid-friendly stops is used for Grand Canyon, Yellowstone, Yosemite, Zion, Great Smoky Mountains, Rocky Mountain, Acadia, Olympic, Grand Teton and Glacier (e.g. “Walk the Rim Trail between Mather Point and Yavapai Point (flat, paved)”).
+- When Open-Meteo elevation is above about 6,500 ft, Day 1 notes “You're up high (~7,000 ft) — drink extra water and take it slow the first day”. What to wear adds a sun-hat line above 85°F and “shorts by day, warm layer at night” when highs are warm and lows drop under about 55°F.
+- Highlights that are a long drive or hike-in only carry a caveat when there is a small child, e.g. “2 h away” or “Hike-in only — not for little kids”.
+- Budget is unchanged.
+
 ## 1.17.1 — Guaranteed interest days, family dinners, and Grand Canyon kid/heat safety
 
 - Root cause of the live London mismatch: Render still served a 24-hour `places|v17` / `eats|v6` cache of pre-1.17 restaurant order and highlights, and `applyInterestVenues` only filled *generic* mornings, so a richer activity/highlight set in production left Warner Bros. Studio Tour in Suggestions only. Cache keys are now `places|v18` and `eats|v7`. Explicit interest matches (Harry Potter → Warner Bros. Studio Tour London) now take a mid-day slot even when other named sights already filled the morning. The red double-decker is a short afternoon add-on.

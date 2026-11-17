@@ -6,7 +6,7 @@ import { placeQueryFallbacks } from "../shared/placeQuery.js";
 
 export interface Place { id: number; name: string; country: string; countryCode: string; admin1?: string; lat: number; lon: number; timezone?: string; population?: number; featureCode?: string }
 export interface DayWeather { date: string; tmax: number; tmin: number; precipMm: number; precipProb: number | null; code: number | null; summary: string; typical?: boolean; receivedAt?: string; snowCm?: number | null }
-export interface WeatherResult { source: "forecast" | "typical" | "mixed"; note: string; days: DayWeather[]; stats: { avgHigh: number; avgLow: number; minLow: number; maxHigh: number; rainyDays: number; snowDays?: number } }
+export interface WeatherResult { source: "forecast" | "typical" | "mixed"; note: string; days: DayWeather[]; stats: { avgHigh: number; avgLow: number; minLow: number; maxHigh: number; rainyDays: number; snowDays?: number }; elevationM?: number }
 
 export async function geocode(q: string): Promise<Place[]> {
   const seen = new Set<number>();
@@ -64,7 +64,7 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
     // Mixed: forecast for the first part, typical for the rest
     const [a, b] = await Promise.all([getWeather(p, start, lastFcIso, false, todayIso), getWeather(p, dateRange(lastFcIso, end)[1], end, false, todayIso)]);
     const days = [...a.days, ...b.days];
-    return { source: "mixed", note: `Live forecast through ${lastFcIso}; later days are typical for this season (averages of prior years, not a forecast).`, days, stats: stats(days) };
+    return { source: "mixed", note: `Live forecast through ${lastFcIso}; later days are typical for this season (averages of prior years, not a forecast).`, days, stats: stats(days), elevationM: a.elevationM ?? b.elevationM };
   }
   if (!forceTypical && daysOut <= 14 && startD >= today) {
     const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,snowfall_sum&timezone=auto&start_date=${start}&end_date=${end}`;
@@ -78,9 +78,9 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
       for (let i = 0; i < days.length; i++) if (gaps.includes(days[i].date) && byDate.has(days[i].date)) days[i] = byDate.get(days[i].date)!;
       if (days.some(x => !Number.isFinite(x.tmax) || !Number.isFinite(x.tmin))) throw new Error("Weather unavailable for some dates. Try again later; no zero-temperature placeholders were used.");
       const source = days.every(x => x.typical) ? "typical" : "mixed";
-      return { source, note: `Open-Meteo forecast where available; ${gaps.length} day(s) use seasonal history (not a forecast). Responses can be cached up to 24 hours; model run time unknown.`, days, stats: stats(days) };
+      return { source, note: `Open-Meteo forecast where available; ${gaps.length} day(s) use seasonal history (not a forecast). Responses can be cached up to 24 hours; model run time unknown.`, days, stats: stats(days), elevationM: Number.isFinite(d.elevation) ? d.elevation : typ?.elevationM };
     }
-    return { source: "forecast", note: "Open-Meteo forecast; response may be cached up to 24 hours. Model run time unknown.", days, stats: stats(days) };
+    return { source: "forecast", note: "Open-Meteo forecast; response may be cached up to 24 hours. Model run time unknown.", days, stats: stats(days), elevationM: Number.isFinite(d.elevation) ? d.elevation : undefined };
   }
   // Typical: same calendar dates over the previous 3 years from the ERA5 archive.
   const dates = dateRange(start, end);
@@ -103,7 +103,8 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
     day.summary = typicalPrecipSummary(prob, precipKind(day));
     return day;
   });
-  return { source: "typical", note: `Typical for this season — averages of the same dates in ${ok.length} prior year(s) (Open-Meteo historical archive). Not a forecast.`, days, stats: stats(days) };
+  const elevationM = ok.map(r => r.elevation).find((n: any) => Number.isFinite(n));
+  return { source: "typical", note: `Typical for this season — averages of the same dates in ${ok.length} prior year(s) (Open-Meteo historical archive). Not a forecast.`, days, stats: stats(days), elevationM };
 }
 
 /** Keeps missing forecast days explicit until seasonal fallback fills them; never null → 0. */

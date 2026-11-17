@@ -128,6 +128,21 @@ async function driveMinutes(p: Place, dests: { lat: number; lon: number; factor?
     return dests.map((_, i) => row[i + 1] != null && (d.destinations?.[i + 1]?.distance ?? 0) <= 2000 ? { min: Math.round(row[i + 1]! / 60), src: "osrm" as const } : est[i]);
   } catch { return est; }
 }
+
+/** Fill missing driveMin values from a batched OSRM table (or a road-factor estimate). */
+export async function annotateDriveTimes<T extends { lat?: number; lon?: number; driveMin?: number; driveSrc?: string }>(place: Place, items: T[]): Promise<T[]> {
+  const need = items.map((it, i) => ({ it, i, has: it.driveMin != null || it.lat == null || it.lon == null }));
+  const dests = need.filter(n => !n.has).map(n => ({ lat: n.it.lat as number, lon: n.it.lon as number }));
+  if (!dests.length) return items;
+  const times = await driveMinutes(place, dests);
+  let j = 0;
+  return items.map(it => {
+    if (it.driveMin != null || it.lat == null || it.lon == null) return it;
+    const t = times[j++];
+    return t ? { ...it, driveMin: t.min, driveSrc: t.src } : it;
+  });
+}
+
 export const MAX_DRIVE_MIN = 150;
 
 // Wikidata SPARQL (free, no key): museums, galleries, theatres, cinemas, aquariums, planetariums, market halls within 10 km,

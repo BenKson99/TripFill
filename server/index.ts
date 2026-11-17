@@ -7,7 +7,7 @@ import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { geocode, getWeather, dateRange, todayIn, type Place } from "./weather.js";
-import { getPlaces } from "./places.js";
+import { getPlaces, annotateDriveTimes } from "./places.js";
 import { packing, itinerary, timeline, type TripInput } from "./plan.js";
 import { budget } from "./budget.js";
 import { getFx } from "./fx.js";
@@ -21,8 +21,9 @@ import { presetsOf } from "./presets.js";
 import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
 import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
 import { resolveActivities, syncActivityInput } from "../shared/activities.js";
-import { tripHasKids } from "../shared/family.js";
+import { tripHasKids, hasChildUnder } from "../shared/family.js";
 import { curatedInterestVenues } from "../shared/interestVenues.js";
+import { curatedParkSights, isNearBase, preferredParkBase, isOffParkBase } from "../shared/nationalParks.js";
 import { preferFamilyEats, familyDinnerList } from "../shared/familyEats.js";
 import { dropUnusedWaterParkSwimwear } from "../shared/packing.js";
 import { rankPlaceMatches } from "../shared/placeQuery.js";
@@ -100,8 +101,10 @@ app.post("/api/generate", async (req, res) => {
     }
     const acts = resolveActivities(inp);
     const skiOn = acts.includes("ski") || presetsOf(inp).includes("ski");
+    const parkBase = preferredParkBase(place);
+    const origin = parkBase ? { ...place, lat: parkBase.lat, lon: parkBase.lon } : place;
     const [weather, places] = await Promise.all([
-      getWeather(place, inp.start, end, false, todayIso),
+      getWeather(origin, inp.start, end, false, todayIso),
       getPlaces(place, { ski: skiOn, want: inp.style === "Packed" || skiOn ? 20 : 14 }),
     ]);
     // After Wikipedia/Wikidata place lookups, so the activity SPARQL is not crowded out.
@@ -127,8 +130,23 @@ app.post("/api/generate", async (req, res) => {
         return { name: v.name, description: "A well-known place that matches your interests.", source: "TripFill", indoor, setting: (indoor ? "indoor" : "outdoor") as "indoor" | "outdoor", type: "attraction" as const };
       });
     if (extraVenues.length) places.highlights = [...extraVenues, ...places.highlights];
+    for (const s of curatedParkSights(place)) {
+      if (!places.highlights.some((h: any) => (h.name || "").toLowerCase() === s.name.toLowerCase())) {
+        places.highlights.unshift({ name: s.name, description: s.description || "A kid-friendly stop in the park.", source: "TripFill", indoor: !!s.indoor, setting: s.setting, type: s.type } as any);
+      }
+    }
+    try {
+      places.highlights = await annotateDriveTimes(origin, places.highlights);
+      places.eats.restaurants = await annotateDriveTimes(origin, places.eats.restaurants || []);
+      places.eats.cafes = await annotateDriveTimes(origin, places.eats.cafes || []);
+    } catch { /* keep unannotated */ }
+    const youngDrive = hasChildUnder(6, inp);
+    const nearRest = (places.eats.restaurants || []).filter((e: any) => isNearBase(e, { smallChild: youngDrive }) && !isOffParkBase(e?.name, place));
+    if (nearRest.length) places.eats.restaurants = nearRest;
+    const nearCafes = (places.eats.cafes || []).filter((e: any) => isNearBase(e, { smallChild: youngDrive }) && !isOffParkBase(e?.name, place));
+    if (nearCafes.length) places.eats.cafes = nearCafes;
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
     const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic), it);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,

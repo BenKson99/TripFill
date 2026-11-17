@@ -100,9 +100,22 @@ function slotFallback(slot: Slot) {
   return "";
 }
 
+function isStandalonePlaceSlot(text: string, name: string) {
+  const t = (text || "").trim();
+  if (!t || !name) return false;
+  if (new RegExp(`^[^A-Za-z0-9"]*${escapeRe(name)}\s*$`, "i").test(t)) return true;
+  if (new RegExp(`;\s*then\s+${escapeRe(name)}\s*$`, "i").test(t)) return true;
+  if (new RegExp(`;\s*or a rest day:\s*${escapeRe(name)}`, "i").test(t)) return true;
+  if (new RegExp(`^(?:If it rains:|Rain likely — try |Mixed rain and snow — waterproof layers; indoor option: )${escapeRe(name)}$`, "i").test(t)) return true;
+  return false;
+}
+
 /** Remove a place from a slot, using a generic fallback when the slot was just that name. */
 export function clearPlaceFromSlot(text: string, name: string, slot: "morning" | "afternoon" | "evening" | "rainyBackup") {
   if (!text) return text;
+  // Never punch a hole in a longer title such as "Sunset at Mather Point" or
+  // "Walk the Rim Trail between Mather Point and Yavapai Point".
+  if (!isStandalonePlaceSlot(text, name)) return text;
   const swapped = swapNamedPlace(text, name, undefined, slot);
   if (!namesInText(swapped, [name]).length) {
     if (slot === "rainyBackup" && /^If it rains:\s*$/i.test(swapped)) return "If it rains: café, museum or covered market";
@@ -184,7 +197,14 @@ export function dedupeItineraryPlaces(days: ItinDay[], hl: Highlight[], placeNam
     const text = (h.day[h.slot] || "") as string;
     const kind = mentionKind(text, h.name);
     const canSwap = kind === "then" || kind === "rest" || h.slot === "rainyBackup";
-    const alt = canSwap ? hl.find(x => x.name && !used.has(x.name.toLowerCase()) && !(placeName && x.name.toLowerCase() === placeName.toLowerCase()) && !isAdminOrReligiousOrg(x) && !isSeriousPeak(x) && !isSkiSector(x)) : undefined;
+    const indoorBackupOk = (x: Highlight) => {
+      if (x.setting === "outdoor" || x.indoor === false) return false;
+      const blob = `${x.name || ""} ${x.type || ""} ${x.description || ""}`;
+      if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(x.name || "")) return false;
+      if (/wildlife from a distance|stargazing|phantom ranch|hike-?in|day hike|rim trail|easy walk/i.test(blob)) return false;
+      return !!(x.indoor || x.setting === "indoor" || /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(blob));
+    };
+    const alt = canSwap ? hl.find(x => x.name && !used.has(x.name.toLowerCase()) && !(placeName && x.name.toLowerCase() === placeName.toLowerCase()) && !isAdminOrReligiousOrg(x) && !isSeriousPeak(x) && !isSkiSector(x) && (h.slot !== "rainyBackup" || indoorBackupOk(x))) : undefined;
     const next = alt ? swapNamedPlace(text, h.name, alt.name, h.slot) : clearPlaceFromSlot(text, h.name, h.slot);
     (h.day as any)[h.slot] = next;
     if (alt) used.add(alt.name.toLowerCase());

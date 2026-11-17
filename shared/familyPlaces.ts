@@ -1,3 +1,5 @@
+import { isHikeInOrInnerCanyon } from "./nationalParks.js";
+import { formatShortDuration } from "./distance.js";
 import { isNightlifeVenue, isRestaurantLike } from "./activities.js";
 import { familyEatScore } from "./familyEats.js";
 
@@ -57,16 +59,29 @@ export function isOutdoorFamilyPlace(h: { name?: string; type?: string; descript
 }
 
 /** Plain reason for a highlight. Never returns raw OSM/Wikidata class lists. */
-export function highlightReason(h: { name?: string; type?: string; description?: string; setting?: string; indoor?: boolean }, kids = false): string {
-  const t = blob(h);
-  if (/playground|play\s*area|kids[_\s-]?area/i.test(t)) return "Good for kids: playground";
-  if (/\bzoo\b/i.test(t)) return "Good for kids: zoo";
-  if (/aquarium/i.test(t)) return "Good for kids: aquarium";
-  if (/children'?s?\s*museum|family\s*museum|science (centre|center)/i.test(t)) return "Good for kids: museum";
-  if (/theme park|amusement park|water park/i.test(t)) return "A full park day — go early and rest after";
-  if (isBarStyleVenue(h)) return kids ? "Evening spot — better for grown-ups" : "Nightlife";
-  if (isOutdoorFamilyPlace(h)) return "Outdoor — check the weather";
-  if (h.indoor || h.setting === "indoor" || h.setting === "mixed") return "Indoor — good if it rains";
-  if (h.setting === "outdoor" || /outdoor|park|garden|trail|beach/i.test(t)) return "Outdoor — check the weather";
+export function highlightCaveat(h: { name?: string; type?: string; description?: string; driveMin?: number; distanceKm?: number }, opts: { kids?: boolean; smallChild?: boolean } = {}): string {
+  if (!(opts.kids || opts.smallChild)) return "";
+  if (isHikeInOrInnerCanyon(h)) return "Hike-in only — not for little kids";
+  if (opts.smallChild && h.driveMin != null && h.driveMin >= 75) {
+    const hours = h.driveMin >= 90 ? `${Math.round(h.driveMin / 60)} h` : formatShortDuration(h.driveMin);
+    return `${hours} away`;
+  }
   return "";
 }
+
+export function highlightReason(h: { name?: string; type?: string; description?: string; setting?: string; indoor?: boolean; driveMin?: number; distanceKm?: number }, kids = false, opts?: { smallChild?: boolean }): string {
+  const caveat = highlightCaveat(h, { kids, smallChild: opts?.smallChild });
+  const t = blob(h);
+  let reason = "";
+  if (/playground|play\s*area|kids[_\s-]?area/i.test(t)) reason = "Good for kids: playground";
+  else if (/\bzoo\b/i.test(t)) reason = "Good for kids: zoo";
+  else if (/aquarium/i.test(t)) reason = "Good for kids: aquarium";
+  else if (/children'?s?\s*museum|family\s*museum|science (centre|center)/i.test(t)) reason = "Good for kids: museum";
+  else if (/theme park|amusement park|water park/i.test(t)) reason = "A full park day — go early and rest after";
+  else if (isBarStyleVenue(h)) reason = kids ? "Evening spot — better for grown-ups" : "Nightlife";
+  else if (isOutdoorFamilyPlace(h)) reason = "Outdoor — check the weather";
+  else if (h.indoor || h.setting === "indoor" || h.setting === "mixed") reason = "Indoor — good if it rains";
+  else if (h.setting === "outdoor" || /outdoor|park|garden|trail|beach/i.test(t)) reason = "Outdoor — check the weather";
+  return [caveat, reason].filter(Boolean).join(" · ");
+}
+

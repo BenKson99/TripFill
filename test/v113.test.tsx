@@ -50,7 +50,7 @@ test("v1.13.0: ski + snow itinerary is good news, not an indoor rain backup; war
   const rainWx = { ...weather, days: weather.days.map(d => ({ ...d, tmax: 18, tmin: 12, precipMm: 8, precipProb: 70, summary: "Rain" })) };
   const wet = itinerary({ ...inp, purpose: "Leisure", interests: "", presets: [] }, rainWx as any, highlights, []);
   const rainMid = wet.filter(d => !/Arrive|Depart/.test(d.label));
-  assert.ok(rainMid.every(d => /Rain likely — indoor/.test(d.rainyBackup || "")));
+  assert.ok(rainMid.every(d => /Rain likely/.test(d.rainyBackup || "")), rainMid.map(d => d.rainyBackup).join(" | "));
 });
 
 test("v1.13.0: snow packing suggests a shell and snow boots, not an umbrella; plug adapters scale", () => {
