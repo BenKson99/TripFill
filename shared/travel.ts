@@ -72,6 +72,7 @@ export const departAfternoon = (mode: TravelMode) => mode === "driving" ? DEPART
 /** Stock timeline lines that swap when the mode changes (overdue suffix is preserved). */
 export const TIMELINE_SWAPS: [string, string][] = [
   ["Book flights/transport and accommodation", "Confirm the route, vehicle and accommodation"],
+  ["Online check-in, and make a plan to get to the airport (grown-up task)", "Check the car (tyres, fluids, lights), charge or fuel up, pack"],
   ["Online check-in; charge devices; pack", "Check the car (tyres, fluids, lights), charge or fuel up, pack"],
 ];
 export const TIMELINE_DRIVE_EXTRA = "Plan the route, fuel or charging stops, parking and tolls";

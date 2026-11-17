@@ -3,12 +3,16 @@ import { geocode, getWeather, dateRange, stats, type Place, type WeatherResult }
 import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput, type ItinDay } from "./plan.js";
 import { budget } from "./budget.js";
-import { tripFacts, haversineKm } from "./trip.js";
 import { resolveTravelMode } from "../shared/travel.js";
 import { presetsOf } from "./presets.js";
 import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
 import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
 import { resolveActivities } from "../shared/activities.js";
+import { tripHasKids } from "../shared/family.js";
+import { curatedInterestVenues } from "../shared/interestVenues.js";
+import { preferFamilyEats } from "../shared/familyEats.js";
+import { dropUnusedWaterParkSwimwear } from "../shared/packing.js";
+import { tripFacts, haversineKm } from "./trip.js";
 import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 export interface LegIn { destination: string; start: string; place?: Place }
@@ -45,12 +49,20 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     pl.highlights = mergeActivityPlaces(pl.highlights, osm);
     const nights = Math.max(0, dateRange(l.start, l.end).length - 1);
     pl.eats = dietaryEats(pl.eats, inp);
+    if (tripHasKids(inp)) {
+      pl.eats = { ...pl.eats, restaurants: preferFamilyEats(pl.eats.restaurants), cafes: preferFamilyEats(pl.eats.cafes) };
+    }
+    const extraVenues = curatedInterestVenues(inp.interests || "", l.place)
+      .filter(v => !pl.highlights.some((h: any) => (h.name || "").toLowerCase() === v.name.toLowerCase()))
+      .map(v => ({ name: v.name, description: "A well-known place that matches your interests.", source: "TripFill", indoor: true, setting: "indoor" as const, type: "attraction" as const }));
+    if (extraVenues.length) pl.highlights = [...extraVenues, ...pl.highlights];
     pl.highlights.forEach(h => (h as any).leg = l.place.name); pl.eats.restaurants.forEach(f => f.leg = l.place.name); pl.eats.cafes.forEach(f => f.leg = l.place.name);
     // Each city has an independent cached source pool; rotate only its own dinner list.
     const prior = legs.slice(0, k).filter(x => x.place.countryCode === l.place.countryCode).reduce((n, x) => n + dateRange(x.start, x.end).length, 0);
     const rot = pl.eats.restaurants.length ? prior % pl.eats.restaurants.length : 0;
     const R0 = pl.eats.restaurants; const legFood = [...R0.slice(rot), ...R0.slice(0, rot)];
-    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra, { domestic: !!home && home.countryCode === l.place.countryCode, travelMode, countryCode: l.place.countryCode }); runActivitySchedule(it, inp, weather, preferredHighlights(pl.highlights, inp), ps, l.place.name); walkingNotes(it, inp);
+    const hopFacts = home ? tripFacts(home, l.place, l.start, travelMode) : null;
+    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra, { domestic: !!home && home.countryCode === l.place.countryCode, travelMode, countryCode: l.place.countryCode, flightHours: hopFacts?.flightHours, tzDiffHours: hopFacts?.tzDiffHours, destName: l.place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(pl.highlights, inp), ps, l.place.name); walkingNotes(it, inp);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start, travelMode) : null;
     // Leg 1 carries the round trip from home (open-jaw ≈ round trip); later legs carry the one-way hop from the previous city
     const hop = k ? (fromPrev ? { km: fromPrev.distanceKm, roundTrip: false, from: legs[k - 1].place.name } : undefined) : (home ? { km: tripFacts(home, l.place, l.start, travelMode).distanceKm, roundTrip: true, from: home.name } : undefined);
@@ -83,7 +95,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
   const countries = [...new Set(built.map(L => L.place.country))];
   const synth: Place = { ...first, country: countries.join(" & ") };
   const totalNights = Math.max(0, dateRange(inp.start, tripEnd).length - 1);
-  const pk = packing(inp, weather, synth, totalNights, domestic);
+  const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, synth, totalNights, domestic), days);
   const eats = { restaurants: built.flatMap(L => L.places.eats.restaurants), cafes: built.flatMap(L => L.places.eats.cafes) };
   return {
     title: built.map(L => L.place.name).join(" → "), capped, place: first, domestic,

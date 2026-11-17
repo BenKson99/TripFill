@@ -30,7 +30,7 @@ import { GrownUpBadge, GrownUpNote, showGrownUpNote } from "./GrownUp";
 import { MoreInfo } from "./MoreInfo";
 import { whatToWear } from "../shared/wear";
 import { highlightReason, sortForFamily } from "../shared/familyPlaces";
-import { tripHasKids } from "../shared/family";
+import { tripHasKids, jetLagNote } from "../shared/family";
 import { groupPrepTasks, prepOwnerHint } from "../shared/prepTiming";
 import { dedupePrepAgainstTimeline } from "../shared/activityPrep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
@@ -112,13 +112,20 @@ export default function App() {
   const { fx, busy: fxBusy, refresh: fxRefresh } = useFx();
   const online = useOnline() && !(fx as Any)?.offline;
   const [tab, setTabRaw] = useState<TabId>(() => (TABS.find(t => t.id === localStorage.getItem(TAB_KEY))?.id) || "plan");
-  const setTab = (t: TabId) => { setTabRaw(t); localStorage.setItem(TAB_KEY, t); };
+  const [seenTabs, setSeenTabs] = useState<Partial<Record<TabId, true>>>(() => ({ [(TABS.find(t => t.id === localStorage.getItem(TAB_KEY))?.id) || "plan"]: true }));
+  const setTab = (t: TabId) => { setTabRaw(t); localStorage.setItem(TAB_KEY, t); setSeenTabs(s => s[t] ? s : { ...s, [t]: true }); };
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const onTabKey = (e: React.KeyboardEvent, i: number) => {
     const en = TABS.filter(t => plan || t.id === "plan"); const cur = en.findIndex(t => t.id === TABS[i].id);
     const j = e.key === "ArrowRight" ? (cur + 1) % en.length : e.key === "ArrowLeft" ? (cur - 1 + en.length) % en.length : e.key === "Home" ? 0 : e.key === "End" ? en.length - 1 : -1;
     if (j < 0) return; e.preventDefault(); setTab(en[j].id); tabRefs.current[en[j].id]?.focus();
   };
+  useEffect(() => { const t = plan ? tab : "plan"; setSeenTabs(s => s[t] ? s : { ...s, [t]: true }); }, [tab, plan]);
+  useEffect(() => {
+    const all = () => setSeenTabs({ plan: true, pack: true, money: true });
+    window.addEventListener("beforeprint", all);
+    return () => window.removeEventListener("beforeprint", all);
+  }, []);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(saved && "error" in saved ? saved.error || "" : "");
 
@@ -216,7 +223,7 @@ export default function App() {
           <p className={plan.weather.source !== "forecast" ? "warn" : "muted"}>{plan.weather.source === "typical" ? "📊 " : "📡 "}{T(plan.weather.note)}</p>
           <p className="wxstat"><span><Thermometer size={15} /> Avg high <b>{deg(plan.weather.stats.avgHigh)}</b> · low <b>{deg(plan.weather.stats.avgLow)}</b></span><span><Droplets size={15} /> {plan.weather.stats.snowDays ? <>Snow days ~<b>{plan.weather.stats.snowDays}</b>{plan.weather.stats.rainyDays ? " · " : ""}</> : null}{plan.weather.stats.rainyDays || !plan.weather.stats.snowDays ? <>Wet days ~<b>{plan.weather.stats.rainyDays}</b></> : null}</span></p>
           {plan.weather.legs?.length > 1 && <ul className="small wx-legs" data-testid="leg-weather">{plan.weather.legs.map((l: Any) => <li key={l.name}><b>{l.name}</b>: avg high {deg(l.stats.avgHigh)} · low {deg(l.stats.avgLow)} · {l.stats.snowDays ? `snow days ~${l.stats.snowDays}` : ""}{l.stats.snowDays && l.stats.rainyDays ? " · " : ""}{l.stats.rainyDays || !l.stats.snowDays ? `wet days ~${l.stats.rainyDays}` : ""}</li>)}</ul>}
-          <div className="wx">{plan.weather.days.map((d: Any) => <div key={d.date} className={"wxd" + (d.typical ? " typical" : "")}>{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}{d.typical && <small className="wx-typical">Typical weather (not a forecast yet)</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} muted={!!d.typical} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}<small className="wx-wear" data-testid="what-to-wear">What to wear: {T(whatToWear(d))}</small></div>)}</div>
+          <div className="wx">{plan.weather.days.map((d: Any, i: number) => <div key={d.date} className={"wxd" + (d.typical ? " typical" : "")}>{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}{d.typical && <small className="wx-typical">Typical weather (not a forecast yet)</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} muted={!!d.typical} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}{(() => { const line = T(whatToWear(d)); const prev = i > 0 ? T(whatToWear(plan.weather.days[i - 1])) : null; return line !== prev ? <small className="wx-wear" data-testid="what-to-wear">What to wear: {line}</small> : null; })()}</div>)}</div>
     </>,
     highlights: <>
           {(() => { const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const list = sortForFamily(plan.highlights || [], kids); return <ol className="hl">{list.map((h: Any, idx: number) => { const i = plan.highlights.indexOf(h); const prev = list[idx - 1] as Any | undefined; const reason = highlightReason(h, kids); return <li key={i}>{plan.legs?.length > 1 && h.leg !== prev?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
@@ -226,7 +233,7 @@ export default function App() {
           </li>; })}</ol>; })()}
     </>,
     food: <>
-          {(() => { const E0 = eatsOf(plan); const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const E = { restaurants: sortForFamily(E0.restaurants, kids), cafes: sortForFamily(E0.cafes, kids) }; const list = (k: "restaurants" | "cafes") => E[k].length ? <ul className="hl eats">{E[k].map((f: Any, i: number) => { const orig = E0[k].indexOf(f); const prev = E[k][i - 1] as Any | undefined; return <li key={orig >= 0 ? orig : i}>{plan.legs?.length > 1 && f.leg && f.leg !== prev?.leg && <h3 className="leghead">📍 {f.leg}</h3>}<Editable value={f.name} onChange={v => upd(p => { if (orig >= 0) p.eats[k][orig].name = v; })} />{f.tag && <span className="tag eat">{f.tag}</span>}{(f.km != null || f.area) && <small className="muted"> {[f.area, f.km != null ? `${f.km < 1 ? Math.round(f.km * 1000) + " m" : f.km + " km"} from the centre` : ""].filter(Boolean).join(" · ")}</small>}{f.description && <div className="gloss">{f.description}</div>}<p className="muted small">Check hours &amp; menus before you go.</p><small className="muted"> {safeUrl(f.sourceUrl) ? <a href={safeUrl(f.sourceUrl)} target="_blank" rel="noopener noreferrer">{f.source || "Source listing"}</a> : <span>{f.source || "Unknown source"} — provenance unavailable in this saved plan</span>}{safeUrl(f.url) && f.url !== f.sourceUrl && <> · <a href={safeUrl(f.url)} target="_blank" rel="noopener noreferrer">Website / details</a></>}{f.lat != null && <> · <a href={`https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lon}#map=18/${f.lat}/${f.lon}`} target="_blank" rel="noopener noreferrer">map</a></>}</small></li>; })}</ul> : <p className="muted small">{plan.eats ? `No ${k === "cafes" ? "coffee shops" : "restaurants"} found nearby right now — try regenerating in a minute.` : "This plan was saved before TripFill 1.4 — regenerate it to see local restaurants and coffee shops."}</p>;
+          {(() => { const E0 = eatsOf(plan); const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const E = { restaurants: sortForFamily(E0.restaurants, kids), cafes: sortForFamily(E0.cafes, kids) }; const list = (k: "restaurants" | "cafes") => E[k].length ? <ul className="hl eats">{E[k].map((f: Any, i: number) => { const orig = E0[k].indexOf(f); const prev = E[k][i - 1] as Any | undefined; return <li key={orig >= 0 ? orig : i}>{plan.legs?.length > 1 && f.leg && f.leg !== prev?.leg && <h3 className="leghead">📍 {f.leg}</h3>}<Editable value={f.name} onChange={v => upd(p => { if (orig >= 0) p.eats[k][orig].name = v; })} />{f.tag && <span className="tag eat">{f.tag}</span>}{(f.km != null || f.area) && <small className="muted"> {[f.area, f.km != null ? `${f.km < 1 ? Math.round(f.km * 1000) + " m" : f.km + " km"} from the ${T("centre")}` : ""].filter(Boolean).join(" · ")}</small>}{f.description && <div className="gloss">{f.description}</div>}<p className="muted small">Check hours &amp; menus before you go.</p><small className="muted"> {safeUrl(f.sourceUrl) ? <a href={safeUrl(f.sourceUrl)} target="_blank" rel="noopener noreferrer">{f.source || "Source listing"}</a> : <span>{f.source || "Unknown source"} — provenance unavailable in this saved plan</span>}{safeUrl(f.url) && f.url !== f.sourceUrl && <> · <a href={safeUrl(f.url)} target="_blank" rel="noopener noreferrer">Website / details</a></>}{f.lat != null && <> · <a href={`https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lon}#map=18/${f.lat}/${f.lon}`} target="_blank" rel="noopener noreferrer">map</a></>}</small></li>; })}</ul> : <p className="muted small">{plan.eats ? `No ${k === "cafes" ? "coffee shops" : "restaurants"} found nearby right now — try regenerating in a minute.` : "This plan was saved before TripFill 1.4 — regenerate it to see local restaurants and coffee shops."}</p>;
             return <><p className="muted small">Check hours &amp; menus before you go. Always check allergies with the restaurant — ask a grown-up.</p><MoreInfo><p className="muted small">These are source listings, not ratings or guaranteed recommendations. Local-cuisine ordering uses incomplete metadata; it is not a verified authenticity ranking.</p></MoreInfo>{(E.restaurants.length < 5 || E.cafes.length < 3) && <p className="warn" data-testid="limited-eats">Limited source coverage: {E.restaurants.length} restaurant(s), {E.cafes.length} coffee shop(s). No results added to pad the lists. {safeUrl(plan.guideUrl) ? <a href={safeUrl(plan.guideUrl)} target="_blank" rel="noopener noreferrer">Check the city guide</a> : "Check the destination tourist information office"} and venue websites.</p>}<h3>🍽 Restaurants</h3>{list("restaurants")}<h3>☕ Coffee shops</h3>{list("cafes")}</>; })()}
           <p className="muted small">Sources: {plan.sources.join(" · ")}{plan.aiPolished ? " · descriptions lightly reworded by AI" : ""}</p>
     </>,
@@ -234,7 +241,7 @@ export default function App() {
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
             {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable wrap value={T(d[k])} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
-            {(() => { const w = plan.weather?.days?.find((x: Any) => x.date === d.date); return w ? <p className="wx-wear" data-testid="what-to-wear">What to wear: {T(whatToWear(w))}</p> : null; })()}
+            {(() => { const w = plan.weather?.days?.find((x: Any) => x.date === d.date); if (!w) return null; const line = T(whatToWear(w)); const prev = i > 0 ? plan.weather?.days?.find((x: Any) => x.date === plan.itinerary[i - 1].date) : null; const same = prev && T(whatToWear(prev)) === line; return same ? null : <p className="wx-wear" data-testid="what-to-wear">What to wear: {line}</p>; })()}
             {d.rainyBackup && <div className="slot"><span>{backupSlotLabel(precipKind(plan.weather.days.find((w: Any) => w.date === d.date) || {}))}</span><Editable wrap value={T(d.rainyBackup)} onChange={v => upd(p => { p.itinerary[i].rainyBackup = v; })} /></div>}
             <div className="slot"><span>notes</span><Editable wrap value={T(d.notes)} onChange={v => upd(p => { p.itinerary[i].notes = v; })} /></div>
           </div>)}
@@ -243,12 +250,12 @@ export default function App() {
           <p className="muted small">Tick these off in the days before you go — saved with this plan.</p>
           {groupPrepTasks(dedupePrepAgainstTimeline(plan.prep || defaultPrep(plan), plan.timeline)).map(g => <div key={g.when} className="prep-group" data-testid={`prep-group-${g.when}`}>
             <h3>{g.label}</h3>
-            {g.items.map((t: Any) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.task = v; })} />{t.why && <small className="why">{t.why}</small>}{prepOwnerHint(t.task, t.grownUp) && <small className="prep-owner muted">{prepOwnerHint(t.task, t.grownUp)}</small>}<GrownUpBadge name={t.task} flagged={t.grownUp} /><button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep = p.prep.filter((x: Any) => x.id !== t.id); })}>×</button></div>)}
+            {g.items.map((t: Any) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.done = e.target.checked; })} /><ChecklistText value={T(t.task)} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.task = v; })} />{t.why && <small className="why">{T(t.why)}</small>}{prepOwnerHint(t.task, t.grownUp) && <small className="prep-owner muted">{prepOwnerHint(t.task, t.grownUp)}</small>}<GrownUpBadge name={t.task} flagged={t.grownUp} /><button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep = p.prep.filter((x: Any) => x.id !== t.id); })}>×</button></div>)}
           </div>)}
           <button className="add noprint" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.push({ id: crypto.randomUUID(), task: "New task", done: false }); })}>+ add</button>
     </>,
     timeline: <>
-          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /><GrownUpBadge name={t.task} /></div>)}
+          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={T(t.task)} onChange={v => upd(p => { p.timeline[i].task = v; })} /><GrownUpBadge name={t.task} /></div>)}
     </>,
     map: <MapView pins={pins} center={(plan.legs?.length > 1 ? plan.legs.map((l: Any) => l.place) : [plan.place]).map((q: Any) => ({ lat: q.lat, lon: q.lon, name: q.name }))} route={plan.legs?.length > 1}
       legend={[...plan.itinerary.map((d: Any, i: number) => ({ label: `Day ${i + 1}`, color: DAY_COLORS[i % DAY_COLORS.length] })).filter((_: Any, i: number) => pins.some(p => p.day === i)), ...(pins.some(p => p.day == null) ? [{ label: "Not scheduled", color: "#8a8f9c" }] : [])]} />,
@@ -282,6 +289,7 @@ export default function App() {
       <div className="tabs noprint" role="tablist" aria-label="TripFill sections">{TABS.map((t, i) => { const dis = !plan && t.id !== "plan"; return <button key={t.id} role="tab" id={`tab-${t.id}`} ref={el => { tabRefs.current[t.id] = el; }} aria-selected={activeTab === t.id} aria-controls={`panel-${t.id}`} aria-disabled={dis || undefined} tabIndex={activeTab === t.id ? 0 : -1} disabled={dis} title={dis ? "Generate a plan first" : undefined} className={activeTab === t.id ? "on" : ""} onClick={() => setTab(t.id)} onKeyDown={e => onTabKey(e, i)}><span aria-hidden>{t.icon}</span> {t.label}</button>; })}</div>
       {!plan && <p className="muted small tabs-hint noprint">Packing & Prep and Budget unlock once you generate a plan.</p>}
       <div role="tabpanel" id="panel-plan" aria-labelledby="tab-plan" hidden={activeTab !== "plan"}>
+      {seenTabs.plan && (<>
       {!online && <div className="card warn noprint" data-testid="offline">📴 You're offline — showing your last saved plan. Editing works and is saved in this browser; generating a new plan, the map tiles and live rates need a connection.</div>}
       {!readOnly && <form className="card form noprint" onSubmit={e => { e.preventDefault(); if (dates.order) return; if (dates.past && !window.confirm("That day is in the past. Plan it anyway? Weather will be typical for the season, not a forecast.")) return; generate(); }}>
         <fieldset className="form-step" data-testid="step-where"><legend>1 Where</legend>
@@ -346,6 +354,7 @@ export default function App() {
           </div>
           {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <WrongPlace label="Wrong place?" alts={lg.alternatives.slice(0, 3)} onPick={a => { const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }} resolved />}</span>)}</div>}
           <Snapshot trip={plan.trip} dest={plan.place} mode={resolveTravelMode(plan.input, plan.trip?.distanceKm)} onMode={changeTravelMode} readOnly={!!readOnly} distanceUnit={distanceUnit} />
+          {jetLagNote(plan.place?.name, plan.trip?.tzDiffHours) && <p className="muted" data-testid="jet-lag">{jetLagNote(plan.place?.name, plan.trip?.tzDiffHours)}</p>}
           <GrownUpNote show={showGrownUpNote(form, plan)} />
           <a href="#day-by-day" className="jump-itin noprint" data-testid="jump-itinerary" onClick={e => { e.preventDefault(); setTab("plan"); setLayout(l => ({ ...l, hidden: l.hidden.filter(x => x !== "itinerary"), collapsed: l.collapsed.filter(x => x !== "itinerary") })); const go = () => document.getElementById("day-by-day")?.scrollIntoView({ behavior: "smooth", block: "start" }); requestAnimationFrame(() => requestAnimationFrame(go)); }}>Day by day ↓</a>
           {plan.activityNotes?.length > 0 && <div className="muted small" data-testid="activity-notes">{plan.activityNotes.map((n: string, i: number) => <p key={i}>{T(n)}</p>)}</div>}
@@ -356,16 +365,19 @@ export default function App() {
         <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("plan")} />
         <p className="muted small">Weather: Open-Meteo · Places: Wikivoyage / Wikipedia / Wikidata (CC BY-SA). Generated {new Date(plan.generatedAt).toLocaleString()}.</p>
       </>}
+      </>)}
       </div>
       {plan && <>
         <div role="tabpanel" id="panel-pack" aria-labelledby="tab-pack" hidden={activeTab !== "pack"}>
-          <PackTab layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} packing={roBodies.packing} prep={roBodies.prep} timeline={roBodies.timeline} />
+          {seenTabs.pack && <PackTab layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} packing={roBodies.packing} prep={roBodies.prep} timeline={roBodies.timeline} />}
         </div>
         <div role="tabpanel" id="panel-money" aria-labelledby="tab-money" hidden={activeTab !== "money"}>
+          {seenTabs.money && <>
           <section className="card">
             <div className="moneycard" data-testid="money-card"><b>Money</b>{(plan.legs?.length > 1 ? [...new Set(plan.legs.map((l: Any) => l.budget.currency))] as string[] : [plan.budget?.localCurrency || plan.budget?.currency || home]).map((c: string, i: number) => <RateLine key={c} compact fx={fx} home={home} local={c} shownIn={i === 0 && !(plan.legs?.length > 1) ? plan.budget?.currency : c} busy={fxBusy} onRefresh={fxRefresh} />)}<span className="noprint"><CurrencyPicker value={home} onChange={setHome} hint={homeExplicit ? "your choice" : homeCity ? `from ${homeCity.country}` : "from browser locale"} /></span></div>
           </section>
           <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("money")} />
+          </>}
         </div>
       </>}
       <footer className="page-actions noprint" data-testid="page-actions" aria-label="Trip actions">

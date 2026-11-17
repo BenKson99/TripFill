@@ -10,7 +10,8 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay } from "../shared/family.js";
+import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay, tripHasKids } from "../shared/family.js";
+import { applyInterestVenues, fillNamedAfternoons, isBareCategorySlot } from "../shared/interestVenues.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
   return fitContextFromWeather(w, placeName);
@@ -80,8 +81,16 @@ function activityLabel(id: ActivityId, h?: Highlight) {
     return id === "surf" ? `${def.emoji} Surf time at a nearby beach` : `${def.emoji} Beach time at a nearby beach`;
   }
   if (id === "dive" && !h) return `${def.emoji} Guided snorkel or dive trip (book an operator)`;
-  if (h) return farDayTrip(h) ? `${def.emoji} ${def.label}: ${h.name}${driveLabel(h) ? ` (${driveLabel(h)})` : ""}` : `${def.emoji} ${h.name}`;
-  return `${def.emoji} ${def.label}`;
+  if (h) return farDayTrip(h) ? `${def.emoji} ${h.name}${driveLabel(h) ? ` (${driveLabel(h)})` : ""}` : `${def.emoji} ${h.name}`;
+  const fallback: Partial<Record<ActivityId, string>> = {
+    parks: "Pick a theme park nearby (ask a grown-up)",
+    museums: "Pick a museum nearby (ask a grown-up)",
+    family: "Pick a kid-friendly attraction nearby (ask a grown-up)",
+    heritage: "Pick a castle or historic place nearby (ask a grown-up)",
+    wildlife: "Pick a park or nature place nearby (ask a grown-up)",
+    sightseeing: "Pick a famous sight nearby (ask a grown-up)",
+  };
+  return `${def.emoji} ${fallback[id] || `Pick a place nearby (ask a grown-up)`}`;
 }
 
 function mentions(d: ItinDay, id: ActivityId) {
@@ -219,7 +228,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
     else if (/Skiing until/.test(a.day.afternoon)) {
       a.day.afternoon = a.day.afternoon.replace(/\s*;\s*or a rest day:.*$/, "") + `; or a rest day: ${text}`;
     } else a.day.afternoon = text;
-    a.day.notes = [a.day.notes, ACTIVITY_BY_ID[a.id].label].filter((x, i, arr) => x && arr.indexOf(x) === i).join(" · ");
+    if (h) a.day.notes = [a.day.notes, ACTIVITY_BY_ID[a.id].label].filter((x, i, arr) => x && arr.indexOf(x) === i).join(" · ");
   }
 }
 
@@ -241,5 +250,11 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   stripUnsuitableActivities(days, resolveActivities(inp).filter(id => !activityFit(id, ctx).ok));
   dedupeItineraryPlaces(days, usable, placeName);
   fillPreferredParks(days, hl, inp.interests || "");
+  applyInterestVenues(days, inp.interests || "", placeName, hl, isTravelOrLeaveDay);
+  fillNamedAfternoons(days, hl, isTravelOrLeaveDay);
   paceItineraryForKids(days, inp);
+  for (const d of days) {
+    if (isBareCategorySlot(d.morning)) d.morning = "Pick a theme park nearby (ask a grown-up)";
+    if (isBareCategorySlot(d.afternoon)) d.afternoon = "Pick a place nearby (ask a grown-up)";
+  }
 }

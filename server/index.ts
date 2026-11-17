@@ -21,6 +21,10 @@ import { presetsOf } from "./presets.js";
 import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
 import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
 import { resolveActivities, syncActivityInput } from "../shared/activities.js";
+import { tripHasKids } from "../shared/family.js";
+import { curatedInterestVenues } from "../shared/interestVenues.js";
+import { preferFamilyEats } from "../shared/familyEats.js";
+import { dropUnusedWaterParkSwimwear } from "../shared/packing.js";
 import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 // Minimal .env loader (no dependency)
@@ -108,9 +112,16 @@ app.post("/api/generate", async (req, res) => {
     const nights = Math.max(0, all.length - 1); const travelers = Math.max(1, Number(inp.travelers) || 1);
     const aiPolished = await polish(places.highlights);
     places.eats = dietaryEats(places.eats, inp);
+    if (tripHasKids(inp)) {
+      places.eats = { ...places.eats, restaurants: preferFamilyEats(places.eats.restaurants), cafes: preferFamilyEats(places.eats.cafes) };
+    }
+    const extraVenues = curatedInterestVenues(inp.interests || "", place)
+      .filter(v => !places.highlights.some((h: any) => (h.name || "").toLowerCase() === v.name.toLowerCase()))
+      .map(v => ({ name: v.name, description: "A well-known place that matches your interests.", source: "TripFill", indoor: true, setting: "indoor" as const, type: "attraction" as const }));
+    if (extraVenues.length) places.highlights = [...extraVenues, ...places.highlights];
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
-    const pk = packing(inp, weather, place, nights, domestic);
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
+    const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic), it);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,

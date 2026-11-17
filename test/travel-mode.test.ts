@@ -76,15 +76,15 @@ test("v1.12: itinerary, timeline and prep follow the choice", () => {
   assert.equal(itinerary(inp, weather, [], [])[flyDays.length - 1].afternoon, DEPART_DRIVE);
   const flyT = timeline("2026-12-01", true, "2026-09-01", "flying").map(t => t.task);
   const driveT = timeline("2026-12-01", true, "2026-09-01", "driving").map(t => t.task);
-  assert.ok(flyT.includes("Book flights/transport and accommodation") && flyT.includes("Online check-in; charge devices; pack"));
+  assert.ok(flyT.includes("Book flights/transport and accommodation") && flyT.includes("Online check-in, and make a plan to get to the airport (grown-up task)"));
   assert.ok(!flyT.includes(TIMELINE_DRIVE_EXTRA));
   assert.ok(driveT.includes("Confirm the route, vehicle and accommodation") && driveT.includes("Check the car (tyres, fluids, lights), charge or fuel up, pack") && driveT.includes(TIMELINE_DRIVE_EXTRA));
   const p = fixture(); p.input.travelMode = "flying";
   const flyPrep = defaultPrep(p).map(t => t.task);
   p.input.travelMode = "driving";
   const drivePrep = defaultPrep(p).map(t => t.task);
-  assert.ok(flyPrep.includes("Online check-in / confirm transport to the airport"));
-  assert.ok(!drivePrep.includes("Online check-in / confirm transport to the airport"));
+  assert.ok(flyPrep.includes("Do the online check-in and plan how you'll get to the airport (grown-up task)"));
+  assert.ok(!drivePrep.includes("Do the online check-in and plan how you'll get to the airport (grown-up task)"));
   assert.ok(drivePrep.includes("Check the car: tyres, lights, fluids and papers"));
   assert.ok(drivePrep.includes("Plan the route, fuel or charging stops, parking and tolls"));
 });
@@ -136,7 +136,7 @@ test("v1.12: switching mode keeps edits, checks and removals, adds driving sugge
   assert.ok(!afterItems.some(i => i.id === socks.id));
   assert.ok(afterItems.some(i => i.item === "Car emergency kit"));
   assert.ok(next.prep.some((t: any) => t.task.includes("Check the car")));
-  assert.ok(next.prep.some((t: any) => t.task === "Online check-in / confirm transport to the airport"), "existing flying prep is kept");
+  assert.ok(next.prep.some((t: any) => t.task === "Do the online check-in and plan how you'll get to the airport (grown-up task)"), "existing flying prep is kept");
   assert.ok(next.timeline.some((t: any) => t.task.includes("Check the car (tyres")));
   const again = applyTravelMode(next, "driving");
   assert.equal(packingItems(again.packing).length, packingItems(next.packing).length);

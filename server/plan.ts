@@ -8,7 +8,7 @@ import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
-import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName } from "../shared/family.js";
+import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2 } from "../shared/family.js";
 import { formatShortDuration } from "../shared/distance.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
@@ -36,7 +36,7 @@ export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm
   const how = h.driveSrc === "osrm" ? "traffic not included" : "rough estimate, traffic not included";
   return `~${short} drive, ${how}`;
 };
-export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string };
+export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string; flightHours?: number | null; tzDiffHours?: number | null; destName?: string };
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = [], opts: ItineraryOpts = {}): ItinDay[] {
   hl = preferredHighlights(hl, inp);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
@@ -61,19 +61,26 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
     const overnight = drivingLong && driveMin >= 10 * 60;
     const stop = (opts.overnightStop || "").trim();
+    const flyNight = isOvernightFlight({ travelMode: opts.travelMode || resolveTravelMode(inp), domestic: opts.domestic, flightHours: opts.flightHours, tzDiffHours: opts.tzDiffHours });
+    const lag = jetLagNote(opts.destName || inp.destination, opts.tzDiffHours);
     if (i === 0) {
-      const morning = overnight ? overnightDay1Morning(stop, driveMin) : drivingLong ? KIDS_DRIVE_DAY : "Travel & check in";
+      const morning = overnight ? overnightDay1Morning(stop, driveMin) : drivingLong ? KIDS_DRIVE_DAY : flyNight ? OVERNIGHT_FLY_DAY1 : "Travel & check in";
       const afternoon = overnight
         ? `Overnight in ${overnightStopName(stop)} — no need to reach ${inp.destination || "your destination"} today`
         : drivingLong
           ? "Check in & rest — skip the neighbourhood walk today"
-          : (opts.domestic === true ? "Easy walk around your neighbourhood" : "Easy walk around your neighbourhood; get local currency/SIM");
-      const notes = overnight && !stop ? "Consider an overnight stop around the midpoint" : (holidayNote(d.date, opts.countryCode) || "");
-      const tag = overnight ? "Drive" : "Arrive";
-      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : (food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay"), notes };
+          : flyNight
+            ? "Sleep on the plane — you'll arrive tomorrow"
+            : "Easy walk around your neighbourhood";
+      const notes = [overnight && !stop ? "Consider an overnight stop around the midpoint" : "", lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ");
+      const tag = overnight ? "Drive" : flyNight ? "Fly" : "Arrive";
+      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : (food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay"), notes };
     }
     if (overnight && i === 1 && days.length > 2) {
       return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: holidayNote(d.date, opts.countryCode) || "" };
+    }
+    if (flyNight && i === 1 && days.length > 2) {
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: food[0] ? `Early dinner nearby: ${food[0].name}` : "Early dinner near your stay", notes: [lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
     }
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" };
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
@@ -111,15 +118,15 @@ export function timeline(start: string, international: boolean, todayIso?: strin
   const t = (k: number, task: string): Task => ({ id: id(), due: addDays(start, -k), task, done: false });
   const today = todayIso || todayIn();
   const list = [
-    t(60, international ? "Check passport validity & visa/entry rules" : "Confirm ID is valid"),
+    t(60, international ? "Make sure everyone's passport is good for 6+ months after you come home (grown-up task)" : "Confirm ID is valid"),
     t(45, travelMode === "driving" ? "Confirm the route, vehicle and accommodation" : "Book flights/transport and accommodation"),
-    t(30, international ? "Buy travel insurance; check vaccinations/health advice" : "Consider travel insurance"),
+    t(30, international ? "Buy travel insurance; check vaccinations/health advice (grown-up task)" : "Consider travel insurance"),
     t(21, "Book must-do tickets & any restaurant reservations"),
-    t(14, international ? "Tell your bank you're travelling; order some local currency" : "Tell your bank you're travelling"),
+    t(14, international ? "Tell your bank you're travelling so they don't freeze the card (grown-up task)" : "Tell your bank you're travelling"),
     t(7, "Check the forecast & finalise packing list"),
     t(3, international ? "Download offline maps, tickets and translation pack" : "Download offline maps and tickets"),
     t(2, "Arrange pet/plant care, hold mail"),
-    t(1, travelMode === "driving" ? "Check the car (tyres, fluids, lights), charge or fuel up, pack" : "Online check-in; charge devices; pack"),
+    t(1, travelMode === "driving" ? "Check the car (tyres, fluids, lights), charge or fuel up, pack" : "Online check-in, and make a plan to get to the airport (grown-up task)"),
     t(0, international ? "Departure day — passport, phone, wallet, keys" : "Departure day — ID, phone, wallet, keys"),
   ];
   if (travelMode === "driving") list.splice(list.length - 2, 0, t(3, TIMELINE_DRIVE_EXTRA));

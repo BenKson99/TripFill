@@ -62,8 +62,8 @@ export function holidayNote(iso: string, countryCode?: string): string | undefin
   return undefined;
 }
 
-const GROWN_UP_PACKING = /passport|photo id|licence|license|vehicle documents|insurance|bookings? & tickets|house keys|medicines?|medication|health supplies|feeding supplies|cash|payment card|thermostat|car emergency|driving/i;
-const GROWN_UP_TASKS = /passport|visa|entry rules|insurance|bank|card issuer|roaming|esim|car:|tyres|fluids|papers|parking|tolls|hold mail|thermostat|lock up|plant & pet|empty the fridge|bookings?|documents|medicines?|feeding|photo id|online check-in/i;
+const GROWN_UP_PACKING = /passport|photo id|licence|license|vehicle documents|insurance|bookings? & tickets|house keys|medicines?|medication|health supplies|feeding supplies|cash|payment card|thermostat|car emergency|driving|plug adapter|voltage/i;
+const GROWN_UP_TASKS = /passport|visa|entry rules|insurance|bank|card issuer|roaming|esim|car:|tyres|tires|fluids|papers|parking|tolls|hold mail|thermostat|lock up|plant & pet|empty the fridge|bookings?|documents|medicines?|feeding|photo id|online check-in|plug adapter|voltage|grown-up task|check voltage/i;
 
 export function isGrownUpPackingItem(name: string): boolean {
   return GROWN_UP_PACKING.test(name || "");
@@ -106,8 +106,26 @@ export function overnightDay2Morning(driveMin: number): string {
 /** Arrive/depart days, long drive days, and the morning after an overnight midpoint. */
 export function isTravelOrLeaveDay(d: { label?: string; morning?: string } | string): boolean {
   const text = typeof d === "string" ? d : `${d.label || ""} ${d.morning || ""}`;
-  return /Arrive|Depart|Finish the drive|Drive day/i.test(text);
+  return /Arrive|Depart|Finish the drive|Drive day|Fly overnight|land the next morning|Get outside in daylight/i.test(text);
 }
+
+/** Eastbound long-haul overnight flight: 6h+ in the air and the destination is 4h or more ahead. */
+export function isOvernightFlight(opts: { travelMode?: string; domestic?: boolean; flightHours?: number | null; tzDiffHours?: number | null } = {}): boolean {
+  if ((opts.travelMode || "flying") !== "flying" || opts.domestic) return false;
+  return (opts.flightHours || 0) >= 6 && (opts.tzDiffHours || 0) >= 4;
+}
+
+export function jetLagNote(placeName: string | undefined, tzDiffHours: number | null | undefined): string | undefined {
+  if (tzDiffHours == null || Math.abs(tzDiffHours) < 4) return undefined;
+  const abs = Math.abs(tzDiffHours);
+  const n = Number.isInteger(abs) ? String(abs) : abs.toFixed(1).replace(/\.0$/, "");
+  const name = (placeName || "Your destination").trim() || "Your destination";
+  return `${name} is ${n} hours ${tzDiffHours > 0 ? "ahead" : "behind"} — you'll feel sleepy at odd times for a day or two`;
+}
+
+export const OVERNIGHT_FLY_DAY1 = "Fly overnight — you land the next morning";
+export const OVERNIGHT_FLY_DAY2 = "Get outside in daylight, early bedtime";
+
 
 export const KIDS_POOL_REST = "🏊 Hotel pool or a quiet rest at the hotel";
 

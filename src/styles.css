@@ -32,6 +32,7 @@
   color-scheme:dark;
 }
 *{box-sizing:border-box}
+html,body,#root{max-width:100%;overflow-x:hidden}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;font-family:var(--font-body);font-size:15px;line-height:1.6;background:var(--bg);color:var(--ink);
   /* soft linen wash + warm radial glow */
@@ -45,7 +46,7 @@ body{margin:0;font-family:var(--font-body);font-size:15px;line-height:1.6;backgr
 h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:-.01em;line-height:1.18;color:var(--ink);font-optical-sizing:auto}
 h2{font-size:1.5rem}h3{font-size:1.1rem}
 a{color:var(--link);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}
-.wrap{max-width:1080px;margin:0 auto;padding:var(--s4) var(--s4) var(--s8)}
+.wrap{max-width:min(1080px,100%);width:100%;margin:0 auto;padding:var(--s4) var(--s4) var(--s8);overflow-x:hidden}
 :focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:8px}
 ::selection{background:var(--accent-soft)}
 
@@ -310,14 +311,16 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .toolbar svg{flex:0 0 auto}
 
 /* ===== Tabs (v1.5 boho) ===== */
-.tabs{display:flex;gap:.4rem;margin:1.1rem 0 .55rem;padding:.35rem;border-radius:var(--r-xl);background:color-mix(in srgb,var(--surface) 75%,var(--bg-2));border:1px solid var(--line);position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);overflow-x:auto;box-shadow:var(--sh-1)}
-.tabs [role=tab]{flex:1;min-height:46px;white-space:nowrap;border-radius:var(--r-lg);border:0;background:transparent;color:var(--ink-2);font-weight:600;padding:.55rem 1rem;cursor:pointer;font-family:var(--font-display);letter-spacing:-.01em;transition:background var(--t),color var(--t),box-shadow var(--t)}
+.tabs{display:flex;gap:.4rem;margin:1.1rem 0 .55rem;padding:.35rem;border-radius:var(--r-xl);background:color-mix(in srgb,var(--surface) 75%,var(--bg-2));border:1px solid var(--line);position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);overflow-x:auto;box-shadow:var(--sh-1);max-width:100%;min-width:0}
+.tabs [role=tab]{flex:1 1 0;min-width:0;min-height:46px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:var(--r-lg);border:0;background:transparent;color:var(--ink-2);font-weight:600;padding:.55rem 1rem;cursor:pointer;font-family:var(--font-display);letter-spacing:-.01em;transition:background var(--t),color var(--t),box-shadow var(--t)}
 .tabs [role=tab].on{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 65%,var(--rose)));color:var(--on-accent);box-shadow:var(--sh-1)}
 .tabs [role=tab]:disabled{opacity:.42;cursor:not-allowed}
 .tabs [role=tab]:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
 .tabs [role=tab]:not(.on):not(:disabled):hover{background:var(--surface-2);color:var(--ink)}
 .tabs-hint{margin:.2rem 0 .8rem;text-align:center}
+.day,.day p,.day h3,.slot,li,td,th{overflow-wrap:anywhere;word-break:break-word}
 @media (max-width:520px){.tabs [role=tab]{padding:.5rem .55rem;font-size:.92rem}.tabs{border-radius:16px}.tabs [role=tab]{border-radius:12px}}
+@media (max-width:512px){.tabs{width:100%;max-width:100%}.tabs [role=tab]{padding:.5rem .4rem;font-size:.88rem}table{display:block;overflow-x:auto;max-width:100%}.day,.slot,.itin,.stats,.toolbar,.page-actions,.trip-head{min-width:0;max-width:100%;overflow-wrap:anywhere}}
 @media print{[role=tabpanel][hidden]{display:block!important}.tabs{display:none!important}}
 
 .import-start { margin: 0 0 1rem; }

@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.17.0 — Kid-friendliness batch 4
+
+- Free-text interests map to named, famous places from a small static dictionary (Harry Potter → Warner Bros. Studio Tour London and Platform 9¾; a red double-decker on route 11 or 15; Tower of London / Windsor Castle; dinosaurs → Natural History Museum, and a handful of other kid favourites). A keyword search in Wikidata/OSM names is the fallback. A bare category such as “Theme & water parks” is never an itinerary slot; if nothing is found the line is concrete (“Pick a theme park nearby (ask a grown-up)”). Water-park swimwear is packed only when a water park is actually scheduled.
+- Place lookup accepts “London, UK”, “Paris, FR”, “NYC”, “LA” and similar: country abbreviations and city aliases are expanded, then a stripped city-only query is tried.
+- “Get local currency/SIM” is gone from every trip’s day text. International prep (passport validity, visa/entry rules, travel insurance, notifying the bank, roaming/eSIM, online check-in) uses kid-readable wording and the Grown-up badge, e.g. “Make sure everyone’s passport is good for 6+ months after you come home (grown-up task)”.
+- Eastbound overnight long-haul flights (6h+ in the air, destination 4h or more ahead) make Day 1 “Fly overnight — you land the next morning” and Day 2 a light, rest-first arrival: “Get outside in daylight, early bedtime”. A jet-lag note appears when the time difference is 4h or more. Flying packing adds a neck pillow, headphones, and kids’ flight entertainment.
+- With kids, dinners prefer casual and family spots (pizza, burgers, cafes, family-tagged) and push fine dining and luxury-hotel restaurants down the list.
+- Repeated “Explore a market or local street” afternoons are replaced with unused named kid-friendly sights when they are available.
+- “What to wear” is shown once per stretch of similar days, or when it changes. A mild 58–73°F / 14–23°C day (a London July) is “T-shirt plus a hoodie; pack a rain jacket”.
+- Plug wording is plain: “UK plugs have 3 big prongs — bring a UK plug adapter (grown-up: check voltage)”. Prep, timeline and packing strings go through the US English dictionary (traveling, neighbor, center, moisturizer) for non-UK homes.
+- Narrow screens (390–512px): the tab bar can no longer stretch the page; tabs shrink with ellipsis, tables scroll, and long words wrap. Reloading with Packing open no longer mounts the hidden Plan tab (including the map) on first paint; remaining tabs mount on first visit and before print.
+- Budget is unchanged.
+
 ## 1.16.2 — Faster first Simple toggle and friendlier unknown-city errors
 
 - The first Simple-mode toggle no longer spends seconds resizing every packing, prep and timeline label one at a time. Checklist textareas share one ResizeObserver and batch height writes into a single animation frame, so layout work is O(1) reflows instead of O(n). `T()` is memoized, US English strings are cached, and Start here is memoized.

@@ -153,7 +153,7 @@ test("v1.16.1: what-to-wear follows stored Celsius so a °F setting does not cha
   assert.notEqual(notF, orlando);
   const en = localizeEn(orlando, "us");
   assert.equal(en, orlando); // this line has no jumper
-  assert.equal(localizeEn(whatToWear({ tmax: 19, tmin: 11, precipProb: 0, summary: "Usually dry" }), "us"), "T-shirt and a light sweater, a warmer layer at night");
+  assert.equal(localizeEn(whatToWear({ tmax: 19, tmin: 11, precipProb: 0, summary: "Usually dry" }), "us"), "T-shirt plus a hoodie; pack a rain jacket");
 });
 
 test("v1.16.1: Plan steps and a friendly Generate label are in the questionnaire", () => {

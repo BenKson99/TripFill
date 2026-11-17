@@ -17,19 +17,24 @@ export function defaultPrep(plan: any): PrepItem[] {
   const intl = plan.trip?.domestic === false || (!!homeCC && ccs.some(c => c !== homeCC)) || (!homeCC && plan.trip?.domestic !== true);
   const out: [string, string?][] = [];
   if (intl) {
-    out.push(["Passport valid 6+ months past return date", "many countries require it"]);
-    out.push([`Check visa / entry rules for ${names.join(", ") || "your destination"}`, "official government travel site"]);
-    out.push(["Buy travel insurance (medical + cancellation)"]);
-    out.push(["Tell your bank & card issuer you're travelling", "avoid blocked cards; check foreign-transaction fees"]);
-    out.push(["Set up a roaming plan or eSIM"]);
+    out.push(["Check that everyone's passport is good for 6+ months after you come home (grown-up task)", "many countries require it"]);
+    out.push([`Check visa and entry rules for ${names.join(", ") || "your destination"} (grown-up task)`, "official government travel site"]);
+    out.push(["Buy travel insurance (medical + cancellation) (grown-up task)"]);
+    out.push(["Tell your bank & card issuer you're travelling (grown-up task)", "so they don't freeze the card; check foreign-transaction fees"]);
+    out.push(["Set up a phone roaming plan or eSIM (grown-up task)"]);
   } else {
     out.push(["Photo ID packed", "domestic trip"]);
     out.push(["Consider travel insurance (cancellation)"]);
   }
   const plugs = ccs.map(c => PLUGS[c] && `${c} type ${PLUGS[c]}`).filter(Boolean);
   const homePlug = homeCC && PLUGS[homeCC];
-  if (plugs.length && !(homePlug && ccs.every(c => PLUGS[c] === homePlug)))
-    out.push([`Plug adapter: ${plugs.join(", ")}`, homePlug ? `your home sockets are type ${homePlug}` : "check your chargers' voltage too"]);
+  if (plugs.length && !(homePlug && ccs.every(c => PLUGS[c] === homePlug))) {
+    const gb = ccs.includes("GB") || ccs.includes("UK");
+    const task = gb
+      ? "UK plugs have 3 big prongs — bring a UK plug adapter (grown-up: check voltage)"
+      : `Bring a plug adapter for ${names.join(", ") || "your destination"} (grown-up: check voltage)`;
+    out.push([task, plugs.join(", ") + (homePlug ? `; home sockets are type ${homePlug}` : "")]);
+  }
   out.push(["Chargers, power bank & cables packed"]);
   out.push([`Download offline maps for ${(plan.legs?.length > 1 ? plan.legs.map((l: any) => l.place.name) : [plan.place?.name]).join(", ")}`]);
   out.push(["Save tickets, bookings & insurance docs offline"]);
@@ -39,9 +44,9 @@ export function defaultPrep(plan: any): PrepItem[] {
     out.push(["Plan the route, fuel or charging stops, parking and tolls"]);
     out.push(["Confirm parking at your stay and any city driving or toll rules"]);
   } else {
-    out.push(["Online check-in / confirm transport to the airport"]);
+    out.push(["Do the online check-in and plan how you'll get to the airport (grown-up task)"]);
   }
-  out.push(["Hold mail / packages or ask a neighbour"]);
+  out.push(["Hold mail / packages or ask a neighbour (grown-up task)"]);
   out.push(["Arrange plant & pet care"]);
   out.push(["Empty the fridge, take out trash"]);
   out.push(["Set thermostat, unplug appliances, lock up"]);

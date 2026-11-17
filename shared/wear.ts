@@ -14,6 +14,10 @@ export function whatToWear(d: { tmax?: number | null; tmin?: number | null; prec
   if (hi != null && hi >= 26 && (lo == null || lo >= 18)) {
     return wet ? "Shorts & t-shirt, and a light rain jacket" : "Shorts & t-shirt";
   }
+  // Mild stretch (about 58–73°F / 14–23°C), e.g. a London July: hoodie, not shorts.
+  if (hi != null && hi >= 14 && hi < 24 && (lo == null || lo <= 16)) {
+    return "T-shirt plus a hoodie; pack a rain jacket";
+  }
   if (hi != null && hi >= 20) {
     const night = lo != null && lo < 16 ? ", light jacket at night" : "";
     return wet ? `T-shirt and a light rain jacket${night}` : `Shorts & t-shirt${night}`;

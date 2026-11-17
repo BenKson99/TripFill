@@ -2,14 +2,24 @@ import { validDate } from "../shared/portable.js";
 import { isRainy, isWet, precipKind, typicalPrecipSummary, adjustForecastSummary } from "../shared/precip.js";
 export { isRainy, isWet, precipKind } from "../shared/precip.js";
 import { getJSON, responseReceivedAt } from "./fetchy.js";
+import { placeQueryFallbacks } from "../shared/placeQuery.js";
 
 export interface Place { id: number; name: string; country: string; countryCode: string; admin1?: string; lat: number; lon: number; timezone?: string; population?: number; featureCode?: string }
 export interface DayWeather { date: string; tmax: number; tmin: number; precipMm: number; precipProb: number | null; code: number | null; summary: string; typical?: boolean; receivedAt?: string; snowCm?: number | null }
 export interface WeatherResult { source: "forecast" | "typical" | "mixed"; note: string; days: DayWeather[]; stats: { avgHigh: number; avgLow: number; minLow: number; maxHigh: number; rainyDays: number; snowDays?: number } }
 
 export async function geocode(q: string): Promise<Place[]> {
-  const d = await getJSON<any>(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`);
-  const all: Place[] = (d.results || []).map((r: any) => ({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population, featureCode: r.feature_code }));
+  const seen = new Set<number>();
+  const all: Place[] = [];
+  for (const name of placeQueryFallbacks(q)) {
+    const d = await getJSON<any>(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=8&language=en&format=json`);
+    for (const r of d.results || []) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      all.push({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population, featureCode: r.feature_code });
+    }
+    if (all.length) break;
+  }
   return sortPlaces(all);
 }
 /** Populated places (GeoNames PPL*) first, by population; islands, glaciers, peaks etc. after (v1.5.2). */

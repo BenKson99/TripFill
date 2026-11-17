@@ -91,11 +91,11 @@ test("v1.15: long-drive Day 1 is a rest day and suggests a midpoint overnight ov
   assert.ok(!/overnight/i.test(`${mid[0].morning} ${mid[0].afternoon} ${mid[0].notes}`));
 });
 
-test("v1.15: domestic trips do not mention local currency or a SIM", () => {
+test("v1.15: day text never mentions local currency or a SIM", () => {
   const days = itinerary(familyInput(), wx(), parks as any, [], [], { domestic: true, travelMode: "flying", countryCode: "US" });
   assert.ok(!/currency|SIM/i.test(days.map(d => `${d.morning} ${d.afternoon} ${d.evening} ${d.notes}`).join(" ")));
   const intl = itinerary({ ...familyInput(), travelMode: "flying" }, wx(), parks as any, [], [], { domestic: false, travelMode: "flying" });
-  assert.match(intl[0].afternoon, /local currency\/SIM/);
+  assert.ok(!/currency|SIM/i.test(intl.map(d => `${d.morning} ${d.afternoon} ${d.evening} ${d.notes}`).join(" ")));
   const tasks = timeline("2026-12-20", false, "2026-11-17", "driving").map(t => t.task).join(" ");
   assert.ok(!/local currency/i.test(tasks));
 });

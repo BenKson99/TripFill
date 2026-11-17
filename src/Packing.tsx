@@ -65,7 +65,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     {toggle}
     <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} T={tFn} />
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
-    {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
+    {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} T={tFn} /></div>}
     {mountedDetailed && <div hidden={isSimple} className={isSimple ? "noprint" : undefined} data-testid="packing-detailed-pane">
       <DetailedPane plan={plan} p={p} readOnly={readOnly} travelMode={travelMode} members={members} T={tFn} openSettings={openSettings} message={message} setMessage={setMessage} change={change} edit={edit} />
     </div>}
@@ -208,7 +208,7 @@ const StartHere = memo(function StartHere({ p, readOnly, onCheck, T = (s: string
 });
 
 /** Simple mode: whole active lists (ignores detailed search/filters), same item ids, checks only. */
-export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {
+export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onCheckMany, T = (s: string) => s }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void; T?: (s: string) => string }) {
   const checkMany = onCheckMany || ((ids: string[], checked: boolean) => ids.forEach(id => onCheck(id, checked)));
   const lists = useMemo(() => simpleLists(p), [p]);
   const members = p.settings.members?.length ? p.settings.members : [];
@@ -236,8 +236,8 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
     return <section className="simple-list" aria-label={`${title} packing list`} data-testid={print ? undefined : `simple-${title.toLowerCase()}`}>
       <header><h3>{title}</h3><span className="muted small">{done}/{active.length} packed</span></header>
       {rows.length ? <ul>{grouped.entries.map(e => e.kind === "shared"
-        ? <SimpleSharedRow key={e.row.item.id} row={e.row} readOnly={readOnly} print={print} onCheck={onCheck} />
-        : <SimpleGroupRow key={e.group.key} g={e.group} multi={multi} title={title} readOnly={readOnly} print={print} onCheck={onCheck} onCheckMany={checkMany} />)}</ul>
+        ? <SimpleSharedRow key={e.row.item.id} row={e.row} readOnly={readOnly} print={print} onCheck={onCheck} T={T} />
+        : <SimpleGroupRow key={e.group.key} g={e.group} multi={multi} title={title} readOnly={readOnly} print={print} onCheck={onCheck} onCheckMany={checkMany} T={T} />)}</ul>
         : <p className="muted small">No items yet.</p>}
     </section>;
   };
@@ -258,8 +258,8 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
               <span className="muted small">{mine.rows.filter(r => !r.item.skipped && r.item.checked).length}/{mine.rows.filter(r => !r.item.skipped).length} packed</span></header>
             <p className="muted small">Tick each thing as you put it in the bag.</p>
             {mine.rows.length ? <ul>{mine.grouped.entries.map(e => e.kind === "shared"
-              ? <SimpleSharedRow key={e.row.item.id} row={{ ...e.row, item: { ...e.row.item, item: shortItemName(e.row.item.item) } }} readOnly={readOnly} print={false} onCheck={onCheck} />
-              : <SimpleGroupRow key={e.group.key} g={e.group} multi={false} title="My stuff" readOnly={readOnly} print={false} onCheck={onCheck} onCheckMany={checkMany} />)}</ul>
+              ? <SimpleSharedRow key={e.row.item.id} row={{ ...e.row, item: { ...e.row.item, item: shortItemName(e.row.item.item) } }} readOnly={readOnly} print={false} onCheck={onCheck} T={T} />
+              : <SimpleGroupRow key={e.group.key} g={e.group} multi={false} title="My stuff" readOnly={readOnly} print={false} onCheck={onCheck} onCheckMany={checkMany} T={T} />)}</ul>
               : <p className="muted small">No items on this list yet.</p>}
           </section>
         : <>{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</>}
@@ -268,30 +268,31 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
   </>;
 });
 
-const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void }) {
-  const i = row.item, label = `${i.quantity} × ${i.item} (Shared)${i.skipped ? " — not needed" : ""}`;
+const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck, T = (s: string) => s }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string }) {
+  const i = row.item, name = T(i.item), label = `${i.quantity} × ${name} (Shared)${i.skipped ? " — not needed" : ""}`;
   return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id} data-shared="true">
     {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
       : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
+    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
     <small className="simple-owner">Shared</small>{i.skipped && <small className="simple-owner">Not needed</small>}
   </li>;
 });
 
-const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly, print, onCheck, onCheckMany }: { g: SimpleGroup; multi: boolean; title: string; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany: (ids: string[], checked: boolean) => void }) {
+const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly, print, onCheck, onCheckMany, T = (s: string) => s }: { g: SimpleGroup; multi: boolean; title: string; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany: (ids: string[], checked: boolean) => void; T?: (s: string) => string }) {
   const [open, setOpen] = useState(false);
   if (g.rows.length === 1) {
     const { item: i, ownerName } = g.rows[0];
     const tag = multi || title === "Kids" ? ownerName : "";
-    const label = `${i.quantity} × ${i.item}${tag ? ` (${tag})` : ""}${i.skipped ? " — not needed" : ""}`;
+    const name = T(i.item);
+    const label = `${i.quantity} × ${name}${tag ? ` (${tag})` : ""}${i.skipped ? " — not needed" : ""}`;
     return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id}>
       {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
         : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
+      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
       {tag && <small className="simple-owner">{tag}</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
     </li>;
   }
-  const label = simpleGroupLabel(g), allPacked = g.total > 0 && g.packed === g.total, some = g.packed > 0 && !allPacked;
+  const label = T(simpleGroupLabel(g)), allPacked = g.total > 0 && g.packed === g.total, some = g.packed > 0 && !allPacked;
   const ids = g.rows.filter(r => !r.item.skipped).map(r => r.item.id);
   return <li className={`simple-group${allPacked ? " packed" : ""}`} data-group-key={print ? undefined : g.key}>
     {print ? <span aria-hidden>{allPacked ? "[x]" : some ? "[/]" : "[ ]"}</span>
@@ -302,7 +303,7 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
     {!print && <button type="button" className="ghost simple-expand" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Hide people" : "Show people"}</button>}
     {print && <small className="simple-owner">{g.rows.map(r => r.ownerName).join(", ")}</small>}
     {open && !print && <ul className="simple-people">{g.rows.map(({ item: i, ownerName }) => <li key={i.id} className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={i.id}>
-      <input type="checkbox" aria-label={`Pack ${i.item} for ${ownerName}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />
+      <input type="checkbox" aria-label={`Pack ${T(i.item)} for ${ownerName}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />
       <span className="simple-name">{ownerName}</span>
       {i.skipped && <small className="simple-owner">Not needed</small>}
     </li>)}</ul>}

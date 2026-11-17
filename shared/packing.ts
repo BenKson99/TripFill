@@ -1,6 +1,7 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
-import { isGrownUpPackingItem } from "./family.js";
+import { isGrownUpPackingItem, tripHasKids } from "./family.js";
+import { itineraryHasWaterPark } from "./interestVenues.js";
 import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities, suitableActivities } from "./activities.js";
 import { precipKind } from "./precip.js";
 export const BAGS = ["unassigned", "personal", "carry-on", "checked", "day-bag", "car", "cooler"] as const;
@@ -401,6 +402,11 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   each(E, "Phone & charger", "Daily navigation and communication", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
   each(E, "Power bank (if needed)", driving ? "Useful on the road; keep it accessible" : "Verify carrier/security battery rules, ratings and permitted bag; assignment is not clearance", 1, { bag: "personal" }, "adults");
   if (!plan.trip?.domestic) { const nAd = Math.max(1, Math.ceil(members.length / 3)); add(E, "Plug adapter(s) & voltage check", `Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage · about 1 per 3 travelers = ${nAd}`, nAd); }
+  if (!driving) {
+    add(X, "Neck pillow", "For the flight — especially a long one", 1, { bag: "personal" });
+    each(X, "Headphones", "For the flight and quiet time", 1, { bag: "personal" }, "notInfant");
+    if (tripHasKids(input, members)) add(X, "Kids' entertainment for the flight", "Books, downloaded shows or a small game — ask a grown-up about screen rules", 1, { bag: "personal" });
+  }
   if (kits.includes("photography")) add(E, "Camera, battery & memory card", driving ? "Photography interest — keep spares from heat and view when parked" : "Photography interest — verify spare battery transport rules");
   if (kits.includes("business")) { each(C, "Business outfit", "Business plans — adjust to meetings and dress code", Math.min(3, cycle), {}, "adults"); each(E, "Laptop & charger", driving ? "Business plans; keep it out of sight when the car is parked" : "Business plans; check security and carrier rules", 1, { bag: "personal" }, "adults"); }
   if (kits.includes("celebration")) each(C, "Dressy outfit", "Celebration plans — check dress code");
@@ -612,4 +618,10 @@ export function fillEmptyTravelers(list: PackingList, plan: any): PackingList {
   if (!empty.length || !plan?.input) return list;
   const ids = new Set(empty.map(m => m.id));
   return mergeSuggestions(list, { ...suggestPacking(plan, list.settings), groups: suggestPacking(plan, list.settings).groups.map(g => ({ ...g, items: g.items.filter(i => ids.has(ownerOf(i))) })).filter(g => g.items.length) });
+}
+
+/** Drop "Swimwear (if a water park)" when the itinerary never visits a water park. */
+export function dropUnusedWaterParkSwimwear<T extends { groups?: { items: { item: string }[] }[] }>(list: T, days: { morning?: string; afternoon?: string; evening?: string; notes?: string }[] | undefined): T {
+  if (!list?.groups || itineraryHasWaterPark(days || [])) return list;
+  return { ...list, groups: list.groups.map(g => ({ ...g, items: g.items.filter(i => !/swimwear \(if a water park\)/i.test(i.item)) })).filter(g => g.items.length) };
 }
