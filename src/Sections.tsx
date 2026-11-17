@@ -50,7 +50,7 @@ function Section({ id, title, summary, collapsed, idx, count, onToggle, onMove, 
   const style = { transform: CSS.Transform.toString(transform), transition, zIndex: isDragging ? 5 : undefined, opacity: isDragging ? 0.85 : 1 };
   const bodyId = `sec-body-${id}`;
   return (
-    <section ref={setNodeRef} style={style} className={"card sec" + (collapsed ? " collapsed" : "") + (isDragging ? " dragging" : "")} data-section={id}>
+    <section id={id} ref={setNodeRef} style={style} className={"card sec" + (collapsed ? " collapsed" : "") + (isDragging ? " dragging" : "")} data-section={id}>
       <div className="sec-head">
         <button ref={setActivatorNodeRef} className="handle noprint" aria-label={`Drag to reorder ${title}`} {...attributes} {...listeners}><GripVertical size={18} /></button>
         <button className="sec-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={onToggle}>

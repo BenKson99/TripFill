@@ -58,3 +58,15 @@ export function backupSlotLabel(kind: PrecipKind): string {
   if (kind === "mixed") return "❄️ mixed";
   return "☔ backup";
 }
+
+/** Display helper only: a day "might be wet" at ≥30% chance. Packing still uses isRainy / isWet. */
+export function maybeWetDay(d: PrecipDay): boolean {
+  return (d.precipProb ?? 0) >= 30 || (!d.typical && (d.precipMm ?? 0) >= 2);
+}
+export function wetDaysSummary(days: PrecipDay[] = []): { count: number; label: string } {
+  const count = days.filter(maybeWetDay).length;
+  if (count === 0) return { count: 0, label: "usually dry" };
+  if (count === 1) return { count, label: "1 day might be wet" };
+  if (count <= 3) return { count, label: "a couple of days might be wet" };
+  return { count, label: `${count} days might be wet` };
+}

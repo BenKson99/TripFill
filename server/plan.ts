@@ -8,6 +8,8 @@ import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
+import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY } from "../shared/family.js";
+import { formatShortDuration } from "../shared/distance.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
 export type { PackingItem as PackItem, PackingGroup as PackGroup } from "../shared/packing.js";
@@ -25,32 +27,63 @@ export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: 
 }
 
 const dist = (a: { lat?: number; lon?: number }, b: { lat?: number; lon?: number }) => { const r = (x: number) => x * Math.PI / 180; const h = Math.sin(r(b.lat! - a.lat!) / 2) ** 2 + Math.cos(r(a.lat!)) * Math.cos(r(b.lat!)) * Math.sin(r(b.lon! - a.lon!) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
-/** "~1h 20m drive" from OSRM, or "~1h 30m drive est." from the straight-line fallback */
-export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm?: number }) => { const m = h.driveMin ?? (h.distanceKm != null ? Math.round(h.distanceKm * 1.4) : undefined); if (m == null) return ""; const r5 = Math.round(m / 5) * 5, H = Math.floor(r5 / 60), M = r5 % 60; return `~${H ? `${H}h${M ? ` ${M}m` : ""}` : `${M || 5}m`} drive (${h.driveSrc === "osrm" ? "OSRM road route; no live traffic" : h.driveSrc === "estimate" || h.distanceKm != null ? "straight-line × road factor, 60 km/h; not routed" : "method unknown"})`; };
-export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = []): ItinDay[] {
+/** "~30 min drive, traffic not included" from OSRM, or a rough estimate fallback. */
+export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm?: number }) => {
+  const m = h.driveMin ?? (h.distanceKm != null ? Math.round(h.distanceKm * 1.4) : undefined);
+  if (m == null) return "";
+  const r5 = Math.max(5, Math.round(m / 5) * 5);
+  const short = r5 < 60 ? `${r5} min` : formatShortDuration(r5);
+  const how = h.driveSrc === "osrm" ? "traffic not included" : "rough estimate, traffic not included";
+  return `~${short} drive, ${how}`;
+};
+export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string };
+export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = [], opts: ItineraryOpts = {}): ItinDay[] {
   hl = preferredHighlights(hl, inp);
-  const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix"; const perDay = style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
+  const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
+  const kids = tripHasKids(inp);
+  const perDay = kids ? 1 : style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
   hl = hl.filter(h => !isBroadRegion(h)); extraIndoor = extraIndoor.filter(h => !isBroadRegion(h));
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
   hl = hl.filter(h => !h.ski); // ski areas are scheduled by the ski preset
   const outdoorF = outdoor.filter(h => !h.ski);
-  const queue = [...hl]; const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
-  const label = (h: Highlight) => h.dayTrip ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
+  const queue = [...hl];
+  const brands = interestBrands(inp.interests || "");
+  if (brands.length) queue.sort((a, b) => {
+    const score = (h: Highlight) => brands.some(br => matchesBrand(h.name, br)) ? 0 : isMajorAttraction(h) ? 2 : 1;
+    return score(a) - score(b);
+  });
+  const days = w.days.slice(0, 14); const usedBackup = new Set<string>();
+  const label = (h: Highlight) => farDayTrip(h) ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
   return days.map((d, i) => {
     const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
     const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? `, ${d.precipProb}%${precipProbLabel(d, kind)}`.replace("sampled years", "past years") : ""}`.trim();
-    if (i === 0) return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning: "Travel & check in", afternoon: "Easy walk around your neighbourhood; get local currency/SIM", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: "" };
-    if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: "" };
-    const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && !(noTrip && x.dayTrip)) || queue.find(x => !(noTrip && x.dayTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
+    if (i === 0) {
+      const driveMin = opts.driveMin ?? 0;
+      const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
+      const overnight = drivingLong && driveMin >= 10 * 60;
+      const stop = (opts.overnightStop || "").trim();
+      const morning = drivingLong ? KIDS_DRIVE_DAY : "Travel & check in";
+      const afternoon = drivingLong
+        ? (overnight ? (stop && stop !== "a town around the midpoint" ? `Consider an overnight stop in ${stop} around the midpoint, then check in & rest` : "Consider an overnight stop around the midpoint, then check in & rest")
+          : "Check in & rest — skip the neighbourhood walk today")
+        : (opts.domestic === true ? "Easy walk around your neighbourhood" : "Easy walk around your neighbourhood; get local currency/SIM");
+      const notes = overnight && drivingLong && !stop ? "Consider an overnight stop around the midpoint" : (holidayNote(d.date, opts.countryCode) || "");
+      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning, afternoon, evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes };
+    }
+    if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" };
+    const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
+    const okPick = (x: Highlight, noTrip = false) => !(noTrip && farDayTrip(x)) && !isCompetitorPark(x.name, inp.interests || "", unusedPreferred());
+    const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && okPick(x, noTrip)) || queue.find(x => okPick(x, noTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };
     const slots: string[] = [];
-    // A day trip fills the day on dry days; never on rainy days
-    const trip = !rain && style !== "Slow" ? queue.find(x => x.dayTrip && isRealisticDayTrip(x, inp, { name: inp.destination })) : undefined;
+    // A far day trip fills the day on dry days; never on rainy days. Nearby parks (~30 min) are not day trips.
+    const trip = !rain && style !== "Slow" ? queue.find(x => farDayTrip(x) && isRealisticDayTrip(x, inp, { name: inp.destination }) && !isCompetitorPark(x.name, inp.interests || "", unusedPreferred())) : undefined;
     const fullDays = days.length - 2;
-    const cityLeft = queue.filter(x => !x.dayTrip).length;
-    if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); const near = trip.lat != null ? queue.find(x => x !== trip && x.lat != null && dist(x, trip) < 15) : undefined;
+    const cityLeft = queue.filter(x => !farDayTrip(x)).length;
+    if (trip && ((i % 3 === 2 && fullDays >= 3) || cityLeft < Math.min(perDay, 2))) { queue.splice(queue.indexOf(trip), 1); const near = trip.lat != null ? queue.find(x => x !== trip && x.lat != null && dist(x, trip) < 15 && !(kids && isMajorAttraction(x)) && !(isMajorAttraction(trip) && isMajorAttraction(x))) : undefined;
       if (near) queue.splice(queue.indexOf(near), 1);
       const back = driveLabel(trip) ? ` (${driveLabel(trip)} back)` : "";
-      slots.push(label(trip), near ? `Also nearby: ${near.name}, then head back${back}` : `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`); }
+      const lunch = `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`;
+      slots.push(label(trip), (near && !(kids && isMajorAttraction(near))) ? `Also nearby: ${near.name}, then head back${back}` : lunch); }
     else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(inp.interests?.trim() ? hl : outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
     const f = food.length ? food[i % food.length] : undefined;
     // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again
@@ -64,7 +97,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       afternoon: slots.slice(1).join(" → ") || (style === "Slow" ? "Long lunch & downtime" : "Explore a market or local street"),
       evening: f ? `Dinner: ${f.name}${f.tag && f.tag !== "restaurant" ? ` (${f.tag})` : ""}` : "Dinner somewhere local",
       rainyBackup: itineraryPrecipCopy(kind, ski, rain ? undefined : backup),
-      notes: "",
+      notes: holidayNote(d.date, opts.countryCode) || "",
     };
   });
 }

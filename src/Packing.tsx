@@ -10,6 +10,7 @@ import { ActivityPicker } from "./Activities";
 import { Settings } from "lucide-react";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, groupSimpleRows, simpleGroupLabel, updatePackingItems, bagLabel, bagsFor, type SimpleRow, type SimpleGroup, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
+import { GrownUpBadge } from "./GrownUp";
 
 const KIT_LABELS: Record<ActivityKit, string> = {
   beach: "Beach & swim", hiking: "Hiking", ski: "Ski", business: "Business",
@@ -85,11 +86,11 @@ const DetailedPane = memo(function DetailedPane({ plan, p, readOnly, travelMode,
   const renderGroups = (groups: typeof p.groups, printing = false) => groups.map(g => { const gp = packingProgress(scoped(p.groups.find(x => x.group === g.group)?.items || g.items)); return <section key={g.group} className="packing-category" aria-label={g.group}>
     <header><h3>{g.group}</h3><span className="muted small">{gp.packed}/{gp.total} packed</span></header>
     {g.items.map(i => <article key={i.id} className={`packing-item${i.checked ? " packed" : ""}${i.skipped ? " skipped" : ""}`} data-testid={printing ? undefined : "packing-item"} data-item-id={i.id}>
-      {printing ? <><span>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span><div><b>{i.quantity} × {i.item}</b><div className="small">{bagLabel(i.bag, travelMode)} · {stageLabel(i)}{i.essential ? " · Essential" : " · Optional"}{i.lastMinute ? " · Departure day" : ""} · {ownerLabel(p, i.owner || SHARED)}</div><small>{T(i.reason)}</small></div></> : <>
+      {printing ? <><span>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span><div><b>{i.quantity} × {i.item}</b> <GrownUpBadge name={i.item} flagged={i.grownUp} /><div className="small">{bagLabel(i.bag, travelMode)} · {stageLabel(i)}{i.essential ? " · Essential" : " · Optional"}{i.lastMinute ? " · Departure day" : ""} · {ownerLabel(p, i.owner || SHARED)}</div><small>{T(i.reason)}</small></div></> : <>
         <div className="packing-check"><ChecklistCheckbox aria-label={`Pack ${i.item}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => edit(i.id, { checked: e.target.checked })} /></div>
         <div className="packing-content">
-          <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={i.item} onChange={item => edit(i.id, { item: item.slice(0, 300) })} />
-            <div className="packing-meta"><label>Qty<input aria-label={`Quantity for ${i.item}`} type="number" min={1} max={99} value={i.quantity} onChange={e => edit(i.id, { quantity: quantity(Number(e.target.value)) })} /></label>
+          <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={i.item} onChange={item => edit(i.id, { item: item.slice(0, 300) })} /><GrownUpBadge name={i.item} flagged={i.grownUp} />
+            <div className="packing-meta"><label>Qty<input aria-label={`Quantity for ${i.item}`} type="number" min={1} max={999} value={i.quantity} onChange={e => edit(i.id, { quantity: quantity(Number(e.target.value)) })} /></label>
               <LazySelect label="Bag" aria-label={`Bag for ${i.item}`} value={i.bag} options={bagsFor(travelMode, i.bag).map(b => ({ value: b, label: bagLabel(b, travelMode) }))} onChange={v => edit(i.id, { bag: v as PackingItem["bag"] })} />
               <LazySelect label="List" aria-label={`List for ${i.item}`} value={i.owner || SHARED} options={[{ value: SHARED, label: "Shared" }, ...members.map(m => ({ value: m.id, label: m.name }))]} onChange={v => edit(i.id, { owner: v })} />
               <LazySelect label="Status" aria-label={`Status for ${i.item}`} value={i.checked ? "packed" : (i.stage || "ready")} options={[{ value: "need-to-buy", label: "Need to buy" }, { value: "ready", label: "Ready" }, { value: "packed", label: "Packed" }]} onChange={v => edit(i.id, { stage: v as Stage })} />
@@ -205,7 +206,7 @@ const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, on
   return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id} data-shared="true">
     {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
       : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span>
+    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
     <small className="simple-owner">Shared</small>{i.skipped && <small className="simple-owner">Not needed</small>}
   </li>;
 });
@@ -219,7 +220,7 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
     return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id}>
       {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
         : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span>
+      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{i.item}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
       {tag && <small className="simple-owner">{tag}</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
     </li>;
   }

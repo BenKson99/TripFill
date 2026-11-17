@@ -31,23 +31,39 @@ test("v1.12: old plans without a mode default by distance; no home stays Flying;
   assert.equal(none.input.travelMode, "flying");
 });
 
-test("v1.12: flying time labels stay exactly as before; driving is an unrouted approximate drive time", () => {
+test("v1.15: travel labels use plain language; driving can use a road route when provided", () => {
   const flyShort = travelTimeLabel(180, "flying");
   assert.equal(flyShort.flightHours, null);
-  assert.match(flyShort.flightLabel, /^180 km — closer by road or rail \(~2h 15m drive; straight-line distance ÷ 80 km\/h, not road-routed/);
+  assert.match(flyShort.flightLabel, /180 km — usually quicker by road or rail/);
+  assert.match(flyShort.flightLabel, /2 hours 15 minutes of driving/);
+  assert.ok(!/great-circle|OSRM/i.test(flyShort.flightLabel));
   const flyLong = travelTimeLabel(800, "flying");
   assert.equal(flyLong.flightHours, 0.5 + (800 * 1.05) / 800);
-  assert.match(flyLong.flightLabel, /nonstop flight \(approx\., 800 km great-circle\)/);
+  assert.match(flyLong.flightLabel, /nonstop flight \(about 800 km\)/);
+  assert.ok(!/great-circle/i.test(flyLong.flightLabel));
   assert.ok(!flyLong.flightLabel.includes("or ~"), "800 km has no drive alternative");
   const flyMid = travelTimeLabel(500, "flying");
-  assert.match(flyMid.flightLabel, /nonstop flight/); assert.match(flyMid.flightLabel, /or ~/);
+  assert.match(flyMid.flightLabel, /nonstop flight/); assert.match(flyMid.flightLabel, /by road/);
   const drive = travelTimeLabel(800, "driving");
-  assert.match(drive.flightLabel, /^~10h drive \(approx\., 800 km great-circle, not a road route\)/);
+  assert.match(drive.flightLabel, /About 10 hours of driving/);
+  assert.match(drive.flightLabel, /rough estimate, not a turn-by-turn route/);
+  assert.ok(!/great-circle|roads\/borders/i.test(drive.flightLabel));
   assert.ok(!drive.flightLabel.includes("nonstop flight"));
   const factsFly = tripFacts(detroit, porto, "2026-11-10", "flying");
   assert.match(factsFly.flightLabel, /nonstop flight/);
   const factsDrive = tripFacts(detroit, porto, "2026-11-10", "driving");
-  assert.match(factsDrive.flightLabel, /drive \(approx\./); assert.match(factsDrive.flightLabel, /not a road route/);
+  assert.match(factsDrive.flightLabel, /of driving/);
+  assert.match(factsDrive.flightLabel, /rough estimate/);
+  const routed = travelTimeLabel(800, "driving", { roadMin: 17 * 60, roadKm: 1800, roadSrc: "osrm", domestic: true });
+  assert.match(routed.flightLabel, /About 17 hours of driving/);
+  assert.match(routed.flightLabel, /plan stops \(and maybe a night on the way\)/);
+  assert.match(routed.flightLabel, /1,118 miles|1,800 km/);
+  assert.ok(!/border/i.test(routed.flightLabel));
+  const intl = travelTimeLabel(800, "driving", { roadMin: 200, roadKm: 250, roadSrc: "osrm", domestic: false });
+  assert.match(intl.flightLabel, /Crossing a border can take longer/);
+  const miles = travelTimeLabel(160.934, "driving", { roadMin: 120, roadKm: 160.934, roadSrc: "osrm", domestic: true }, "mi");
+  assert.match(miles.flightLabel, /100 miles/);
+  assert.ok(!/ km/.test(miles.flightLabel));
   assert.equal(factsFly.distanceKm, factsDrive.distanceKm);
 });
 
@@ -111,7 +127,7 @@ test("v1.12: switching mode keeps edits, checks and removals, adds driving sugge
   next.prep = mergePrepForMode(next);
   assert.equal(JSON.stringify(p), beforeJson, "source plan is not mutated");
   assert.equal(next.input.travelMode, "driving");
-  assert.match(next.trip.flightLabel, /drive \(approx\./);
+  assert.match(next.trip.flightLabel, /of driving/);
   assert.equal(next.itinerary[next.itinerary.length - 1].afternoon, DEPART_DRIVE);
   assert.equal(next.itinerary[next.itinerary.length - 1].notes, "Custom note");
   const afterItems = packingItems(next.packing);

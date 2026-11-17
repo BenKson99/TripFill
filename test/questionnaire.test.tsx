@@ -30,7 +30,7 @@ test("Who's traveling editor renders accessible name + exact type choices per ro
   assert.deepEqual([...sel.slice(0, sel.indexOf("</select>")).matchAll(/<option[^>]*>([^<]+)</g)].map(x => x[1]), ["Not set (general)", "Man", "Woman", "Girl", "Boy", "Infant"]);
   assert.match(sel, /value="girl" selected=""/);
   const ro = renderToStaticMarkup(<TravelerFields idPrefix="x" members={rows} disabled onEdit={() => { throw new Error("no"); }} />);
-  assert.equal((ro.match(/disabled=""/g) || []).length, 4);
+  assert.ok((ro.match(/disabled=""/g) || []).length >= 4, "name, type, and optional age fields are disabled");
   const app = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
   assert.ok(app.indexOf("Who’s traveling?") > app.indexOf(">Travelers<input") && app.indexOf("Who’s traveling?") < app.indexOf("Offline — connect to generate"));
 });
@@ -39,7 +39,7 @@ test("mixed family from the questionnaire: the first generated lists already use
   const inp: any = { ...fixture().input, travelers: 5, members };
   const pk = packing(inp, weather, porto, 6);
   assert.deepEqual(pk.settings.members, members);
-  assert.ok(own(pk, "traveler-5").includes("Diapers / nappies") && !own(pk, "traveler-5").includes("Tops"));
+  assert.ok(own(pk, "traveler-5").some((n: string) => n.startsWith("Diapers / nappies")) && !own(pk, "traveler-5").includes("Tops"));
   assert.ok(own(pk, "traveler-3").includes("Tops") && !own(pk, "traveler-3").includes("Payment card + backup / local cash"));
   assert.deepEqual([...new Set(simpleLists(pk).kids!.filter(r => !r.shared).map(r => r.item.owner))].sort(), ["traveler-3", "traveler-4", "traveler-5"]);
   const hostile: any = { ...inp, members: [{ id: "evil", name: "<x>" }, { id: "traveler-1", name: "A", profile: "robot" }] };

@@ -419,3 +419,21 @@ footer.foot{margin-top:var(--s6);text-align:center}
 }
 .lazy-select { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
 .lazy-select-btn { min-height: 38px; max-width: 150px; text-align: left; font-weight: 500; padding: 6px 10px; }
+
+/* v1.15.0 kid-friendliness: wrapping itinerary lines, muted typical weather, grown-up cues */
+.slot{align-items:flex-start;flex-wrap:wrap;min-width:0}
+.slot > span{flex:0 0 auto}
+.slot .ed,.slot .ed.wrap{flex:1 1 12rem;min-width:0;width:100%;max-width:100%;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;resize:vertical;box-sizing:border-box;line-height:1.4}
+.wxd.typical{opacity:.88;filter:grayscale(.35);background:color-mix(in srgb, var(--bg, #f6f1ea) 70%, transparent)}
+.wxd .wx-typical{display:block;font-size:.72rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted, #6b6258);margin-bottom:2px}
+.wxi-muted{opacity:.7;filter:grayscale(.45)}
+.grownup-badge{display:inline-block;margin-left:.4rem;padding:.05rem .45rem;border-radius:999px;background:color-mix(in srgb, var(--accent, #b98a63) 18%, transparent);color:var(--ink, #3b2f2a);font-size:.75rem;font-weight:600;white-space:nowrap;vertical-align:middle}
+.grownup-note{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:.6rem 0;padding:.55rem .8rem;border-radius:12px;background:color-mix(in srgb, var(--sun, #e8c87a) 22%, var(--bg, #f6f1ea));color:var(--ink, #3b2f2a)}
+.jump-itin{display:inline-block;margin:.6rem 0 0;font-weight:700;color:var(--accent, #8a5a3b);text-decoration:none}
+.jump-itin:hover,.jump-itin:focus{text-decoration:underline}
+button.linkish{background:none;border:none;padding:0;color:var(--accent, #8a5a3b);cursor:pointer;font:inherit;text-decoration:underline}
+.place-alts{display:block;margin-top:.25rem}
+@media (max-width: 420px){
+  .slot{align-items:flex-start}
+  .slot .ed,.slot .ed.wrap{flex-basis:100%}
+}

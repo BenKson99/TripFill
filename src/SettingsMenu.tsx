@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Settings, X } from "lucide-react";
 import { ThemeToggle } from "./Theme";
+import type { DistanceUnit } from "../shared/distance";
 
 const FOCUSABLE = "button,select,input,textarea,a[href],summary,[tabindex]";
 type FocusLike = { matches(sel: string): boolean; closest(sel: string): unknown; getAttribute(n: string): string | null; getClientRects(): { length: number } };
@@ -20,8 +21,9 @@ export function trapTarget<T>(list: T[], active: unknown, shift: boolean): T | n
 }
 
 /** One accessible Settings dialog: closed by default, Escape/backdrop close, focus returns to the opener. */
-export function SettingsMenu({ open, setOpen, unit, setUnit, slotRef, children }: {
+export function SettingsMenu({ open, setOpen, unit, setUnit, distanceUnit, setDistanceUnit, slotRef, children }: {
   open: boolean; setOpen: (o: boolean) => void; unit: "C" | "F"; setUnit: (u: "C" | "F") => void;
+  distanceUnit?: DistanceUnit; setDistanceUnit?: (u: DistanceUnit) => void;
   slotRef?: (el: HTMLDivElement | null) => void; children?: ReactNode;
 }) {
   const opener = useRef<HTMLButtonElement>(null), panel = useRef<HTMLDivElement>(null), wasOpen = useRef(false);
@@ -50,6 +52,7 @@ export function SettingsMenu({ open, setOpen, unit, setUnit, slotRef, children }
       <section aria-label="Display"><h3>Display</h3>
         <div className="settings-row"><span>Theme</span><ThemeToggle /></div>
         <div className="settings-row"><span>Temperature</span><div className="seg" role="group" aria-label="Temperature unit">{(["F", "C"] as const).map(u => <button key={u} type="button" aria-pressed={unit === u} className={unit === u ? "on" : ""} onClick={() => setUnit(u)}>°{u}</button>)}</div></div>
+        {setDistanceUnit && <div className="settings-row"><span>Distance</span><div className="seg" role="group" aria-label="Distance unit">{(["mi", "km"] as const).map(u => <button key={u} type="button" aria-pressed={distanceUnit === u} className={distanceUnit === u ? "on" : ""} onClick={() => setDistanceUnit(u)}>{u === "mi" ? "miles" : "km"}</button>)}</div></div>}
       </section>
       <div ref={slotRef} className="settings-slot" />
       {children}

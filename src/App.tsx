@@ -17,11 +17,13 @@ import { InstallButton, useOnline } from "./Pwa";
 import { downloadIcs } from "./ics";
 import { DAY_COLORS, MapView, pinsFor } from "./MapView";
 import { exportPlan, parsePlan, readSaved, savePlan, normalizePreferences, MAX_PLAN_BYTES, safeUrl, weatherLabel } from "../shared/portable";
-import { precipProbLabel, precipKind, backupSlotLabel } from "../shared/precip";
+import { precipProbLabel, precipKind, backupSlotLabel, wetDaysSummary } from "../shared/precip";
+import { defaultDistanceUnit, isDistanceUnit, type DistanceUnit } from "../shared/distance";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
-import { HomeCityField, Snapshot, useHomeCity, placeLabel } from "./Home";
+import { HomeCityField, Snapshot, useHomeCity, placeLabel, WrongPlace } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
 import { defaultPrep, mergePrepForMode } from "./Prep";
+import { GrownUpBadge, GrownUpNote, showGrownUpNote } from "./GrownUp";
 import { dedupePrepAgainstTimeline } from "../shared/activityPrep";
 import { CurrencyPicker, RateLine, crossRate, money, useFx, useHomeCurrency } from "./Money";
 
@@ -31,10 +33,10 @@ const TITLES: Record<string, string> = { weather: "Weather", highlights: "Local 
 const TABS = [{ id: "plan", label: "Plan", icon: "🗺", secs: ["weather", "highlights", "map", "food", "itinerary"] }, { id: "pack", label: "Packing & Prep", icon: "🧳", secs: ["packing", "prep", "timeline"] }, { id: "money", label: "Budget", icon: "💰", secs: ["budget"] }] as const;
 type TabId = typeof TABS[number]["id"];
 const TAB_KEY = "tripfill:tab";
-function WxIcon({ s }: { s: string }) {
+function WxIcon({ s, muted }: { s: string; muted?: boolean }) {
   const t = (s || "").toLowerCase();
   const [I, c] = /thunder|storm/.test(t) ? [CloudLightning, "rain"] : /snow|sleet/.test(t) ? [CloudSnow, "cloud"] : /rain|shower|drizzle|wet/.test(t) ? [CloudRain, "rain"] : /fog|mist/.test(t) ? [CloudFog, "cloud"] : /overcast|cloud/.test(t) ? (/part|some|mostly clear/.test(t) ? [CloudSun, ""] : [Cloud, "cloud"]) : [Sun, ""];
-  return <I size={26} className={"wxi " + c} aria-hidden />;
+  return <I size={26} className={"wxi " + c + (muted ? " wxi-muted" : "")} aria-hidden />;
 }
 const HeroArt = () => <svg className="hero-art" viewBox="0 0 400 260" aria-hidden><defs>
     <linearGradient id="hg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stopColor="var(--accent)" stopOpacity=".95" /><stop offset=".55" stopColor="var(--rose)" stopOpacity=".7" /><stop offset="1" stopColor="var(--sun)" stopOpacity=".85" /></linearGradient>
@@ -56,10 +58,12 @@ const KEY = "tripfill:v1";
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const plus = (k: number) => { const d = new Date(); d.setDate(d.getDate() + k); return iso(d); };
 
-function Editable({ value, onChange, multiline }: { value: string; onChange: (v: string) => void; multiline?: boolean }) {
-  return multiline
-    ? <textarea className="ed" value={value} rows={3} onChange={e => onChange(e.target.value)} />
-    : <input className="ed" value={value} onChange={e => onChange(e.target.value)} />;
+function Editable({ value, onChange, multiline, wrap }: { value: string; onChange: (v: string) => void; multiline?: boolean; wrap?: boolean }) {
+  if (multiline || wrap) {
+    const rows = multiline ? 3 : Math.min(6, Math.max(2, Math.ceil(((value || "").length || 1) / 42)));
+    return <textarea className="ed wrap" value={value} rows={rows} onChange={e => onChange(e.target.value)} />;
+  }
+  return <input className="ed" value={value} onChange={e => onChange(e.target.value)} />;
 }
 
 const defaultUnit = (): "C" | "F" => /-(US|LR|MM)$/i.test(navigator.language || "") || /^en$/i.test(navigator.language) && Intl.DateTimeFormat().resolvedOptions().timeZone?.startsWith("America/") ? "F" : "C";
@@ -80,6 +84,19 @@ export default function App() {
   const T = (s: string) => (s || "").replace(/\{t:(-?[\d.]+)\}/g, (_m, v) => deg(Number(v))).replace(/(-?\d+(?:\.\d+)?)°C\b/g, (_m, v) => deg(Number(v)));
   const [layout, setLayout] = useLayout(Object.keys(TITLES));
   const [homeCity, setHomeCity] = useHomeCity();
+  const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(() => {
+    const savedU = localStorage.getItem(KEY + ":distance");
+    if (isDistanceUnit(savedU)) return savedU;
+    return defaultDistanceUnit(undefined, typeof navigator !== "undefined" ? navigator.language : undefined);
+  });
+  useEffect(() => { localStorage.setItem(KEY + ":distance", distanceUnit); }, [distanceUnit]);
+  // When the user has never chosen a unit, follow the home country's default (US/UK → miles).
+  useEffect(() => {
+    if (localStorage.getItem(KEY + ":distance-chosen") === "1") return;
+    const next = defaultDistanceUnit(homeCity?.countryCode || plan?.trip?.home?.countryCode, typeof navigator !== "undefined" ? navigator.language : undefined);
+    setDistanceUnit(next);
+  }, [homeCity?.countryCode, plan?.trip?.home?.countryCode]);
+  const chooseDistance = (u: DistanceUnit) => { localStorage.setItem(KEY + ":distance-chosen", "1"); setDistanceUnit(u); };
   const [homeText, setHomeText] = useState(() => homeCity ? placeLabel(homeCity) : "");
   const [homeErr, setHomeErr] = useState("");
   const [home, setHome, homeExplicit] = useHomeCurrency(homeCity?.countryCode || plan?.trip?.home?.countryCode);
@@ -159,7 +176,7 @@ export default function App() {
   const pins = plan ? pinsFor(plan.highlights || [], plan.itinerary || []) : [];
   const summaries: Record<string, string> = plan ? {
     map: `${pins.length} pinned sights across ${new Set(pins.filter(p => p.day != null).map(p => p.day)).size} day(s)`,
-    weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.snowDays ? plan.weather.stats.snowDays + " snow day(s)" : plan.weather.stats.rainyDays + " wet day(s)"}${plan.weather.stats.snowDays && plan.weather.stats.rainyDays ? ` · ${plan.weather.stats.rainyDays} wet` : ""}`,
+    weather: `${plan.weather.source === "forecast" ? "Forecast" : plan.weather.source === "mixed" ? "Forecast + typical" : "Typical"} · highs ~${deg(plan.weather.stats.avgHigh)}, lows ~${deg(plan.weather.stats.avgLow)} · ~${plan.weather.stats.snowDays ? plan.weather.stats.snowDays + " snow day(s) · " : ""}${wetDaysSummary(plan.weather.days).label}`,
     highlights: `${plan.highlights.length} sights · ${plan.highlights.slice(0, 3).map((h: Any) => h.name).join(", ")}…`,
     food: (() => { const E = eatsOf(plan); return `${E.restaurants.length} restaurants · ${E.cafes.length} coffee shops${E.restaurants.length ? " · " + E.restaurants.slice(0, 2).map((f: Any) => f.name).join(", ") + "…" : ""}`; })(),
     packing: `${packingProgress(packItems).packed}/${packingProgress(packItems).total} active items packed`,
@@ -190,7 +207,7 @@ export default function App() {
           <p className={plan.weather.source !== "forecast" ? "warn" : "muted"}>{plan.weather.source === "typical" ? "📊 " : "📡 "}{plan.weather.note}</p>
           <p className="wxstat"><span><Thermometer size={15} /> Avg high <b>{deg(plan.weather.stats.avgHigh)}</b> · low <b>{deg(plan.weather.stats.avgLow)}</b></span><span><Droplets size={15} /> {plan.weather.stats.snowDays ? <>Snow days ~<b>{plan.weather.stats.snowDays}</b>{plan.weather.stats.rainyDays ? " · " : ""}</> : null}{plan.weather.stats.rainyDays || !plan.weather.stats.snowDays ? <>Wet days ~<b>{plan.weather.stats.rainyDays}</b></> : null}</span></p>
           {plan.weather.legs?.length > 1 && <ul className="small wx-legs" data-testid="leg-weather">{plan.weather.legs.map((l: Any) => <li key={l.name}><b>{l.name}</b>: avg high {deg(l.stats.avgHigh)} · low {deg(l.stats.avgLow)} · {l.stats.snowDays ? `snow days ~${l.stats.snowDays}` : ""}{l.stats.snowDays && l.stats.rainyDays ? " · " : ""}{l.stats.rainyDays || !l.stats.snowDays ? `wet days ~${l.stats.rainyDays}` : ""}</li>)}</ul>}
-          <div className="wx">{plan.weather.days.map((d: Any) => <div key={d.date} className="wxd">{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}</div>)}</div>
+          <div className="wx">{plan.weather.days.map((d: Any) => <div key={d.date} className={"wxd" + (d.typical ? " typical" : "")}>{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}{d.typical && <small className="wx-typical">Typical weather (not a forecast yet)</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} muted={!!d.typical} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {d.summary}{d.precipProb != null ? ` · ${d.precipProb}%${precipProbLabel(d)}` : ""}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}</div>)}</div>
     </>,
     highlights: <>
           <ol className="hl">{plan.highlights.map((h: Any, i: number) => <li key={i}>{plan.legs?.length > 1 && h.leg !== plan.highlights[i - 1]?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
@@ -207,18 +224,18 @@ export default function App() {
     packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} settingsSlot={activeTab === "pack" ? settingsSlot : null} openSettings={() => setSettingsOpen(true)} onTravelMode={changeTravelMode} onActivities={ids => { setForm((f: Any) => syncActivityInput({ ...f }, ids)); setPlan((p: Any) => { const c = structuredClone(p); c.input = syncActivityInput(c.input || {}, ids); return c; }); }} onRefreshPlan={() => setPlan((p: Any) => applyActivities(p, resolveActivities(p.input)))} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
-            {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
-            {d.rainyBackup && <div className="slot"><span>{backupSlotLabel(precipKind(plan.weather.days.find((w: Any) => w.date === d.date) || {}))}</span><Editable value={d.rainyBackup} onChange={v => upd(p => { p.itinerary[i].rainyBackup = v; })} /></div>}
-            <div className="slot"><span>notes</span><Editable value={d.notes} onChange={v => upd(p => { p.itinerary[i].notes = v; })} /></div>
+            {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable wrap value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
+            {d.rainyBackup && <div className="slot"><span>{backupSlotLabel(precipKind(plan.weather.days.find((w: Any) => w.date === d.date) || {}))}</span><Editable wrap value={d.rainyBackup} onChange={v => upd(p => { p.itinerary[i].rainyBackup = v; })} /></div>}
+            <div className="slot"><span>notes</span><Editable wrap value={d.notes} onChange={v => upd(p => { p.itinerary[i].notes = v; })} /></div>
           </div>)}
     </>,
     prep: <>
           <p className="muted small">Tick these off in the days before you go — saved with this plan.</p>
-          {dedupePrepAgainstTimeline(plan.prep || defaultPrep(plan), plan.timeline).map((t: Any) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.task = v; })} />{t.why && <small className="why">{t.why}</small>}<button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep = p.prep.filter((x: Any) => x.id !== t.id); })}>×</button></div>)}
+          {dedupePrepAgainstTimeline(plan.prep || defaultPrep(plan), plan.timeline).map((t: Any) => <div key={t.id} className="pk" data-testid="prep-item"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.done = e.target.checked; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.prep = p.prep || defaultPrep(p); const row = p.prep.find((x: Any) => x.id === t.id); if (row) row.task = v; })} />{t.why && <small className="why">{t.why}</small>}<GrownUpBadge name={t.task} flagged={t.grownUp} /><button className="x noprint" aria-label="Remove task" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep = p.prep.filter((x: Any) => x.id !== t.id); })}>×</button></div>)}
           <button className="add noprint" onClick={() => upd(p => { p.prep = p.prep || defaultPrep(p); p.prep.push({ id: crypto.randomUUID(), task: "New task", done: false }); })}>+ add</button>
     </>,
     timeline: <>
-          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /></div>)}
+          {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={t.task} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={t.task} onChange={v => upd(p => { p.timeline[i].task = v; })} /><GrownUpBadge name={t.task} /></div>)}
     </>,
     map: <MapView pins={pins} center={(plan.legs?.length > 1 ? plan.legs.map((l: Any) => l.place) : [plan.place]).map((q: Any) => ({ lat: q.lat, lon: q.lon, name: q.name }))} route={plan.legs?.length > 1}
       legend={[...plan.itinerary.map((d: Any, i: number) => ({ label: `Day ${i + 1}`, color: DAY_COLORS[i % DAY_COLORS.length] })).filter((_: Any, i: number) => pins.some(p => p.day === i)), ...(pins.some(p => p.day == null) ? [{ label: "Not scheduled", color: "#8a8f9c" }] : [])]} />,
@@ -235,7 +252,7 @@ export default function App() {
   const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => roBodies[k]).map(k => [k, roBodies[k]]));
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
-      <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} unit={unit} setUnit={setUnit} slotRef={setSettingsSlot} /></div>
+      <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} unit={unit} setUnit={setUnit} distanceUnit={distanceUnit} setDistanceUnit={chooseDistance} slotRef={setSettingsSlot} /></div>
       <header className="hero noprint"><HeroArt /><span className="eyebrow"><MapPin size={14} />Free · no sign-up · works offline</span><h1>Your next adventure, <em>beautifully planned.</em></h1><p>Destination and dates in — weather, highlights, local restaurants & coffee, packing list and a day-by-day plan out. Everything stays editable and saved in this browser.</p></header>
 
       {recoveryPending.current && <button className="ghost noprint" onClick={() => { const a = document.createElement("a"); const u = URL.createObjectURL(new Blob([localStorage.getItem(KEY) || ""], { type: "application/json" })); a.href = u; a.download = "tripfill-browser-recovery.json"; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); }}>Download original browser data for recovery</button>}
@@ -273,7 +290,8 @@ export default function App() {
         <p className="muted small wide">Limited walking reduces stops and takes priority over hiking, skiing and walking-tour presets; access is not verified. Dietary tags are incomplete: source-tagged matches are preferred, name hints remain unverified, unknown venues stay visible and known conflicts are excluded. Confirm ingredients and cross-contact directly — no allergy-safety guarantee.</p>
         <ActivityPicker value={resolveActivities(form)} interests={form.interests} disabled={!!readOnly} onChange={(ids: ActivityId[]) => setForm((f: Any) => syncActivityInput({ ...f }, ids))} onInterests={text => setForm((f: Any) => ({ ...f, interests: text }))} />
         <HomeCityField value={homeCity} onChange={setHomeCity} text={homeText} onText={t => { setHomeText(t); setHomeErr(""); }} error={homeErr} />
-        <TravelModeField value={form.travelMode === "driving" ? "driving" : "flying"} onChange={m => setForm({ ...form, travelMode: m })} hint={plan ? "Applies when you press Generate — it does not change the plan already on the page. To update this plan without a new weather fetch, use the travel card or ⚙ Settings → Packing." : "Approximate drive times are not a road route. Old trips without a saved choice default to Driving under about 300 km, otherwise Flying."} />
+        <TravelModeField value={form.travelMode === "driving" ? "driving" : "flying"} onChange={m => setForm({ ...form, travelMode: m })} hint={plan ? "Applies when you press Generate — it does not change the plan already on the page. To update this plan without a new weather fetch, use the travel card or ⚙ Settings → Packing." : "Drive times use a typical road route when one is available (traffic is not included). Old trips without a saved choice default to Driving under about 300 km, otherwise Flying."} />
+        <GrownUpNote show={showGrownUpNote(form)} />
         <button disabled={loading || !online}>{!online ? "Offline — connect to generate" : loading ? "Building your plan… (~10s)" : "Generate plan"}</button>
       </form>}
       {matches && !readOnly && <div className="card noprint"><b>Which one did you mean?</b><div className="chips">{matches.map(m => <button key={m.id} onClick={() => generate(m)}>{placeLabel(m)}</button>)}</div></div>}
@@ -284,15 +302,17 @@ export default function App() {
           <h2>{plan.legs?.length > 1 ? plan.title : placeLabel(plan.place)}</h2>
           <p className="dates">{fmtRange(plan.input.start, plan.input.end)}</p>
           <p className="muted">{plan.input.travelers} traveler(s) · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {plan.input.walkingTolerance || "standard"} walking · {(plan.input.dietaryNeeds || "none").replace(/_/g, " ")} dietary preference{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
-          {plan.matches?.length > 1 && <p className="muted noprint">Wrong place? {plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4).map((m: Any) => <a key={m.id} href="#" onClick={e => { e.preventDefault(); generate(m); }}>{placeLabel(m)}</a>).reduce((a: Any[], x: Any, i: number) => i ? [...a, " · ", x] : [x], [])}</p>}
+          {plan.matches?.length > 1 && <WrongPlace alts={plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4)} onPick={m => generate(m)} resolved />}
           <div className="stats" data-testid="stats">
             <div className="stat"><CalendarDays size={18} /><div><b>{plan.itinerary.length} days</b><small>{plan.input.start} → {plan.input.end}</small></div></div>
             <div className="stat"><Users size={18} /><div><b>{plan.input.travelers}</b><small>traveler(s)</small></div></div>
-            <div className="stat"><WxIcon s={plan.weather.days[0]?.summary || ""} /><div><b>{deg(plan.weather.stats.avgHigh)} / {deg(plan.weather.stats.avgLow)}</b><small>avg high / low · {plan.weather.stats.snowDays ? `${plan.weather.stats.snowDays} snow` : ""}{plan.weather.stats.snowDays && plan.weather.stats.rainyDays ? " · " : ""}{plan.weather.stats.rainyDays ? `${plan.weather.stats.rainyDays} wet` : plan.weather.stats.snowDays ? "" : "0 wet"}</small></div></div>
+            <div className="stat"><WxIcon s={plan.weather.days[0]?.summary || ""} /><div><b>{deg(plan.weather.stats.avgHigh)} / {deg(plan.weather.stats.avgLow)}</b><small>avg high / low · {plan.weather.stats.snowDays ? `${plan.weather.stats.snowDays} snow` : ""}{plan.weather.stats.snowDays ? " · " : ""}{wetDaysSummary(plan.weather.days).label}</small></div></div>
             <div className="stat"><Wallet size={18} /><div><b>{(summaries.budget || "").replace(/ estimate$/, "").split(" ≈ ").pop()}</b><small>budget estimate</small></div></div>
           </div>
-          {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <small className="muted noprint"> · not it? {lg.alternatives.slice(0, 3).map((a: Any, ai: number) => <a key={ai} href="#" onClick={e => { e.preventDefault(); const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }}>{a.name}, {a.country}</a>).reduce((acc: Any[], x: Any, i: number) => i ? [...acc, " · ", x] : [x], [])}</small>}</span>)}</div>}
-          <Snapshot trip={plan.trip} dest={plan.place} mode={resolveTravelMode(plan.input, plan.trip?.distanceKm)} onMode={changeTravelMode} readOnly={!!readOnly} />
+          {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <WrongPlace label="Wrong place?" alts={lg.alternatives.slice(0, 3)} onPick={a => { const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }} resolved />}</span>)}</div>}
+          <Snapshot trip={plan.trip} dest={plan.place} mode={resolveTravelMode(plan.input, plan.trip?.distanceKm)} onMode={changeTravelMode} readOnly={!!readOnly} distanceUnit={distanceUnit} />
+          <GrownUpNote show={showGrownUpNote(form, plan)} />
+          <a href="#itinerary" className="jump-itin noprint" data-testid="jump-itinerary" onClick={e => { e.preventDefault(); setTab("plan"); setLayout(l => ({ ...l, hidden: l.hidden.filter(x => x !== "itinerary"), collapsed: l.collapsed.filter(x => x !== "itinerary") })); requestAnimationFrame(() => document.getElementById("itinerary")?.scrollIntoView({ behavior: "smooth", block: "start" })); }}>Day by day ↓</a>
           {plan.activityNotes?.length > 0 && <div className="muted small" data-testid="activity-notes">{plan.activityNotes.map((n: string, i: number) => <p key={i}>{T(n)}</p>)}</div>}
           {plan.capped && <p className="warn">Trips longer than 14 days: weather & itinerary cover the first 14 days.</p>}
         </section>

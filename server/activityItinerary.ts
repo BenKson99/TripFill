@@ -10,6 +10,7 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
+import { farDayTrip, paceItineraryForKids, fillPreferredParks } from "../shared/family.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
   return fitContextFromWeather(w, placeName);
@@ -79,7 +80,7 @@ function activityLabel(id: ActivityId, h?: Highlight) {
     return id === "surf" ? `${def.emoji} Surf time at a nearby beach` : `${def.emoji} Beach time at a nearby beach`;
   }
   if (id === "dive" && !h) return `${def.emoji} Guided snorkel or dive trip (book an operator)`;
-  if (h) return h.dayTrip ? `${def.emoji} ${def.label}: ${h.name}${driveLabel(h) ? ` (${driveLabel(h)})` : ""}` : `${def.emoji} ${h.name}`;
+  if (h) return farDayTrip(h) ? `${def.emoji} ${def.label}: ${h.name}${driveLabel(h) ? ` (${driveLabel(h)})` : ""}` : `${def.emoji} ${h.name}`;
   return `${def.emoji} ${def.label}`;
 }
 
@@ -239,4 +240,6 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   scheduleActivities(days, inp, w, usable, placeName);
   stripUnsuitableActivities(days, resolveActivities(inp).filter(id => !activityFit(id, ctx).ok));
   dedupeItineraryPlaces(days, usable, placeName);
+  fillPreferredParks(days, hl, inp.interests || "");
+  paceItineraryForKids(days, inp);
 }

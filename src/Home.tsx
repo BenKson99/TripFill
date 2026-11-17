@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { placeLabel } from "../shared/homeCity";
-import { resolveTravelMode, type TravelMode } from "../shared/travel";
+import { resolveTravelMode, formatTripTravel, type TravelMode } from "../shared/travel";
+import type { DistanceUnit } from "../shared/distance";
 import { TravelModeField } from "./TravelMode";
 type Any = any;
 export const HOME_CITY_KEY = "tripfill:homeCity";
@@ -36,21 +37,31 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
       <input data-testid="home-city" placeholder="e.g. Detroit" value={text} onChange={e => onText(e.target.value)} onBlur={resolve}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); resolve(); } }} aria-invalid={!!error || (state.startsWith("Couldn't") || state === "Geocoding failed") || undefined} />
       {msg && <small className={error || state.startsWith("Couldn't") || state === "Geocoding failed" ? "warn" : "muted"} data-testid="home-city-status" role={error || state.startsWith("Couldn't") ? "alert" : undefined}>{msg}</small>}
-      {opts.length > 0 && <small className="muted">Not it? {opts.map((o, i) => <a key={o.id} href="#" onMouseDown={e => { e.preventDefault(); onChange(o); setOpts([]); }}>{i ? " · " : ""}{placeLabel(o)}</a>)}</small>}
+      {opts.length > 0 && <WrongPlace alts={opts} onPick={o => { onChange(o); setOpts([]); }} resolved={!!value} />}
     </label>
   );
 }
 
-export function Snapshot({ trip, dest, mode, onMode, readOnly }: { trip: Any; dest: Any; mode?: TravelMode; onMode?: (m: TravelMode) => void; readOnly?: boolean }) {
+
+/** Hide long alternative lists behind a small link once a city has resolved. */
+export function WrongPlace({ alts, onPick, resolved = true, label = "Wrong place?" }: { alts: Any[]; onPick: (p: Any) => void; resolved?: boolean; label?: string }) {
+  const [open, setOpen] = useState(false);
+  if (!alts?.length) return null;
+  const links = alts.map((o: Any, i: number) => <a key={o.id || o.name || i} href="#" onMouseDown={e => { e.preventDefault(); onPick(o); setOpen(false); }} onClick={e => { e.preventDefault(); onPick(o); setOpen(false); }}>{i ? " · " : ""}{placeLabel(o)}</a>);
+  if (!resolved) return <small className="muted">{label} {links}</small>;
+  return <small className="muted place-alts noprint">{open ? <> <button type="button" className="linkish" data-testid="wrong-place" onClick={() => setOpen(false)}>{label}</button> {links}</> : <button type="button" className="linkish" data-testid="wrong-place" onClick={() => setOpen(true)}>{label}</button>}</small>;
+}
+
+export function Snapshot({ trip, dest, mode, onMode, readOnly, distanceUnit = "km" }: { trip: Any; dest: Any; mode?: TravelMode; onMode?: (m: TravelMode) => void; readOnly?: boolean; distanceUnit?: DistanceUnit }) {
   const resolved = mode || resolveTravelMode(undefined, trip?.distanceKm);
   if (!trip) return <div className="noprint">{onMode && <TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Add a home city for an approximate travel time. Changing the mode updates packing and leave-home tasks without a new weather fetch." />}<p className="muted small">Add a home city to see travel time, time difference and domestic/international.</p></div>;
   return (
     <div className="snap" data-testid="snapshot">
       <div><small>From</small><b>{placeLabel(trip.home)}</b></div>
       <div><small>Trip type</small><b>{trip.domestic ? `Domestic (${dest.country})` : "International"}</b></div>
-      <div><small>Travel time</small><b>{trip.flightLabel}</b></div>
+      <div><small>Travel time</small><b data-testid="travel-time">{formatTripTravel(trip, resolved, distanceUnit)}</b></div>
       <div><small>Time difference</small><b>{trip.tzLabel}</b>{trip.destTz && <small>{trip.destTz}</small>}</div>
-      {onMode && <div className="snap-mode noprint"><TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Approximate times are not a road route or a booked flight. Changing this updates labels and packing suggestions without a new weather fetch." /></div>}
+      {onMode && <div className="snap-mode noprint"><TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Times are a typical road or flight estimate, not live traffic. Changing this updates labels and packing suggestions without a new weather fetch." /></div>}
     </div>
   );
 }

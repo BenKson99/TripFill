@@ -4,16 +4,22 @@ import { PROFILES, PROFILE_LABELS, packingMembers, type PackingMember, type Prof
 /** Visible rows for a count. Uses the same normaliser as the packing list (ids traveler-1…N, names, types). */
 export const travelerRows = (members: PackingMember[] | undefined, count: unknown) => packingMembers({ members: members || [] }, Math.max(1, Math.min(20, Math.round(Number(count) || 1))));
 /** Apply one row edit while keeping rows beyond the current count, so shrinking then growing restores them. */
-export function editTraveler(all: PackingMember[] | undefined, count: unknown, id: string, patch: { name?: string; type?: string }): PackingMember[] {
+export function editTraveler(all: PackingMember[] | undefined, count: unknown, id: string, patch: { name?: string; type?: string; age?: number | null }): PackingMember[] {
   const rows = travelerRows(all, count), extra = (all || []).filter(m => !rows.some(r => r.id === m.id));
   const apply = (x: PackingMember): PackingMember => {
     if (x.id !== id) return x;
     let next: PackingMember = { ...x };
     if (patch.name !== undefined) next.name = patch.name.slice(0, 80);
     if (patch.type !== undefined) {
-      const v = patch.type; next = { id: x.id, name: next.name };
+      const v = patch.type; const keepAge = next.age;
+      next = { id: x.id, name: next.name };
       if (v === "child") next.child = true;
       else if ((PROFILES as readonly string[]).includes(v)) { next.profile = v as Profile; if (v === "girl" || v === "boy" || v === "infant") next.child = true; }
+      if (next.child && Number.isInteger(keepAge)) next.age = keepAge;
+    }
+    if (patch.age !== undefined) {
+      if (patch.age == null || !Number.isInteger(patch.age)) delete next.age;
+      else if (patch.age >= 0 && patch.age <= 21) next.age = patch.age;
     }
     return next;
   };
@@ -27,13 +33,14 @@ export function setAllTypes(all: PackingMember[] | undefined, count: unknown, ty
     const next: PackingMember = { id: x.id, name: x.name };
     if (type === "child") next.child = true;
     else if ((PROFILES as readonly string[]).includes(type)) { next.profile = type as Profile; if (type === "girl" || type === "boy" || type === "infant") next.child = true; }
+    if (next.child && Number.isInteger(x.age)) next.age = x.age;
     return next;
   };
   return [...rows.map(apply), ...extra];
 }
 
 /** One traveler editor used by both the Plan questionnaire and ⚙ Settings → Packing. */
-export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix }: { members: PackingMember[]; onEdit: (id: string, patch: { name?: string; type?: string }) => void; onEditAll?: (type: string) => void; disabled?: boolean; idPrefix: string }) {
+export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix }: { members: PackingMember[]; onEdit: (id: string, patch: { name?: string; type?: string; age?: number | null }) => void; onEditAll?: (type: string) => void; disabled?: boolean; idPrefix: string }) {
   return <div className="packing-members traveler-fields">{members.length >= 2 && onEditAll && <div className="set-everyone" data-testid={`${idPrefix}-set-everyone`}>
     <label>Set everyone to<select aria-label="Set everyone to" defaultValue="" disabled={disabled} onChange={e => { const v = e.target.value; if (v !== "") onEditAll(v === "unset" ? "" : v); e.target.selectedIndex = 0; }}>
       <option value="">Choose type…</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}<option value="unset">Not set (general)</option>
@@ -42,6 +49,7 @@ export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix 
     <label>Traveler {i + 1} name<NameInput index={i} name={m.name} disabled={disabled} onCommit={name => onEdit(m.id, { name })} /></label>
     <label>Traveler type<select aria-label={`Traveler type for traveler ${i + 1}`} value={val} disabled={disabled} onChange={e => onEdit(m.id, { type: e.target.value })}>
       <option value="">Not set (general)</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}{val === "child" && <option value="child">Child (unspecified)</option>}</select></label>
+    {(val === "girl" || val === "boy" || val === "infant" || val === "child") && <label>Age <small className="muted">(optional)</small><input data-testid={`${idPrefix}-${m.id}-age`} aria-label={`Age for traveler ${i + 1}`} type="number" min={0} max={21} inputMode="numeric" placeholder="—" value={m.age ?? ""} disabled={disabled} onChange={e => { const raw = e.target.value; onEdit(m.id, { age: raw === "" ? null : Math.max(0, Math.min(21, Math.round(Number(raw)))) }); }} /></label>}
   </div>; })}</div>;
 }
 

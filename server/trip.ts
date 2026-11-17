@@ -1,10 +1,12 @@
 import type { Place } from "./weather.js";
 import { countryInfo } from "./countries.js";
 import { resolveTravelMode, travelTimeLabel, type TravelMode } from "../shared/travel.js";
+import { defaultDistanceUnit } from "../shared/distance.js";
 
 export interface TripFacts {
   home: Place; domestic: boolean; distanceKm: number; flightHours: number | null; flightLabel: string;
   tzDiffHours: number | null; tzLabel: string; homeCurrency: string; homeTz?: string; destTz?: string;
+  driveMin?: number; driveKm?: number; driveSrc?: "osrm" | "estimate"; overnightStop?: string | null;
 }
 
 export function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
@@ -26,7 +28,8 @@ export function tripFacts(home: Place, dest: Place, start: string, modeOrInput?:
   const domestic = !!home.countryCode && home.countryCode === dest.countryCode;
   const km = Math.round(haversineKm(home, dest));
   const mode: TravelMode = modeOrInput == null ? "flying" : resolveTravelMode(modeOrInput, km);
-  const { flightHours, flightLabel } = travelTimeLabel(km, mode);
+  const unit = defaultDistanceUnit(home.countryCode);
+  const { flightHours, flightLabel } = travelTimeLabel(km, mode, { domestic }, unit);
   let tzDiffHours: number | null = null, tzLabel = "Time difference unknown";
   if (home.timezone && dest.timezone) {
     const a = tzOffsetMin(home.timezone, start), b = tzOffsetMin(dest.timezone, start);
@@ -37,4 +40,24 @@ export function tripFacts(home: Place, dest: Place, start: string, modeOrInput?:
     }
   }
   return { home, domestic, distanceKm: km, flightHours, flightLabel, tzDiffHours, tzLabel, homeCurrency: countryInfo(home.countryCode).cur, homeTz: home.timezone, destTz: dest.timezone };
+}
+
+export function applyRoadRoute(facts: TripFacts, route: { durationMin: number; distanceKm: number; src: "osrm" | "estimate"; midpoint?: { name: string } | null } | null): TripFacts {
+  if (!route) return facts;
+  const unit = defaultDistanceUnit(facts.home?.countryCode);
+  const { flightHours, flightLabel } = travelTimeLabel(facts.distanceKm, "driving", {
+    roadMin: route.durationMin,
+    roadKm: route.distanceKm,
+    roadSrc: route.src,
+    domestic: facts.domestic,
+  }, unit);
+  return {
+    ...facts,
+    flightHours,
+    flightLabel,
+    driveMin: route.durationMin,
+    driveKm: route.distanceKm,
+    driveSrc: route.src,
+    overnightStop: route.midpoint?.name || null,
+  };
 }

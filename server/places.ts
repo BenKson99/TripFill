@@ -237,7 +237,7 @@ async function wikidataRank(qids: string[], curated: Set<string>, p: Place, wide
   return { extras, top: top.map(t => {
     const raw = (byTitle.get(t.title) || t.desc).replace(/\s*\([^()]*(\([^()]*\)[^()]*)*\)/g, "").replace(/\s+([,.])/g, "$1");
     const st = setting(t.classes.join("; ") || t.desc + " " + t.name);
-    return { name: t.name, description: firstSentences(raw, 240) || t.desc, setting: st, indoor: st === "indoor", type: t.classes.slice(0, 2).join(", "), views30d: pv.get(t.title) || 0, source: "Wikipedia/Wikidata", url: `https://en.wikipedia.org/wiki/${encodeURIComponent(t.title.replace(/ /g, "_"))}`, lat: t.lat, lon: t.lon, ...(km(t) > 15 ? { dayTrip: true, distanceKm: Math.round(km(t)) } : {}), ...(isSki(t) ? { ski: true } : {}), ...(drive.get(t.id) ? { driveMin: drive.get(t.id)!.min, driveSrc: drive.get(t.id)!.src } : {}) };
+    return { name: t.name, description: firstSentences(raw, 240) || t.desc, setting: st, indoor: st === "indoor", type: t.classes.slice(0, 2).join(", "), views30d: pv.get(t.title) || 0, source: "Wikipedia/Wikidata", url: `https://en.wikipedia.org/wiki/${encodeURIComponent(t.title.replace(/ /g, "_"))}`, lat: t.lat, lon: t.lon, ...(() => { const minutes = drive.get(t.id)?.min; const far = minutes != null ? minutes > 60 : km(t) > 40; return far ? { dayTrip: true, distanceKm: Math.round(km(t)) } : {}; })(), ...(isSki(t) ? { ski: true } : {}), ...(drive.get(t.id) ? { driveMin: drive.get(t.id)!.min, driveSrc: drive.get(t.id)!.src } : {}) };
   }) };
 }
 

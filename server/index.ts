@@ -10,7 +10,8 @@ import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput } from "./plan.js";
 import { budget } from "./budget.js";
 import { getFx } from "./fx.js";
-import { tripFacts } from "./trip.js";
+import { tripFacts, applyRoadRoute } from "./trip.js";
+import { roadRoute } from "./route.js";
 import { resolveTravelMode } from "../shared/travel.js";
 import { resolveHomeCity } from "./home.js";
 import { mountShare, shareStore } from "./share.js";
@@ -82,7 +83,10 @@ app.post("/api/generate", async (req, res) => {
     const prelim = home ? tripFacts(home, place, inp.start) : null;
     const travelMode = resolveTravelMode(inp, prelim?.distanceKm);
     inp.travelMode = travelMode;
-    const facts = home ? tripFacts(home, place, inp.start, travelMode) : null;
+    let facts = home ? tripFacts(home, place, inp.start, travelMode) : null;
+    if (facts && home && travelMode === "driving") {
+      try { facts = applyRoadRoute(facts, await roadRoute(home, place, true)); } catch { /* keep unrouted label */ }
+    }
     const domestic = !!facts?.domestic;
     const fxForce = process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce;
     const extra = ((inp as any).legs || []).filter((l: any) => l && (l.destination || l.place) && l.start);
@@ -105,7 +109,7 @@ app.post("/api/generate", async (req, res) => {
     places.eats = dietaryEats(places.eats, inp);
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
     const pk = packing(inp, weather, place, nights, domestic);
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,

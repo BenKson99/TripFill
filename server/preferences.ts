@@ -23,7 +23,9 @@ export function preferredHighlights(hl: Highlight[], inp: TripInput): Highlight[
 export function walkingNotes(days: ItinDay[], inp: TripInput) {
   if (normalizePreferences(inp).walkingTolerance !== "low") return;
   days.forEach((d, i) => {
-    if (i === 0) d.afternoon = "Check in; rest or take a short optional outing using local transport";
+    if (i === 0) {
+      if (!/^Drive day/i.test(d.morning || "")) d.afternoon = "Check in; rest or take a short optional outing using local transport";
+    }
     else if (i < days.length - 1) { d.afternoon = "Long lunch & rest; use transport between stops"; if (/walk|hike|ski|climb/i.test(d.morning)) d.morning = "Optional short nearby stop — confirm access with the venue"; }
     d.notes = [d.notes?.includes("Limited walking:") ? "" : d.notes, "Limited walking: fewer stops; step-free access, gradients and distances not verified. Confirm access before booking."].filter(Boolean).join(" · ");
   });

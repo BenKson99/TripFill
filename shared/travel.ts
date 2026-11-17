@@ -1,7 +1,9 @@
 /** Trip travel mode (flying vs driving). Labels stay client- and server-safe: no extra API calls. */
+import { formatDistance, formatHoursMinutes, type DistanceUnit } from "./distance.js";
+
 export const TRAVEL_MODES = ["flying", "driving"] as const;
 export type TravelMode = typeof TRAVEL_MODES[number];
-/** Old plans without a saved choice: drive when the home–destination great-circle is under this many km. */
+/** Old plans without a saved choice: drive when the home–destination distance is under this many km. */
 export const DRIVE_DEFAULT_KM = 300;
 
 export const isTravelMode = (v: unknown): v is TravelMode => v === "flying" || v === "driving";
@@ -14,14 +16,53 @@ export function resolveTravelMode(input?: { travelMode?: unknown } | TravelMode 
 }
 
 const hm = (h: number) => { const H = Math.floor(h), M = Math.round((h - H) * 60 / 5) * 5; return M === 60 ? `${H + 1}h` : M ? (H ? `${H}h ${M}m` : `${M}m`) : `${H}h`; };
-const xb = "; straight-line distance ÷ 80 km/h, not road-routed; roads/borders can take much longer";
 
-/** Flying wording is unchanged from v1.11. Driving always uses an approximate, unrouted drive time. */
-export function travelTimeLabel(km: number, mode: TravelMode): { flightHours: number | null; flightLabel: string } {
-  if (mode === "driving") return { flightHours: km / 80, flightLabel: `~${hm(km / 80)} drive (approx., ${km.toLocaleString("en-US")} km great-circle, not a road route)${xb}` };
-  if (km < 300) return { flightHours: null, flightLabel: `${km} km — closer by road or rail (~${hm(km / 80)} drive${xb})` };
+export type RoadHint = { roadMin?: number; roadKm?: number; roadSrc?: "osrm" | "estimate"; domestic?: boolean };
+
+function driveAdvice(hours: number, domestic: boolean, routed: boolean): string {
+  let s = "";
+  if (hours >= 10) s = " — plan stops (and maybe a night on the way)";
+  else if (hours >= 6) s = " — plan stops along the way";
+  else if (hours >= 3) s = " — plan a couple of breaks";
+  const estimate = routed ? "" : " This is a rough estimate, not a turn-by-turn route.";
+  const border = domestic ? "" : " Crossing a border can take longer.";
+  return s + estimate + border;
+}
+
+/** Kid-friendly travel card. Distances default to km; pass `unit` to show miles. */
+export function travelTimeLabel(km: number, mode: TravelMode, hint?: RoadHint, unit: DistanceUnit = "km"): { flightHours: number | null; flightLabel: string } {
+  const dist = (n: number) => formatDistance(n, unit);
+  if (mode === "driving") {
+    const routed = hint?.roadSrc === "osrm" && hint.roadMin != null;
+    const minutes = routed ? hint.roadMin! : (hint?.roadMin ?? (km / 80) * 60);
+    const hours = minutes / 60;
+    const roadKm = hint?.roadKm ?? km;
+    const distBit = routed
+      ? `About ${dist(roadKm)} by road (traffic not included).`
+      : `About ${dist(roadKm)} as the crow flies.`;
+    return {
+      flightHours: hours,
+      flightLabel: `About ${formatHoursMinutes(minutes)} of driving${driveAdvice(hours, hint?.domestic !== false, routed)} ${distBit}`.replace(/\s+/g, " ").trim(),
+    };
+  }
+  if (km < 300) {
+    return { flightHours: null, flightLabel: `${dist(km)} — usually quicker by road or rail (about ${formatHoursMinutes((km / 80) * 60)} of driving).` };
+  }
   const flightHours = 0.5 + (km * 1.05) / 800;
-  return { flightHours, flightLabel: `~${hm(flightHours)} nonstop flight (approx., ${km.toLocaleString("en-US")} km great-circle)${km < 700 ? `; or ~${hm(km / 80)} by road (straight-line ÷ 80 km/h, not routed)` : ""}` };
+  const road = km < 700 ? ` Or about ${formatHoursMinutes((km / 80) * 60)} by road.` : "";
+  return { flightHours, flightLabel: `About ${hm(flightHours)} nonstop flight (about ${dist(km)}).${road}` };
+}
+
+/** Rebuild a saved trip's travel card in the user's distance unit. */
+export function formatTripTravel(trip: { distanceKm?: number; driveMin?: number; driveKm?: number; driveSrc?: string; domestic?: boolean; flightLabel?: string }, mode: TravelMode, unit: DistanceUnit): string {
+  const km = trip.distanceKm ?? 0;
+  const hint: RoadHint = {
+    roadMin: trip.driveMin,
+    roadKm: trip.driveKm,
+    roadSrc: trip.driveSrc === "osrm" || trip.driveSrc === "estimate" ? trip.driveSrc : undefined,
+    domestic: trip.domestic,
+  };
+  return travelTimeLabel(km, mode, hint, unit).flightLabel;
 }
 
 export const DEPART_FLY = "Last souvenir/coffee stop, then head to the airport/station";

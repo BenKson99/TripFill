@@ -1,5 +1,6 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
+import { isGrownUpPackingItem } from "./family.js";
 import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities, suitableActivities } from "./activities.js";
 import { precipKind } from "./precip.js";
 export const BAGS = ["unassigned", "personal", "carry-on", "checked", "day-bag", "car", "cooler"] as const;
@@ -23,7 +24,7 @@ export const PROFILES = ["man", "woman", "girl", "boy", "infant"] as const;
 export type Profile = typeof PROFILES[number];
 export const PROFILE_LABELS: Record<Profile, string> = { man: "Man", woman: "Woman", girl: "Girl", boy: "Boy", infant: "Infant" };
 /** profile is optional and user-chosen; never inferred from names. Legacy `child: true` (1.9.0) is kept for compatibility. */
-export interface PackingMember { id: string; name: string; child?: boolean; profile?: Profile }
+export interface PackingMember { id: string; name: string; child?: boolean; profile?: Profile; age?: number }
 export const isChildProfile = (p?: string) => p === "girl" || p === "boy" || p === "infant";
 export const isChildMember = (m: PackingMember) => m.profile ? isChildProfile(m.profile) : m.child === true;
 export type MemberKind = "adult" | "child" | "infant";
@@ -38,7 +39,7 @@ export interface PackingSettings {
   members: PackingMember[];
 }
 export interface PackingItem {
-  id: string; item: string; quantity: number; reason: string; checked: boolean; bag: Bag;
+  id: string; item: string; quantity: number; reason: string; checked: boolean; bag: Bag; grownUp?: boolean;
   essential: boolean; lastMinute: boolean; skipped: boolean; edited: boolean; suggestionId?: string;
   owner: string; stage: Stage;
 }
@@ -85,7 +86,7 @@ function isDismissed(list: PackingList, next: PackingItem) {
   ];
   return keys.some(k => list.dismissed.includes(k));
 }
-export const quantity = (n: number) => Math.max(1, Math.min(99, Math.round(Number(n) || 1)));
+export const quantity = (n: number) => Math.max(1, Math.min(999, Math.round(Number(n) || 1)));
 export const packingItems = (p: PackingList) => p.groups.flatMap(g => g.items);
 export const packingProgress = (items: PackingItem[]) => { const eligible = items.filter(i => !i.skipped); const packed = eligible.filter(i => i.checked || i.stage === "packed").length; return { total: eligible.length, packed, percent: eligible.length ? Math.round(packed / eligible.length * 100) : 0 }; };
 export function filterPacking(items: PackingItem[], search = "", status = "all", bag = "all", owner = "all") {
@@ -133,6 +134,7 @@ export function setAllTravelerTypes(members: PackingMember[], profile: (typeof P
     } else if (m.child) {
       next.child = true;
     }
+    if ((next.child || isChildProfile(next.profile as any)) && Number.isInteger(m.age) && m.age! >= 0 && m.age! <= 21) next.age = m.age;
     return next;
   });
 }
@@ -143,7 +145,7 @@ export function packingMembers(raw: any = {}, travelerCount?: number): PackingMe
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    if (found) return { id, name: (found.name.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found.profile as string) ? { profile: found.profile } : {}) };
+    if (found) return { id, name: (found.name.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found.profile as string) ? { profile: found.profile } : {}), ...(Number.isInteger(found.age) && found.age! >= 0 && found.age! <= 21 ? { age: found.age } : {}) };
     return { id, name: `Traveler ${i + 1}`, ...(inherit ? { profile: inherit, ...(isChildProfile(inherit) ? { child: true } : {}) } : {}) };
   });
 }
@@ -210,7 +212,7 @@ export function migratePacking(raw: any): PackingList {
 }
 /** Reject malformed new fields rather than quietly converting malicious/invalid imports. */
 export function validatePacking(raw: any) {
-  const fail = () => { throw new Error("Invalid packing data. Use a complete TripFill export (quantities 1–99, valid bag and settings)."); };
+  const fail = () => { throw new Error("Invalid packing data. Use a complete TripFill export (quantities 1–999, valid bag and settings)."); };
   if (raw.modelVersion !== undefined && raw.modelVersion !== 2) fail();
   if (raw.settings !== undefined) {
     const s = raw.settings; if (!s || !["all", "carry-on"].includes(s.luggage) || !(s.laundryEvery === null || Number.isInteger(s.laundryEvery) && s.laundryEvery >= 1 && s.laundryEvery <= 30)) fail();
@@ -218,14 +220,14 @@ export function validatePacking(raw: any) {
     if (s.rewearBottomsEvery !== undefined && !(Number.isInteger(s.rewearBottomsEvery) && s.rewearBottomsEvery >= 1 && s.rewearBottomsEvery <= 7)) fail();
     if (s.includeSpares !== undefined && typeof s.includeSpares !== "boolean") fail();
     if (s.activityKits !== undefined && (!Array.isArray(s.activityKits) || s.activityKits.length > 20 || s.activityKits.some((k: any) => !(ACTIVITY_KITS as readonly string[]).includes(k)))) fail();
-    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean" || m.profile !== undefined && !(PROFILES as readonly string[]).includes(m.profile)))) fail();
+    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean" || m.profile !== undefined && !(PROFILES as readonly string[]).includes(m.profile) || m.age !== undefined && !(Number.isInteger(m.age) && m.age >= 0 && m.age <= 21)))) fail();
   }
   if (raw.modelVersion === 2 && !raw.settings) fail();
   const checkItem = (i: any) => {
     if (!i || typeof i.id !== "string" || typeof i.item !== "string" || typeof i.checked !== "boolean") fail();
-    if (i.quantity !== undefined && (!Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 99)) fail();
+    if (i.quantity !== undefined && (!Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 999)) fail();
     if (i.bag !== undefined && !BAGS.includes(i.bag)) fail();
-    for (const k of ["essential", "lastMinute", "skipped", "edited"]) if (i[k] !== undefined && typeof i[k] !== "boolean") fail();
+    for (const k of ["essential", "lastMinute", "skipped", "edited", "grownUp"]) if (i[k] !== undefined && typeof i[k] !== "boolean") fail();
     if (i.suggestionId !== undefined && (typeof i.suggestionId !== "string" || !i.suggestionId.startsWith("suggest-"))) fail();
     if (i.reason !== undefined && typeof i.reason !== "string") fail();
     if (i.owner !== undefined && (typeof i.owner !== "string" || (i.owner !== SHARED && !/^traveler-\d+$/.test(i.owner)))) fail();
@@ -283,7 +285,8 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
     let g = groups.find(g => g.group === group); if (!g) { g = { group, items: [] }; groups.push(g); }
     const next: PackingItem = {
       id, suggestionId: id, item, reason, quantity: quantity(qty), checked: false, skipped: false,
-      bag: "unassigned", essential: false, lastMinute: false, edited: false, owner, stage: "ready", ...opts,
+      bag: "unassigned", essential: false, lastMinute: false, edited: false, owner, stage: "ready",
+      grownUp: isGrownUpPackingItem(item), ...opts,
     };
     next.bag = mapBag(next.bag);
     next.checked = !!next.checked;
@@ -366,14 +369,27 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
     if (members.some(m => memberKind(m) !== "adult")) add(A, "Car entertainment (playlists, games, chargers)", "For the journey; tailor to the children on this trip", 1, { bag: "day-bag" });
   }
   // Infant basics (editable defaults): no assumption about formula vs breastfeeding or medical needs.
-  const infantDays = Math.min(cycle, 14);
-  each(C, "Baby outfits / bodysuits", `${clothingNote} · about two per day for ${infantDays} day(s) for changes; capped at 14 — adjust to your baby`, Math.min(14, infantDays * 2), {}, "infants");
+  const infantDays = Math.min(days, 14);
+  each(C, "Baby outfits / bodysuits (~2 a day)", `${clothingNote} · about two per day for ${infantDays} day(s) for changes; capped at 14 — adjust to your baby`, Math.min(14, infantDays * 2), {}, "infants");
   each(C, "Baby sleepwear / sleep sack", "Familiar sleep setup helps; check accommodation cot/crib", 2, {}, "infants");
-  each(H, "Diapers / nappies", "Enough for travel days plus a buffer; buy more locally if available", 1, { essential: true, lastMinute: true }, "infants");
-  each(H, "Wipes, changing mat & diaper cream", "Changing basics for transit and outings", 1, { essential: true, bag: "personal" }, "infants");
+  const diapersPerDay = 8;
+  const diaperQty = diapersPerDay * infantDays;
+  each(H, `Diapers / nappies (~${diapersPerDay} a day × ${infantDays} days ≈ ${diaperQty} diapers)`, "Enough for travel days plus a buffer; buy more locally if available", diaperQty, { essential: true, lastMinute: true, grownUp: true }, "infants");
+  const wipePacks = Math.max(1, Math.ceil(infantDays / 4));
+  each(H, `Wipes, changing mat & diaper cream (~1 pack every 4 days × ${infantDays} days ≈ ${wipePacks} pack${wipePacks === 1 ? "" : "s"})`, "Changing basics for transit and outings", wipePacks, { essential: true, bag: "personal", grownUp: true }, "infants");
   each(H, "Feeding supplies (as you feed)", driving ? "Whatever this baby uses — e.g. bottles, pump, formula or food. Pack what you need between stops" : "Whatever this baby uses — e.g. bottles, pump, formula or food. Check carrier/security rules for liquids", 1, { essential: true, bag: "personal", lastMinute: true }, "infants");
   each(H, "Bibs & burp cloths", "Feeding and spills", 3, {}, "infants");
   each(X, "Baby carrier or travel stroller", driving ? "Check car-seat laws, boot space and local terrain; a carrier helps at stops" : "Check airline gate-check and local terrain", 1, {}, "infants");
+  const themeParkTrip = /disney|universal|theme park|theme parks|legoland|seaworld|six flags|islands of adventure|magic kingdom|epcot/i.test(`${input.interests || ""} ${input.purpose || ""} ${(input.presets || []).join(" ")} ${(input.activities || []).join(" ")}`);
+  const under5 = members.some(m => memberKind(m) !== "adult" && memberKind(m) !== "infant" && Number.isInteger(m.age) && (m.age as number) < 5);
+  const toddlers = members.some(m => memberKind(m) !== "infant" && Number.isInteger(m.age) && (m.age as number) < 3);
+  if (themeParkTrip && under5) {
+    add(X, "Travel stroller (for little ones under 5)", "Theme-park days are a lot of walking — a stroller helps with naps and tired legs", 1, { grownUp: true });
+  }
+  if (toddlers) {
+    add(C, "Toddler outfits (~2 a day)", "Little ones under 3 go through extra changes; about two outfits a day", Math.min(14, infantDays * 2));
+  }
+
   each(X, "Comfort item / small toys", "Familiar items for transit and sleep", 1, { lastMinute: true }, "infants");
   each(X, "Entertainment / comfort item for transit", "Books, games or a favourite item; tailor to this child", 1, {}, "children");
   if (input.walkingTolerance === "low") each(X, "Usual mobility aids & accessibility notes", "Adjust to your own needs; verify route access, not medical advice", 1, {}, "all");
@@ -446,7 +462,7 @@ export function makeEssentials(list: PackingList) {
 export function parseEssentials(text: string): ReturnType<typeof makeEssentials> {
   if (text.length > 100000) throw new Error("Essentials template too large.");
   const t = JSON.parse(text);
-  if (t?.version !== 1 || !Array.isArray(t.items) || t.items.length > 200 || t.items.some((i: any) => !i || typeof i.item !== "string" || !i.item.trim() || i.item.length > 300 || typeof i.group !== "string" || !i.group.trim() || i.group.length > 100 || !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 99 || !BAGS.includes(i.bag) || i.essential !== true || typeof i.lastMinute !== "boolean")) throw new Error("Personal essentials could not be read. Save a new template to replace it.");
+  if (t?.version !== 1 || !Array.isArray(t.items) || t.items.length > 200 || t.items.some((i: any) => !i || typeof i.item !== "string" || !i.item.trim() || i.item.length > 300 || typeof i.group !== "string" || !i.group.trim() || i.group.length > 100 || !Number.isInteger(i.quantity) || i.quantity < 1 || i.quantity > 999 || !BAGS.includes(i.bag) || i.essential !== true || typeof i.lastMinute !== "boolean")) throw new Error("Personal essentials could not be read. Save a new template to replace it.");
   return { version: 1, items: t.items.map((i: any) => ({ item: i.item, quantity: i.quantity, group: i.group, bag: i.bag, essential: true, lastMinute: i.lastMinute })) };
 }
 export function applyEssentials(list: PackingList, template: ReturnType<typeof makeEssentials>): PackingList {

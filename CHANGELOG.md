@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.15.0 — Kid-friendliness batch 1
+
+- Drive times use an OSRM road route from home to the destination, with a plain-language card such as “About 17 hours of driving — plan stops (and maybe a night on the way)”. Borders are mentioned only on international trips. Miles are the default for US and UK trips, with a Distance unit setting.
+- Long drives change Day 1: over about 6 hours it becomes a drive-and-rest day (breaks every 2 hours, no neighbourhood walk). Over about 10 hours, an overnight stop is suggested around the midpoint when a town can be named cheaply.
+- Domestic trips no longer suggest getting local currency or a SIM. With kids, each mid-trip day has one major theme park or attraction, with a pool or hotel rest in the afternoon. Interests that mention Disney prefer Disney parks over competitors. Nearby parks (~30 min) are not labelled day trips.
+- Jargon such as “great-circle” and “OSRM road route; no live traffic” is gone from the UI. Holiday dates (24/25/31 Dec, 1 Jan, and US Thanksgiving) get a short “check opening hours & book ahead” note.
+- Diapers, wipes and baby outfits show the assumption in the name and scale with days and infants. Optional ages on Girl/Boy/Infant travelers unlock toddler items, a stroller suggestion under 5 at theme parks, and height-limit notes. Adult-only packing and prep rows carry a friendly “Grown-up task” badge, and a dismissible “show this plan to a grown-up” note appears when kids are on the trip.
+- “Wrong place?” alternatives stay hidden behind a link. Typical-weather cards are labelled “Typical weather (not a forecast yet)” with muted icons, and the wet-days summary matches daily percentages (days at 30% or more). Itinerary lines wrap on narrow screens, and a “Day by day ↓” jump sits near the top of the plan.
+
 ## 1.14.5 — Named beach when one is available
 
 - The beach afternoon no longer stays as generic “Beach time at a nearby beach” when a real beach is already on that morning (or only appears as a rain backup or leftover highlight). The beach slot claims the named venue and the weaker mention is cleared. Museum, tasting and nightlife slots get the same claim-and-release treatment.

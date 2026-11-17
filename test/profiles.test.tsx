@@ -49,7 +49,7 @@ test("new mixed five-profile family: every traveler gets a real list, shared onc
   const p = family5(), l = p.packing as PackingList;
   for (const m of kids5) assert.ok(own(l, m.id).length >= 8, m.name);
   const baby = own(l, "traveler-5").map(i => i.item);
-  for (const x of ["Diapers / nappies", "Wipes, changing mat & diaper cream", "Feeding supplies (as you feed)", "Baby outfits / bodysuits", "Passport / accepted travel ID & entry documents"]) assert.ok(baby.includes(x), x);
+  for (const x of ["Diapers / nappies", "Wipes, changing mat & diaper cream", "Feeding supplies (as you feed)", "Baby outfits / bodysuits", "Passport / accepted travel ID & entry documents"]) assert.ok(baby.some(n => n === x || n.startsWith(x)), x);
   for (const x of ["Tops", "Bottoms", "Payment card + backup / local cash", "Phone & charger", "Deodorant & personal care", "Comfortable walking shoes"]) assert.ok(!baby.includes(x), x);
   const feed = own(l, "traveler-5").find(i => i.item.startsWith("Feeding"))!.reason; assert.match(feed, /bottles, pump, formula or food/);
   for (const k of ["traveler-3", "traveler-4"]) { const c = own(l, k).map(i => i.item); assert.ok(c.includes("Tops") && c.includes("Toothbrush & toothpaste") && c.includes("Entertainment / comfort item for transit")); assert.ok(!c.includes("Payment card + backup / local cash")); }
@@ -76,7 +76,7 @@ test("setting a profile after generation: Refresh adds profile items, keeps prog
   assert.ok(!own(l, "traveler-2").some(i => i.item.startsWith("Diapers")), "nothing changes until Refresh");
   const r = mergeSuggestions(l, suggestPacking({ ...p, packing: l }, l.settings));
   const t2 = own(r, "traveler-2");
-  assert.ok(t2.some(i => i.item === "Diapers / nappies"));
+  assert.ok(t2.some(i => i.item.startsWith("Diapers / nappies")));
   assert.ok(t2.find(i => i.id === top.id)!.checked, "check kept"); assert.equal(t2.find(i => i.id === custom.id)!.item, "Silk PJs");
   assert.ok(own(l, "traveler-2").every(o => t2.some(i => i.id === o.id)), "nothing deleted");
   const again = mergeSuggestions(r, suggestPacking({ ...p, packing: r }, r.settings));

@@ -5,6 +5,7 @@ import { driveLabel } from "./plan.js";
 import { isBroadRegion } from "../shared/region.js";
 import { cleanVenueName, isAdminOrReligiousOrg, isRestDayFriendly, isSeriousPeak, isSkiSector } from "../shared/activities.js";
 import { placesUsedInDays } from "./itineraryPlaces.js";
+import { farDayTrip, tripHasKids } from "../shared/family.js";
 
 export const PRESETS = ["beach", "hiking", "ski", "city", "business", "kids", "roadtrip"] as const;
 export type Preset = typeof PRESETS[number];
@@ -34,7 +35,7 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
   const labelRest = (h: { name: string; dayTrip?: boolean; driveMin?: number; driveSrc?: string; type?: string; description?: string }) => {
     if (isSeriousPeak(h)) return `views of ${h.name}`;
     if (/gornergrat/i.test(h.name)) return `${h.name} railway ride`;
-    return (h as any).dayTrip ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
+    return farDayTrip(h as any) ? `🚐 Day trip: ${h.name} (${driveLabel(h)} each way)` : h.name;
   };
   const restDay = (sector?: string) => {
     const skip = (h: { name: string; type?: string; description?: string }) => {
@@ -100,5 +101,11 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
     days[0].afternoon = `Pick up car; ${days[0].afternoon}`;
   }
   if (ps.includes("city") && mid[0] && !used.has(mid[0]) && !ps.includes("business") && !ps.includes("ski")) { mid[0].morning = `🏙 Free walking tour to get oriented, then ${mid[0].morning}`; tag(mid[0], "city"); }
-  if (ps.includes("kids")) for (const d of mid) { d.afternoon = `${d.afternoon.split(" → ")[0]} · 🧒 rest / playground break`; d.evening = d.evening.replace("Dinner:", "Early dinner:"); tag(d, "with kids — one main sight per day"); }
+  if (ps.includes("kids") || tripHasKids({ presets: ps })) {
+    // Full mid-day pacing (one major attraction, pool/rest afternoon) happens in paceItineraryForKids after activities run.
+    for (const d of mid) {
+      if (d.evening) d.evening = d.evening.replace("Dinner:", "Early dinner:");
+      tag(d, "with kids — one main attraction per day");
+    }
+  }
 }
