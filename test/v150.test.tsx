@@ -223,15 +223,18 @@ test("v1.15: Wrong place? alternatives stay hidden until the link is opened", ()
   assert.ok(!html.includes("South Africa"), html);
 });
 
-test("v1.15: typical weather wet-day summary matches daily percentages at the 30% display threshold", () => {
+test("v1.15: typical weather wet-day summary uses the same rainy-day definition as the stats line", () => {
   const days = wx().days;
   assert.equal(days.filter(maybeWetDay).length, 2);
-  assert.equal(wetDaysSummary(days).label, "a couple of days might be wet");
-  assert.equal(wetDaysSummary(days).count, 2);
+  assert.equal(wetDaysSummary(days).label, "usually dry");
+  assert.equal(wetDaysSummary(days).count, 0);
   assert.ok(!maybeWetDay({ precipProb: 10, typical: true }));
   assert.ok(maybeWetDay({ precipProb: 30, typical: true }));
-  // Packing still uses the stricter rainy threshold — 33% typical days are not "rainy".
+  // Display and packing share isRainy — 33% typical days are not "rainy".
   assert.equal(wx().stats.rainyDays, 0);
+  assert.equal(wetDaysSummary(days).label.toLowerCase().includes("wet") ? 1 : 0, 0);
+  const wet = [{ precipProb: 60, precipMm: 4, typical: false, summary: "Rain" }];
+  assert.equal(wetDaysSummary(wet).label, "Wet days ~1");
 });
 
 test("v1.15: itinerary wrapping class is used so long lines are not clipped", () => {

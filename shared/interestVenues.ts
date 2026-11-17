@@ -3,7 +3,7 @@ import { isFullOrHalfDayAttraction, isMajorAttraction } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
-export type InterestSlot = { name: string; kind?: "major" | "light" | "evening" };
+export type InterestSlot = { name: string; kind?: "major" | "light" | "evening"; nearby?: boolean; far?: boolean; note?: string };
 
 type Entry = { interest: RegExp; place: RegExp; slots: InterestSlot[] };
 
@@ -73,6 +73,59 @@ const ENTRIES: Entry[] = [
     { name: "Watch wildlife from a distance (never approach or feed animals)", kind: "light" },
     { name: "Junior Ranger program at the visitor center", kind: "major" },
   ]},
+  { interest: /pyramids?|mayan\s*ruins?|maya\s*ruins?|mayan\s*sites?|chich[eé]n\s*itz[aá]|tulum/i, place: /canc[uú]n|cancun|riviera maya|playa del carmen|yucat[aá]n|quintana roo|cozumel|isla mujeres|^MX$|mexico/i, slots: [
+    { name: "Zona Arqueológica El Rey (Hotel Zone)", kind: "major", nearby: true },
+    { name: "El Meco archaeological site", kind: "major", nearby: true },
+    { name: "Chichén Itzá", kind: "major", far: true, note: "Long day with a baby — go early, or pick closer El Rey ruins in the Hotel Zone" },
+    { name: "Tulum archaeological zone", kind: "major", far: true },
+  ]},
+  { interest: /snorkel/i, place: /canc[uú]n|cancun|riviera maya|playa del carmen|isla mujeres|cozumel|puerto morelos|^MX$|mexico/i, slots: [
+    { name: "Snorkel the reef at Puerto Morelos (calm water, book a guide)", kind: "major" },
+    { name: "Isla Mujeres / Playa Norte — calm snorkeling for little kids", kind: "light" },
+  ]},
+  { interest: /ice\s*cream|helado|gelato/i, place: /.*/, slots: [
+    { name: "Ice cream break", kind: "light" },
+  ]},
+  { interest: /snorkel|beach|swimming/i, place: /honolulu|waikiki|oahu|oʻahu|hawaii/i, slots: [
+    { name: "Hanauma Bay Nature Preserve (book ahead — calm snorkeling)", kind: "major" },
+    { name: "Waikiki Beach", kind: "light" },
+  ]},
+  { interest: /snorkel/i, place: /\bmaui\b/i, slots: [
+    { name: "Snorkel at Molokini or Turtle Town (book a calm-water trip)", kind: "major" },
+  ]},
+  { interest: /snorkel|beach/i, place: /big island|kailua-kona|hawaii island/i, slots: [
+    { name: "Snorkel at Kahaluu Beach Park (calm, family-friendly)", kind: "light" },
+  ]},
+  { interest: /beach|swimming/i, place: /miami\b/i, slots: [
+    { name: "South Beach (swim where lifeguards are)", kind: "light" },
+  ]},
+  { interest: /beach|swimming/i, place: /clearwater/i, slots: [
+    { name: "Clearwater Beach", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /key west|florida keys/i, slots: [
+    { name: "Snorkel at Fort Zachary Taylor or a calm reef trip (book ahead)", kind: "major" },
+  ]},
+  { interest: /snorkel|beach/i, place: /siesta key|sarasota/i, slots: [
+    { name: "Siesta Key Beach", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /nassau|bahamas|paradise island/i, slots: [
+    { name: "Snorkel a calm reef or Cabbage Beach (check flags)", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /montego|negril|jamaica/i, slots: [
+    { name: "Doctor's Cave Beach — calm swimming", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /punta cana|bavaro|dominican/i, slots: [
+    { name: "Bávaro Beach — swim where lifeguards are", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /san juan|puerto rico/i, slots: [
+    { name: "Condado Beach or a calm reef snorkel (book a guide)", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /aruba/i, slots: [
+    { name: "Eagle Beach or Palm Beach — calm family swimming", kind: "light" },
+  ]},
+  { interest: /snorkel|beach/i, place: /barbados/i, slots: [
+    { name: "Carlisle Bay — calm family swimming and snorkeling", kind: "light" },
+  ]},
 ];
 
 function destBlob(dest: DestRef | string | undefined) {
@@ -86,7 +139,7 @@ export function interestPhrases(interests = ""): string[] {
 }
 
 /** Iconic venues that match this trip's free-text interests and destination. */
-export function curatedInterestVenues(interests: string, dest?: DestRef | string): InterestSlot[] {
+export function curatedInterestVenues(interests: string, dest?: DestRef | string, opts?: { youngChild?: boolean }): InterestSlot[] {
   const text = interests || "";
   const place = destBlob(dest);
   const out: InterestSlot[] = [];
@@ -100,7 +153,32 @@ export function curatedInterestVenues(interests: string, dest?: DestRef | string
       out.push(slot);
     }
   }
+  if (opts?.youngChild && out.some(s => s.nearby) && out.some(s => s.far)) {
+    // Prefer the closer site with little kids; keep far sites as optional notes, not scheduled days.
+    return out.filter(s => !s.far);
+  }
   return out;
+}
+
+/** Far iconic sites held back when a little child is on the trip. */
+export function optionalFarInterestNotes(interests: string, dest?: DestRef | string, youngChild = false): string[] {
+  if (!youngChild) return [];
+  const text = interests || "";
+  const place = destBlob(dest);
+  const notes: string[] = [];
+  const seen = new Set<string>();
+  for (const e of ENTRIES) {
+    if (!e.interest.test(text) || !e.place.test(place)) continue;
+    if (!e.slots.some(s => s.nearby) || !e.slots.some(s => s.far)) continue;
+    for (const slot of e.slots.filter(s => s.far)) {
+      const k = slot.name.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const baby = slot.note ? `. ${slot.note}` : "";
+      notes.push(`Optional: ${slot.name} — big day trip (ask a grown-up)${baby}`);
+    }
+  }
+  return notes;
 }
 
 /** Highlights whose names mention an interest phrase (e.g. "Harry Potter" in the title). */
@@ -145,8 +223,8 @@ export function namedCampground(highlights: { name?: string; type?: string; desc
   return h?.name ? `Camp at ${h.name}` : "Your campsite (a grown-up books it)";
 }
 
-function allInterestSlots(interests: string, dest: DestRef | string | undefined, highlights: { name?: string; type?: string; description?: string }[] = []): InterestSlot[] {
-  const curated = curatedInterestVenues(interests, dest);
+function allInterestSlots(interests: string, dest: DestRef | string | undefined, highlights: { name?: string; type?: string; description?: string }[] = [], opts?: { youngChild?: boolean }): InterestSlot[] {
+  const curated = curatedInterestVenues(interests, dest, opts);
   const keyword = keywordInterestHits(interests, highlights).map(h => ({ name: h.name || "", kind: "major" as const }));
   const out: InterestSlot[] = [];
   const seen = new Set<string>();
@@ -159,8 +237,8 @@ function allInterestSlots(interests: string, dest: DestRef | string | undefined,
   return out;
 }
 
-function interestQueue(interests: string, dest: DestRef | string | undefined, highlights: { name?: string; type?: string; description?: string }[] = [], days: { morning?: string; afternoon?: string; evening?: string }[] = []): InterestSlot[] {
-  return allInterestSlots(interests, dest, highlights).filter(s => !alreadyUsed(days, s.name));
+function interestQueue(interests: string, dest: DestRef | string | undefined, highlights: { name?: string; type?: string; description?: string }[] = [], days: { morning?: string; afternoon?: string; evening?: string }[] = [], opts?: { youngChild?: boolean }): InterestSlot[] {
+  return allInterestSlots(interests, dest, highlights, opts).filter(s => !alreadyUsed(days, s.name));
 }
 
 function isInterestSlotText(text: string | undefined, queueNames: string[]): boolean {
@@ -170,18 +248,25 @@ function isInterestSlotText(text: string | undefined, queueNames: string[]): boo
 }
 
 /** Put curated/keyword venues on the itinerary. Majors are guaranteed a mid-day slot. */
-export function applyInterestVenues<T extends { morning: string; afternoon: string; evening?: string; label?: string }>(
+export function applyInterestVenues<T extends { morning: string; afternoon: string; evening?: string; label?: string; notes?: string }>(
   days: T[],
   interests: string,
   dest: DestRef | string | undefined,
   highlights: { name?: string; type?: string; description?: string }[] = [],
   isTravel?: (d: T) => boolean,
+  opts?: { youngChild?: boolean },
 ): T[] {
   if (!days?.length) return days;
-  const protectedNames = allInterestSlots(interests, dest, highlights).map(s => s.name);
-  const queue = interestQueue(interests, dest, highlights, days);
+  const protectedNames = allInterestSlots(interests, dest, highlights, opts).map(s => s.name);
+  const queue = interestQueue(interests, dest, highlights, days, opts);
   const majors = queue.filter(s => s.kind !== "light" && s.kind !== "evening");
   const mid = days.filter(d => !isTravel?.(d));
+  const appendNote = (d: T, note?: string) => {
+    if (!note) return;
+    const cur = (d as { notes?: string }).notes || "";
+    if (cur.includes(note)) return;
+    (d as { notes?: string }).notes = cur ? `${cur} · ${note}` : note;
+  };
   // First fill empty/generic/bare mornings, then evict a non-interest morning so every major gets a day.
   // Never evict a morning that already holds an interest match (including one placed earlier in the pipeline).
   for (const preferGeneric of [true, false]) {
@@ -193,7 +278,12 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
       if (preferGeneric && !generic) continue;
       const next = majors.shift()!;
       d.morning = next.name;
+      appendNote(d, next.note);
     }
+  }
+  for (const note of optionalFarInterestNotes(interests, dest, !!opts?.youngChild)) {
+    const host = mid[0] || days[0];
+    if (host) appendNote(host, note);
   }
   const evenings = queue.filter(s => s.kind === "evening");
   for (const d of mid) {
@@ -223,11 +313,12 @@ export function applyInterestAddOns<T extends { morning: string; afternoon: stri
   dest: DestRef | string | undefined,
   highlights: { name?: string; type?: string; description?: string }[] = [],
   isTravel?: (d: T) => boolean,
-  opts: { maxAddOns?: number } = {},
+  opts: { maxAddOns?: number; youngChild?: boolean; iceCreamName?: string } = {},
 ): T[] {
   if (!days?.length) return days;
   const maxAddOns = opts.maxAddOns ?? 2;
-  const lights = interestQueue(interests, dest, highlights, []).filter(s => s.kind === "light");
+  const lights = interestQueue(interests, dest, highlights, [], opts).filter(s => s.kind === "light")
+    .map(s => s.name === "Ice cream break" && opts.iceCreamName ? { ...s, name: opts.iceCreamName } : s);
   const mid = days.filter(d => !isTravel?.(d));
   const addOnCount = (text?: string) => Math.max(0, (text || "").split(/\s*;\s*then\s+/i).filter(Boolean).length - (text ? 1 : 0));
   const heavyMorning = (text?: string) => /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|day hike|hike continues/i.test(text || "");
@@ -255,6 +346,74 @@ export function isVagueNearby(text?: string) {
 }
 
 
+
+/** Indoor or indoor-ish buildings that work as a rain backup (museums, visitor centers, Hopi House, studios). */
+export function isIndoorishBackup(h: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string }): boolean {
+  const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
+  if (h.setting === "outdoor") return false;
+  if (/\b(cinema|cinemark|cin[eé]polis|theatre|theater|teatro)\b/i.test(`${h.name || ""} ${h.type || ""}`)) return false;
+  if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
+  if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|plateau point|wildlife from a distance|stargazing|day hike|rim trail|easy walk|viewpoint|overlook/i.test(blob)) return false;
+  if (h.indoor || h.setting === "indoor") return true;
+  return /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house|kolb studio|verkamp|trading post|market hall/i.test(blob);
+}
+
+const GENERIC_RAIN_BACKUP = /café, museum or covered market|the visitor center or a nearby museum/i;
+
+export function rainBackupName(text?: string) {
+  return (text || "").replace(/^If it rains:\s*/i, "").replace(/^Rain likely — try\s*/i, "").replace(/^Mixed rain and snow — waterproof layers; indoor option:\s*/i, "").trim();
+}
+
+export function formatRainBackup(previous: string | undefined, name: string) {
+  const bak = previous || "";
+  if (/^If it rains/i.test(bak) || !bak) return `If it rains: ${name}`;
+  if (/^Rain likely/i.test(bak)) return `Rain likely — try ${name}`;
+  if (/^Mixed rain and snow/i.test(bak)) return `Mixed rain and snow — waterproof layers; indoor option: ${name}`;
+  return `If it rains: ${name}`;
+}
+
+/** Give each day a distinct named indoor backup when an alternative exists; never repeat Yavapai if Hopi House (etc.) is free. */
+export function assignUniqueRainBackups<T extends { morning?: string; afternoon?: string; evening?: string; rainyBackup?: string }>(
+  days: T[],
+  alternatives: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string }[] = [],
+  fallbackName?: string,
+): T[] {
+  const activityUsed = new Set<string>();
+  for (const d of days) {
+    const blob = `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`.toLowerCase();
+    for (const h of alternatives) if (h.name && blob.includes(h.name.toLowerCase())) activityUsed.add(h.name.toLowerCase());
+  }
+  const seen = new Set<string>();
+  const take = (d: T) => alternatives.find(h => {
+    if (!h.name || seen.has(h.name.toLowerCase()) || activityUsed.has(h.name.toLowerCase())) return false;
+    if (`${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(h.name.toLowerCase())) return false;
+    return isIndoorishBackup(h);
+  });
+  const GENERIC_LINE = "café, museum or covered market";
+  for (const d of days) {
+    const bak = d.rainyBackup || "";
+    if (!bak) continue;
+    const named = rainBackupName(bak);
+    const generic = !named || GENERIC_RAIN_BACKUP.test(named);
+    const repeat = !!(named && seen.has(named.toLowerCase()));
+    const sameDay = !!(named && `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(named.toLowerCase()));
+    if (!generic && !repeat && !sameDay) {
+      seen.add(named.toLowerCase());
+      continue;
+    }
+    const next = take(d);
+    const fallbackOk = fallbackName && !seen.has(fallbackName.toLowerCase()) && !activityUsed.has(fallbackName.toLowerCase());
+    const replacement = next?.name || (fallbackOk ? fallbackName : undefined) || ((repeat || generic || sameDay) ? GENERIC_LINE : named);
+    if (replacement && (generic || repeat || sameDay)) {
+      d.rainyBackup = formatRainBackup(bak, replacement);
+      if (!GENERIC_RAIN_BACKUP.test(replacement)) seen.add(replacement.toLowerCase());
+    } else if (!generic && named) {
+      seen.add(named.toLowerCase());
+    }
+  }
+  return days;
+}
+
 /** If a rain backup is now also a scheduled day slot, point the backup at another indoor place. */
 export function reassignUsedRainBackups<T extends { morning: string; afternoon: string; evening?: string; rainyBackup?: string }>(
   days: T[],
@@ -271,10 +430,7 @@ export function reassignUsedRainBackups<T extends { morning: string; afternoon: 
     usedBak.delete(named.toLowerCase());
     const next = alternatives.find(h => {
       if (!h.name || inSlots(h.name) || usedBak.has(h.name.toLowerCase())) return false;
-      if (h.setting === "outdoor" || h.indoor === false) return false;
-      if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
-      if (/wildlife from a distance|stargazing|phantom ranch|hike-?in|day hike|rim trail|easy walk/i.test(`${h.name || ""} ${h.type || ""} ${h.description || ""}`)) return false;
-      return /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(`${h.name} ${h.type || ""} ${h.description || ""}`);
+      return isIndoorishBackup(h);
     });
     const replacement = next?.name || fallbackName || "the visitor center or a nearby museum";
     d.rainyBackup = /^If it rains/i.test(bak) ? `If it rains: ${replacement}` : replacement;

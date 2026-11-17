@@ -20,6 +20,7 @@ import { buildMulti } from "./multi.js";
 import { presetsOf } from "./presets.js";
 import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
 import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
+import { tripAdviceNotes } from "../shared/travelAdvice.js";
 import { resolveActivities, syncActivityInput } from "../shared/activities.js";
 import { tripHasKids, hasChildUnder } from "../shared/family.js";
 import { curatedInterestVenues } from "../shared/interestVenues.js";
@@ -146,15 +147,15 @@ app.post("/api/generate", async (req, res) => {
     const nearCafes = (places.eats.cafes || []).filter((e: any) => isNearBase(e, { smallChild: youngDrive }) && !isOffParkBase(e?.name, place));
     if (nearCafes.length) places.eats.cafes = nearCafes;
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);
-    const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic), it);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name, places.eats); walkingNotes(it, inp);
+    const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic, home || facts?.home), it);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
       timeline: mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso),
-      activityNotes: activityNotes(inp, weather, place.name),
+      activityNotes: [...activityNotes(inp, weather, place.name), ...tripAdviceNotes({ input: inp, place, homeCC: facts?.home?.countryCode, domestic, members: (inp as any).members })],
       budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: friendlyError(e) }); }

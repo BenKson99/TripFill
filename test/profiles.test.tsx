@@ -91,7 +91,7 @@ test("settings UI: Traveler type select offers Man, Woman, Girl, Boy, Infant; re
   const p = family5();
   const html = renderToStaticMarkup(<PackingSettingsPanel plan={p} p={p.packing} readOnly={false} change={() => {}} setMessage={() => {}} />);
   const sel = html.slice(html.indexOf('aria-label="Traveler type for traveler 1"'), html.indexOf("</select>", html.indexOf('aria-label="Traveler type for traveler 1"')));
-  assert.deepEqual([...sel.matchAll(/<option value="([^"]*)"[^>]*>([^<]+)</g)].map(m => m[2]), ["Not set (general)", "Man", "Woman", "Girl", "Boy", "Infant"]);
+  assert.deepEqual([...sel.matchAll(/<option value="([^"]*)"[^>]*>([^<]+)</g)].map(m => m[2]), ["Not set (general)", "Man", "Woman", "Grandparent", "Girl", "Boy", "Infant"]);
   assert.match(sel, /value="man" selected=""/);
   const ro = renderToStaticMarkup(<PackingSettingsPanel plan={p} p={p.packing} readOnly change={() => { throw new Error("no"); }} setMessage={() => {}} />);
   assert.ok(ro.includes('<fieldset disabled="" class="packing-edit">'));

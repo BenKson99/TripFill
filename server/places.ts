@@ -1,4 +1,5 @@
 import { getJSON, UA, cached } from "./fetchy.js";
+import { filterHighlightList, preferFamilySights, isJunkEat, isNamelessFoodStall } from "../shared/junkVenues.js";
 import type { Place } from "./weather.js";
 import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
@@ -270,7 +271,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v18|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
+  return cached(`places|v19|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -333,5 +334,9 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
   { const seenN = new Set<string>(); highlights = highlights.filter(h => { const k = nm(h.name); if (seenN.has(k)) return false; seenN.add(k); return true; }); }
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));
+  highlights = preferFamilySights(filterHighlightList(highlights));
+  indoorExtra = filterHighlightList(indoorExtra);
+  if (eats?.restaurants) eats.restaurants = eats.restaurants.filter(e => !isJunkEat(e) && !isNamelessFoodStall(e));
+  if (eats?.cafes) eats.cafes = eats.cafes.filter(e => !isJunkEat(e) && !isNamelessFoodStall(e));
   return { indoorExtra, highlights: highlights.slice(0, Math.max(12, opts.want || 0)), eats, sources, guideUrl };
 }

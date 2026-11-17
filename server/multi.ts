@@ -62,7 +62,7 @@ export async function buildMulti(inp: TripInput, first: Place, extra: LegIn[], h
     const rot = pl.eats.restaurants.length ? prior % pl.eats.restaurants.length : 0;
     const R0 = pl.eats.restaurants; const legFood = [...R0.slice(rot), ...R0.slice(0, rot)];
     const hopFacts = home ? tripFacts(home, l.place, l.start, travelMode) : null;
-    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra, { domestic: !!home && home.countryCode === l.place.countryCode, travelMode, countryCode: l.place.countryCode, flightHours: hopFacts?.flightHours, tzDiffHours: hopFacts?.tzDiffHours, destName: l.place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(pl.highlights, inp), ps, l.place.name); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, pl.highlights, legFood, pl.indoorExtra, { domestic: !!home && home.countryCode === l.place.countryCode, travelMode, countryCode: l.place.countryCode, flightHours: hopFacts?.flightHours, tzDiffHours: hopFacts?.tzDiffHours, destName: l.place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(pl.highlights, inp), ps, l.place.name, pl.eats); walkingNotes(it, inp);
     const fromPrev = k ? tripFacts(legs[k - 1].place, l.place, l.start, travelMode) : null;
     // Leg 1 carries the round trip from home (open-jaw ≈ round trip); later legs carry the one-way hop from the previous city
     const hop = k ? (fromPrev ? { km: fromPrev.distanceKm, roundTrip: false, from: legs[k - 1].place.name } : undefined) : (home ? { km: tripFacts(home, l.place, l.start, travelMode).distanceKm, roundTrip: true, from: home.name } : undefined);

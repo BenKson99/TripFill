@@ -31,11 +31,17 @@ export function namesInText(text: string, names: string[]) {
   return found;
 }
 
+/** Every highlight name mentioned in text, including shorter names inside a longer title (e.g. Mather Point in a Rim Trail walk). For scheduling uniqueness only — do not use this to hole-punch titles. */
+export function mentionedPlaceNames(text: string, names: string[]) {
+  const t = (text || "").toLowerCase();
+  return names.filter(n => n && n.length >= 3 && t.includes(n.toLowerCase()));
+}
+
 export function placesUsedInDays(days: ItinDay[], hl: { name: string }[], placeName?: string) {
   const names = itineraryPlaceNames(hl);
   const used = new Set<string>();
   for (const d of days) {
-    for (const n of namesInText(`${d.morning} ${d.afternoon} ${d.evening} ${d.rainyBackup || ""}`, names)) {
+    for (const n of mentionedPlaceNames(`${d.morning} ${d.afternoon} ${d.evening} ${d.rainyBackup || ""}`, names)) {
       if (placeName && n.toLowerCase() === placeName.toLowerCase()) continue;
       used.add(n);
     }

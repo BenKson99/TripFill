@@ -12,7 +12,7 @@ export function isMajorAttraction(h: { name?: string; type?: string; description
   return MAJOR_PARK.test(blob);
 }
 
-const FULL_OR_HALF_DAY = /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|universal studios|magic kingdom|epcot|animal kingdom|hollywood studios|disneyland|disney\s*world|seaworld|busch gardens|islands of adventure|volcano bay|aquatica|safari park/i;
+const FULL_OR_HALF_DAY = /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|universal studios|magic kingdom|epcot|animal kingdom|hollywood studios|disneyland|disney\s*world|seaworld|busch gardens|islands of adventure|volcano bay|aquatica|safari park|chich[eé]n\s*itz[aá]|tulum archaeological/i;
 const BIG_SIGHT = /tower of london|buckingham palace|kensington palace|palace of whitehall|british museum|natural history museum|science museum|victoria and albert|\bv&a\b|national gallery|tate modern|tate britain|westminster abbey|st paul'?s cathedral|madame tussauds|london eye|the shard|colosseum|eiffel|louvre|notre-?dame|statue of liberty|met(?:ropolitan)? museum|smithsonian|\bcastles?\b|\bpalaces?\b|cathedral|acropolis/i;
 const LIGHT_ACTIVITY = /platform\s*9|double-?decker|hop-?on hop-?off|playground|play park|hyde park|st\.? james'?s? park|green park|regent'?s park|kensington gardens|short (?:rim |easy )?walk|rim trail|easy walk|market|ice cream|picnic|hotel pool|quiet rest|rest in the shade|set up at (?:your )?camp|sunset at|tower bridge|garden walk|nature trail|boardwalk|tide pools?|paved/i;
 const REST_SLOT = /hotel pool|quiet rest|rest in the shade|long lunch|downtime|check in & rest|keep today light/i;

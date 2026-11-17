@@ -453,7 +453,7 @@ export function isRealBeach(h: { name?: string; type?: string; activity?: string
   if (h.activity === "beach" || h.activity === "surf") return true;
   const typ = (h.type || "").toLowerCase().replace(/_/g, " ");
   if (/(^|\b|,\s*)beach(\b|,|$)/.test(typ) && !/waterfront/.test(typ)) return true;
-  if (/\bbeach(es)?\b/i.test(h.name || "") && !/waterfront/i.test(h.name || "")) return true;
+  if (/\b(beach(es)?|playa)\b/i.test(h.name || "") && !/waterfront/i.test(h.name || "")) return true;
   return false;
 }
 

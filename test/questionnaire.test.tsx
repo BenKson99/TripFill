@@ -27,7 +27,7 @@ test("Who's traveling editor renders accessible name + exact type choices per ro
   const html = renderToStaticMarkup(<TravelerFields idPrefix="form-traveler" members={rows} onEdit={() => {}} />);
   assert.ok(html.includes('aria-label="Name for traveler 1"') && html.includes('aria-label="Traveler type for traveler 2"'));
   const sel = html.slice(html.indexOf('aria-label="Traveler type for traveler 2"'));
-  assert.deepEqual([...sel.slice(0, sel.indexOf("</select>")).matchAll(/<option[^>]*>([^<]+)</g)].map(x => x[1]), ["Not set (general)", "Man", "Woman", "Girl", "Boy", "Infant"]);
+  assert.deepEqual([...sel.slice(0, sel.indexOf("</select>")).matchAll(/<option[^>]*>([^<]+)</g)].map(x => x[1]), ["Not set (general)", "Man", "Woman", "Grandparent", "Girl", "Boy", "Infant"]);
   assert.match(sel, /value="girl" selected=""/);
   const ro = renderToStaticMarkup(<TravelerFields idPrefix="x" members={rows} disabled onEdit={() => { throw new Error("no"); }} />);
   assert.ok((ro.match(/disabled=""/g) || []).length >= 4, "name, type, and optional age fields are disabled");

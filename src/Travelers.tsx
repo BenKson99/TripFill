@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { PROFILES, PROFILE_LABELS, packingMembers, type PackingMember, type Profile } from "../shared/packing";
+import { PROFILES, PROFILE_LABELS, packingMembers, MAX_TRAVELER_AGE, isValidTravelerAge, type PackingMember, type Profile } from "../shared/packing";
 
 /** Visible rows for a count. Uses the same normaliser as the packing list (ids traveler-1…N, names, types). */
 export const travelerRows = (members: PackingMember[] | undefined, count: unknown) => packingMembers({ members: members || [] }, Math.max(1, Math.min(20, Math.round(Number(count) || 1))));
@@ -15,11 +15,11 @@ export function editTraveler(all: PackingMember[] | undefined, count: unknown, i
       next = { id: x.id, name: next.name };
       if (v === "child") next.child = true;
       else if ((PROFILES as readonly string[]).includes(v)) { next.profile = v as Profile; if (v === "girl" || v === "boy" || v === "infant") next.child = true; }
-      if (next.child && Number.isInteger(keepAge)) next.age = keepAge;
+      if (isValidTravelerAge(keepAge)) next.age = keepAge;
     }
     if (patch.age !== undefined) {
       if (patch.age == null || !Number.isInteger(patch.age)) delete next.age;
-      else if (patch.age >= 0 && patch.age <= 21) next.age = patch.age;
+      else if (isValidTravelerAge(patch.age)) next.age = patch.age;
     }
     return next;
   };
@@ -33,7 +33,7 @@ export function setAllTypes(all: PackingMember[] | undefined, count: unknown, ty
     const next: PackingMember = { id: x.id, name: x.name };
     if (type === "child") next.child = true;
     else if ((PROFILES as readonly string[]).includes(type)) { next.profile = type as Profile; if (type === "girl" || type === "boy" || type === "infant") next.child = true; }
-    if (next.child && Number.isInteger(x.age)) next.age = x.age;
+    if (isValidTravelerAge(x.age)) next.age = x.age;
     return next;
   };
   return [...rows.map(apply), ...extra];
@@ -49,7 +49,7 @@ export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix 
     <label>Traveler {i + 1} name<NameInput index={i} name={m.name} disabled={disabled} onCommit={name => onEdit(m.id, { name })} /></label>
     <label>Traveler type<select aria-label={`Traveler type for traveler ${i + 1}`} value={val} disabled={disabled} onChange={e => onEdit(m.id, { type: e.target.value })}>
       <option value="">Not set (general)</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}{val === "child" && <option value="child">Child (unspecified)</option>}</select></label>
-    {(val === "girl" || val === "boy" || val === "infant" || val === "child") && <label>Age <small className="muted">(optional)</small><input data-testid={`${idPrefix}-${m.id}-age`} aria-label={`Age for traveler ${i + 1}`} type="number" min={0} max={21} inputMode="numeric" placeholder="—" value={m.age ?? ""} disabled={disabled} onChange={e => { const raw = e.target.value; onEdit(m.id, { age: raw === "" ? null : Math.max(0, Math.min(21, Math.round(Number(raw)))) }); }} /></label>}
+    <label>Age <small className="muted">(optional{val === "girl" || val === "boy" || val === "infant" || val === "child" ? "" : ", for 65+ pacing"})</small><input data-testid={`${idPrefix}-${m.id}-age`} aria-label={`Age for traveler ${i + 1}`} type="number" min={0} max={MAX_TRAVELER_AGE} inputMode="numeric" value={m.age ?? ""} disabled={disabled} onChange={e => { const raw = e.target.value; onEdit(m.id, { age: raw === "" ? null : Math.max(0, Math.min(MAX_TRAVELER_AGE, Math.round(Number(raw)))) }); }} /></label>
   </div>; })}</div>;
 }
 

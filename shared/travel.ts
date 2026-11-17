@@ -65,7 +65,7 @@ export function formatTripTravel(trip: { distanceKm?: number; driveMin?: number;
   return travelTimeLabel(km, mode, hint, unit).flightLabel;
 }
 
-export const DEPART_FLY = "Last souvenir/coffee stop, then head to the airport/station";
+export const DEPART_FLY = "Last souvenir/coffee stop, then head to the airport";
 export const DEPART_DRIVE = "Last souvenir/coffee stop, then hit the road";
 export const departAfternoon = (mode: TravelMode) => mode === "driving" ? DEPART_DRIVE : DEPART_FLY;
 

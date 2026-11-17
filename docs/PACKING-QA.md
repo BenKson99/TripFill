@@ -83,7 +83,7 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 ## Flying or Driving (1.12.0)
 
 1. Start with no plan. Confirm **How are you getting there?** sits under Home city, with Flying selected by default. Choose Driving, set a home city (e.g. Detroit) and generate Porto (or any far destination). The travel card should show an approximate drive time and say it is not a road route. Packing should list a Car emergency kit, Road snacks, a phone mount, and Day bag / Car / trunk / Cooler labels (no Carry-on). Infant trips should mention car-seat laws, not gate-check. Before you leave should include car, route, fuel/charging, parking and tolls — not airport check-in.
-2. Switch the mode to Flying on the travel card (or ⚙ Settings → Packing). Travel time should become a nonstop flight estimate without a new weather wait. Your ticks and edited packing rows stay; driving items already added stay until you remove them. The depart-day line should read “head to the airport/station” if you had not edited it.
+2. Switch the mode to Flying on the travel card (or ⚙ Settings → Packing). Travel time should become a nonstop flight estimate without a new weather wait. Your ticks and edited packing rows stay; driving items already added stay until you remove them. The depart-day line should read “head to the airport” if you had not edited it.
 3. Generate a new Flying trip and confirm packing, bags, the airport disclaimer and “Online check-in / confirm transport to the airport” match the previous app.
 4. Import an older JSON that has a home distance under 300 km and no travelMode: it should open as Driving. A plan with no home city should open as Flying.
 5. At 390px the Flying / Driving buttons wrap without sideways scrolling. Keyboard: the choice is a radiogroup (arrow keys). Shared links show the choice but cannot change it.
@@ -110,6 +110,12 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
+
+## Cancún family travel and Grand Canyon leftovers (1.18.0)
+
+Confirm `/healthz` says **1.18.0**. On a **cold cache**, generate Detroit → Cancún, Flying, 20–27 Mar 2027, Mom, Dad, Girl 10, Grandma (Woman, 65+ or Grandparent), Infant 1, interests “beach, swimming, snorkeling, pyramids, ice cream”. Expect closer Mayan ruins (El Rey / El Meco), Chichén Itzá as an optional big day trip with the baby note, a named snorkel spot, an ice cream break, preferred family beaches without “Playa … | Playa …” duplicates, a beach-safety note, bottled-water / mosquito / sit-down food notes, Mexican pesos and a few Spanish phrases, “Same plugs as home — no adapter needed”, infant passport and 2-day carry-on diapers, a hotel nap break, and gentle pacing for Grandma. The depart day should say “head to the airport”. Wet-day wording should match “Wet days ~N” (or usually dry). Start here should not lead with a waterproof shell on a hot, mostly-dry trip.
+
+Then Phoenix → Grand Canyon, Driving, 14–18 Jun 2027, Girl 10 / Boy 4. Mather Point should not appear as a standalone hike on a later day if sunset or the Rim Trail already named it. Rain backups should be unique named indoor places (not the same museum twice, and not a generic café line when Hopi House or the visitor center is free). Every itinerary day should show What to wear. Budget is unchanged.
 
 ## Kid pacing, packing wording, and national-park specifics (1.17.2)
 

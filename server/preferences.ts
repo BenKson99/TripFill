@@ -1,4 +1,5 @@
 import { normalizePreferences } from "../shared/portable.js";
+import { filterHighlightList, preferFamilySights } from "../shared/junkVenues.js";
 import type { Eat, Eats } from "./eats.js";
 import type { Highlight } from "./places.js";
 import type { TripInput, ItinDay } from "./plan.js";
@@ -15,7 +16,8 @@ export function dietaryEats(eats: Eats, input: TripInput): Eats {
 const strenuous = /hike|trek|mountain|summit|ski|climb|trail|peak/i;
 export function preferredHighlights(hl: Highlight[], inp: TripInput): Highlight[] {
   const p = normalizePreferences(inp);
-  const pool = p.walkingTolerance === "low" ? hl.filter(h => !h.ski && !strenuous.test(`${h.name} ${h.type || ""}`)) : [...hl];
+  const filtered = preferFamilySights(filterHighlightList(hl));
+  const pool = p.walkingTolerance === "low" ? filtered.filter(h => !h.ski && !strenuous.test(`${h.name} ${h.type || ""}`)) : [...filtered];
   const terms = p.interests.toLowerCase().split(/[,; ]+/).filter(t => t.length >= 3);
   const score = (h: Highlight) => terms.reduce((s, t) => s + Number(`${h.name} ${h.type || ""} ${h.description}`.toLowerCase().includes(t.replace(/s$/, ""))), 0);
   return pool.sort((a, b) => score(b) - score(a));

@@ -1,14 +1,9 @@
 // "Before you leave" checklist — built on the client so older saved/shared plans get one too.
 import { resolveTravelMode } from "../shared/travel.js";
 import { dedupePrepAgainstTimeline } from "../shared/activityPrep.js";
-const PLUGS: Record<string, string> = {
-  US: "A/B", CA: "A/B", MX: "A/B", JP: "A/B", BR: "C/N", AR: "C/I", CL: "C/L", CO: "A/B", PE: "A/B/C", UY: "C/F/I/L", CR: "A/B", DO: "A/B",
-  GB: "G", IE: "G", MT: "G", CY: "G", HK: "G", SG: "G", MY: "G", AE: "G", QA: "G", SA: "G", KE: "G", NG: "D/G",
-  FR: "C/E", BE: "C/E", PL: "C/E", CZ: "C/E", SK: "C/E", DE: "C/F", AT: "C/F", NL: "C/F", ES: "C/F", PT: "C/F", GR: "C/F", SE: "C/F", NO: "C/F", FI: "C/F",
-  DK: "C/F/K", IS: "C/F", HU: "C/F", RO: "C/F", BG: "C/F", HR: "C/F", SI: "C/F", EE: "C/F", LV: "C/F", LT: "C/F", RU: "C/F", UA: "C/F", TR: "C/F", GE: "C/F",
-  IT: "C/F/L", CH: "C/J", IL: "C/H", MA: "C/E", EG: "C/F", ZA: "C/D/M/N", IN: "C/D/M", CN: "A/C/I", TW: "A/B", KR: "C/F", TH: "A/B/C/O", VN: "A/C",
-  ID: "C/F", PH: "A/B/C", AU: "I", NZ: "I", FJ: "I",
-};
+import { PLUGS, plugsMatchHome, SAME_PLUGS_LINE } from "../shared/plugs.js";
+import { CONSENT_LETTER_TASK, INFANT_PASSPORT_TASK, hasInfantTraveler } from "../shared/travelAdvice.js";
+import { tripHasKids } from "../shared/family.js";
 export interface PrepItem { id: string; task: string; why?: string; done: boolean }
 export function defaultPrep(plan: any): PrepItem[] {
   const ccs: string[] = [...new Set<string>((plan.legs?.length > 1 ? plan.legs.map((l: any) => l.place) : [plan.place]).map((p: any) => p?.countryCode).filter(Boolean))];
@@ -26,9 +21,16 @@ export function defaultPrep(plan: any): PrepItem[] {
     out.push(["Make sure everyone has a valid photo ID (grown-up task)", "domestic trip"]);
     out.push(["Think about travel insurance in case plans change (grown-up task)"]);
   }
+  if (intl && hasInfantTraveler(plan.input, plan.input?.members || plan.packing?.settings?.members)) {
+    out.push([INFANT_PASSPORT_TASK]);
+  }
+  if (intl && tripHasKids(plan.input, plan.input?.members || plan.packing?.settings?.members)) {
+    out.push([CONSENT_LETTER_TASK, "grown-up task"]);
+  }
   const plugs = ccs.map(c => PLUGS[c] && `${c} type ${PLUGS[c]}`).filter(Boolean);
-  const homePlug = homeCC && PLUGS[homeCC];
-  if (plugs.length && !(homePlug && ccs.every(c => PLUGS[c] === homePlug))) {
+  if (plugs.length && plugsMatchHome(homeCC, ccs)) {
+    out.push([SAME_PLUGS_LINE]);
+  } else if (plugs.length) {
     const gb = ccs.includes("GB") || ccs.includes("UK");
     const task = gb
       ? "UK plugs have 3 big prongs — bring a UK plug adapter (grown-up: check voltage)"

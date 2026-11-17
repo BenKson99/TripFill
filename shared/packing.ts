@@ -1,5 +1,7 @@
 /** Data-only packing model shared by generation, migration, UI and tests. No personal template state here. */
 import { resolveTravelMode, type TravelMode } from "./travel.js";
+import { plugsMatchHome, SAME_PLUGS_LINE } from "./plugs.js";
+import { DIAPERS_FLYING_ABROAD, isRemoteForSupplies, needsMosquitoAdvice, needsReefSafeSunscreen } from "./travelAdvice.js";
 import { isGrownUpPackingItem, tripHasKids } from "./family.js";
 import { itineraryHasWaterPark } from "./interestVenues.js";
 import { resolveActivities, activitiesFromKits, packingItemsForActivity, ACTIVITY_BY_ID, kitsFromActivities, suitableActivities } from "./activities.js";
@@ -21,9 +23,11 @@ export type Stage = typeof STAGES[number];
 export const ACTIVITY_KITS = ["beach", "hiking", "ski", "business", "celebration", "kids", "roadtrip", "photography"] as const;
 export type ActivityKit = typeof ACTIVITY_KITS[number];
 export const SHARED = "shared";
-export const PROFILES = ["man", "woman", "girl", "boy", "infant"] as const;
+export const PROFILES = ["man", "woman", "grandparent", "girl", "boy", "infant"] as const;
 export type Profile = typeof PROFILES[number];
-export const PROFILE_LABELS: Record<Profile, string> = { man: "Man", woman: "Woman", girl: "Girl", boy: "Boy", infant: "Infant" };
+export const PROFILE_LABELS: Record<Profile, string> = { man: "Man", woman: "Woman", grandparent: "Grandparent", girl: "Girl", boy: "Boy", infant: "Infant" };
+export const MAX_TRAVELER_AGE = 120;
+export const isValidTravelerAge = (age: unknown): age is number => Number.isInteger(age) && (age as number) >= 0 && (age as number) <= MAX_TRAVELER_AGE;
 /** profile is optional and user-chosen; never inferred from names. Legacy `child: true` (1.9.0) is kept for compatibility. */
 export interface PackingMember { id: string; name: string; child?: boolean; profile?: Profile; age?: number }
 export const isChildProfile = (p?: string) => p === "girl" || p === "boy" || p === "infant";
@@ -206,7 +210,7 @@ export function setAllTravelerTypes(members: PackingMember[], profile: (typeof P
     } else if (m.child) {
       next.child = true;
     }
-    if ((next.child || isChildProfile(next.profile as any)) && Number.isInteger(m.age) && m.age! >= 0 && m.age! <= 21) next.age = m.age;
+    if (isValidTravelerAge(m.age)) next.age = m.age;
     return next;
   });
 }
@@ -217,7 +221,7 @@ export function packingMembers(raw: any = {}, travelerCount?: number): PackingMe
   return Array.from({ length: n }, (_, i) => {
     const id = `traveler-${i + 1}`;
     const found = existing.find((m: PackingMember) => m.id === id);
-    if (found) return { id, name: (found.name.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found.profile as string) ? { profile: found.profile } : {}), ...(Number.isInteger(found.age) && found.age! >= 0 && found.age! <= 21 ? { age: found.age } : {}) };
+    if (found) return { id, name: (found.name.trim() || `Traveler ${i + 1}`).slice(0, 80), ...(found.child === true ? { child: true } : {}), ...((PROFILES as readonly string[]).includes(found.profile as string) ? { profile: found.profile } : {}), ...(isValidTravelerAge(found.age) ? { age: found.age } : {}) };
     return { id, name: `Traveler ${i + 1}`, ...(inherit ? { profile: inherit, ...(isChildProfile(inherit) ? { child: true } : {}) } : {}) };
   });
 }
@@ -292,7 +296,7 @@ export function validatePacking(raw: any) {
     if (s.rewearBottomsEvery !== undefined && !(Number.isInteger(s.rewearBottomsEvery) && s.rewearBottomsEvery >= 1 && s.rewearBottomsEvery <= 7)) fail();
     if (s.includeSpares !== undefined && typeof s.includeSpares !== "boolean") fail();
     if (s.activityKits !== undefined && (!Array.isArray(s.activityKits) || s.activityKits.length > 20 || s.activityKits.some((k: any) => !(ACTIVITY_KITS as readonly string[]).includes(k)))) fail();
-    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean" || m.profile !== undefined && !(PROFILES as readonly string[]).includes(m.profile) || m.age !== undefined && !(Number.isInteger(m.age) && m.age >= 0 && m.age <= 21)))) fail();
+    if (s.members !== undefined && (!Array.isArray(s.members) || s.members.length < 1 || s.members.length > 20 || s.members.some((m: any) => !m || typeof m.id !== "string" || !/^traveler-\d+$/.test(m.id) || typeof m.name !== "string" || !m.name.trim() || m.name.length > 80 || m.child !== undefined && typeof m.child !== "boolean" || m.profile !== undefined && !(PROFILES as readonly string[]).includes(m.profile) || m.age !== undefined && !isValidTravelerAge(m.age)))) fail();
   }
   if (raw.modelVersion === 2 && !raw.settings) fail();
   const checkItem = (i: any) => {
@@ -396,16 +400,45 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason, 1, {}, "all"); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
   const shellReason = snow && !rain ? (skiTrip ? "Fresh snow — waterproof shell and warm layers, not an umbrella" : "Snow expected — waterproof shell and warm layers, not an umbrella") : kits.includes("hiking") && !rain && !snow ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : snow ? "Snow expected — waterproof shell and warm layers, not an umbrella" : "Hiking — exposed conditions can change; check route-specific weather"}`;
   const desertHot = !rain && !snow && hi !== null && hi >= 32;
-  if ((rain || snow || (kits.includes("hiking") && !desertHot))) each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
+  const wetCount = typeof w?.stats?.rainyDays === "number" ? w.stats.rainyDays : 0;
+  const coldOrLegRain = (lo != null && lo < 16) || (w?.legs || []).some((l: any) => (l.stats?.rainyDays || 0) > 0 || (l.stats?.minLow != null && l.stats.minLow < 16));
+  const hotMostlyDry = !snow && !coldOrLegRain && hi !== null && hi >= 28 && (lo == null || lo >= 16) && wetCount <= 2;
+  if (hotMostlyDry && rain && !snow) {
+    each(C, "Light rain poncho", `${weatherPrefix(false)}${basis} · handy if a warm shower rolls through${uncertaintyNote}`, 1, { essential: false });
+  } else if ((rain || snow || (kits.includes("hiking") && !desertHot))) {
+    each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
+  }
   if (snow || (lo !== null && lo <= 0 && rain)) each(C, snow ? "Insulated snow boots" : "Waterproof boots with grip", snow ? (skiTrip ? "Snow underfoot — insulated snow boots; dress warm" : "Snow expected — insulated snow boots, not an umbrella") : `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential || (!uncertain && snow) });
   each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful", 1, {}, "adults");
   each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
   add(H, "Small first-aid / blister kit", members.length > 4 ? `Choose supplies appropriate to your needs · pack ${Math.max(1, Math.ceil(members.length / 8))} for a group of ${members.length}` : "Choose supplies appropriate to your needs", Math.max(1, Math.ceil(members.length / 8)), { bag: "personal" });
   if (hi !== null && hi >= 18 || kits.includes("hiking") || kits.includes("ski") || kits.includes("beach")) each(H, "Sunscreen & sunglasses", "Sun protection can matter even in cool weather; follow product guidance (check age suitability)", 1, {}, "all");
+  const destName = plan.place?.name || input.destination || "";
+  const destCC = plan.place?.countryCode || "";
+  const interestText = `${input.interests || ""} ${input.purpose || ""} ${(input.presets || []).join(" ")} ${(input.activities || []).join(" ")}`;
+  if (needsReefSafeSunscreen(interestText, destName, destCC) || /snorkel/i.test(interestText)) {
+    each(H, "Reef-safe sunscreen", "Ocean and reef days — use a reef-safe formula; follow product guidance", 1, {}, "all");
+  }
+  if (needsMosquitoAdvice(destCC, destName)) {
+    each(H, "Insect repellent", "Tropical places — follow product guidance (check age suitability)", 1, { lastMinute: true }, "all");
+  }
+  if (/snorkel/i.test(interestText)) {
+    add(A, "Snorkel set (mask & snorkel)", "A named calm reef or bay is on this trip — a well-fitting set is nicer than a rental guess", 1);
+  }
+
   if (lo !== null && lo <= 8) each(H, "Lip balm & moisturiser", coldReason);
   each(E, "Phone & charger", "Daily navigation and communication", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
   each(E, "Power bank (if needed)", driving ? "Useful on the road; keep it accessible" : "Verify carrier/security battery rules, ratings and permitted bag; assignment is not clearance", 1, { bag: "personal" }, "adults");
-  if (!plan.trip?.domestic) { const nAd = Math.max(1, Math.ceil(members.length / 3)); add(E, "Plug adapter(s) & voltage check", `Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage · about 1 per 3 travelers = ${nAd}`, nAd); }
+  if (!plan.trip?.domestic) {
+    const rawCCs: string[] = (plan.legs?.length > 1 ? plan.legs.map((l: any) => l.place?.countryCode) : [plan.place?.countryCode]).filter((c: any): c is string => typeof c === "string" && !!c);
+    const destCCs = [...new Set(rawCCs)];
+    if (plugsMatchHome(plan.trip?.home?.countryCode, destCCs)) {
+      add(E, SAME_PLUGS_LINE, "Your destination uses the same plug type as home");
+    } else {
+      const nAd = Math.max(1, Math.ceil(members.length / 3));
+      add(E, "Plug adapter(s) & voltage check", `Check official socket information for all stops and your devices' voltage compatibility; adapters do not convert voltage · about 1 per 3 travelers = ${nAd}`, nAd);
+    }
+  }
   if (!driving) {
     add(X, "Neck pillow", "For the flight — especially a long one", 1, { bag: "personal" });
     each(X, "Headphones", "For the flight and quiet time", 1, { bag: "personal" }, "notInfant");
@@ -455,13 +488,25 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   each(C, "Baby outfits / bodysuits (~2 a day)", `${clothingNote} · about two per day for ${infantDays} day(s) for changes; capped at 14 — adjust to your baby`, Math.min(14, infantDays * 2), {}, "infants");
   each(C, "Baby sleepwear / sleep sack", "Familiar sleep setup helps; check accommodation cot/crib", 2, {}, "infants");
   const diapersPerDay = 8;
-  const diaperQty = diapersPerDay * infantDays;
-  each(H, `Diapers / nappies (~${diapersPerDay} a day × ${infantDays} days ≈ ${diaperQty} diapers)`, "Enough for travel days plus a buffer; buy more locally if available", diaperQty, { essential: true, lastMinute: true, grownUp: true }, "infants");
+  const flyingAbroad = !driving && plan.trip?.domestic === false;
+  const remoteSupplies = isRemoteForSupplies(plan.place?.name || input.destination || "", plan.place?.countryCode || "");
+  const diaperCarryOn = flyingAbroad && !remoteSupplies;
+  const diaperQty = diaperCarryOn ? diapersPerDay * 2 : diapersPerDay * infantDays;
+  const diaperItem = diaperCarryOn
+    ? "Diapers / nappies (~2 days in your carry-on; buy the rest there)"
+    : `Diapers / nappies (~${diapersPerDay} a day × ${infantDays} days ≈ ${diaperQty} diapers)`;
+  const diaperReason = diaperCarryOn ? DIAPERS_FLYING_ABROAD : "Enough for travel days plus a buffer; buy more locally if available";
+  each(H, diaperItem, diaperReason, diaperQty, { essential: true, lastMinute: true, grownUp: true, bag: diaperCarryOn ? "carry-on" : undefined }, "infants");
   const wipePacks = Math.max(1, Math.ceil(infantDays / 4));
   each(H, `Wipes, changing mat & diaper cream (~1 pack every 4 days × ${infantDays} days ≈ ${wipePacks} pack${wipePacks === 1 ? "" : "s"})`, "Changing basics for transit and outings", wipePacks, { essential: true, bag: "personal", grownUp: true }, "infants");
   each(H, "Feeding supplies (as you feed)", driving ? "Whatever this baby uses — e.g. bottles, pump, formula or food. Pack what you need between stops" : "Whatever this baby uses — e.g. bottles, pump, formula or food. Check carrier/security rules for liquids", 1, { essential: true, bag: "personal", lastMinute: true }, "infants");
   each(H, "Bibs & burp cloths", "Feeding and spills", 3, {}, "infants");
   each(X, "Baby carrier or travel stroller", driving ? "Check car-seat laws, boot space and local terrain; a carrier helps at stops" : "Check airline gate-check and local terrain", 1, {}, "infants");
+  if ((kits.includes("beach") || /beach|swim|snorkel/i.test(`${input.interests || ""} ${(input.activities || []).join(" ")}`)) && members.some(m => memberKind(m) === "infant")) {
+    each(A, "Swim diapers", "For pool and beach time with a baby", Math.min(14, infantDays * 2), {}, "infants");
+    add(A, "Sun tent / shade for the baby", "A pop-up tent or beach umbrella keeps an infant out of direct sun", 1, { grownUp: true });
+    each(A, "Baby rash guard", "Light sun protection in the water", 1, {}, "infants");
+  }
   const themeParkTrip = /disney|universal|theme park|theme parks|legoland|seaworld|six flags|islands of adventure|magic kingdom|epcot/i.test(`${input.interests || ""} ${input.purpose || ""} ${(input.presets || []).join(" ")} ${(input.activities || []).join(" ")}`);
   const under5 = members.some(m => memberKind(m) !== "adult" && memberKind(m) !== "infant" && Number.isInteger(m.age) && (m.age as number) < 5);
   const toddlers = members.some(m => memberKind(m) !== "infant" && Number.isInteger(m.age) && (m.age as number) < 3);

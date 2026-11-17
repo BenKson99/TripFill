@@ -2,11 +2,12 @@
 // Primary: OpenStreetMap via Overpass (free, no key). Curated boost/fallback: Wikivoyage "Eat"/"Drink" listings.
 import { UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
+import { isJunkEat, isNamelessFoodStall } from "../shared/junkVenues.js";
 
 export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string; sourceUrl?: string; retrievedAt?: string; cuisineEvidence?: string; dietary?: Record<string, string>; dietaryStatus?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v7|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v8|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
@@ -100,6 +101,7 @@ async function wikidata(p: Place, radiusKm = 4): Promise<Eat[]> {
 
 /** Merge, de-dupe (same name, or same normalised name within 150 m), rank and cap. */
 export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }, cc?: string, maxForeign = 2): Eats {
+  all = (all || []).filter(e => !isJunkEat(e) && !isNamelessFoodStall(e));
   all = all.filter(e => !/\b(store|supermarket|grocery|minimarket|mercearia)\b/i.test(e.name) && !(e.kind === "cafe" && NOT_CAFE.test(`${e.name} ${e.tag || ""}`)));
   if (cc) all = all.map((e: any) => e.kind !== "restaurant" ? e : { ...e, _s: (e._s ?? 0) + ({ local: 2.5, neutral: 0, foreign: -2 } as const)[cuisineClass(e.tag, cc)] });
   const sorted = [...all].sort((a: any, b: any) => (b._s ?? 0) - (a._s ?? 0));

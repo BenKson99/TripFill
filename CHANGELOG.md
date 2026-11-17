@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.18.0 — Cancún family travel, unique park days, and clearer wear & weather
+
+- Grand Canyon leftovers: a curated walk or sunset that names Mather Point (or Yavapai Point) counts as using that place, so it is not also scheduled as a standalone hike. Rain backups no longer repeat Yavapai Geology Museum when another indoor or indoor-ish rim building (Hopi House, Kolb Studio, the visitor center) is free. Day 4 gets a named backup instead of the generic café/museum line when one exists.
+- What to wear is shown on every weather day and every itinerary day.
+- Interest matches: pyramids / Mayan ruins near Cancún schedule closer sites (El Rey, El Meco) when a child under 6 is on the trip, and keep Chichén Itzá as an optional big day trip (ask a grown-up) with the baby note. Snorkeling names a calm spot (Puerto Morelos reef, Isla Mujeres / Playa Norte) and packing adds reef-safe sunscreen and a snorkel set. Ice cream is a named afternoon add-on when OSM has a heladería, otherwise “Ice cream break”. The curated dictionary also covers Hawaii, Florida beaches and the Caribbean.
+- Junk venues are dropped: cinemas, city theatres as day sights, bus-station stalls, sports bars as family dinners, and nameless “Food stall …” lines. Family trips abroad, and trips with an infant or a 65+ traveler, prefer sit-down restaurants.
+- Family beaches prefer well-known names (Playa Langosta, Playa Tortugas, Playa Delfines), avoid odd “Name | Name” duplicates, and add a beach-safety note. Infants get swim diapers, a sun tent/shade and a rash guard. “Free morning — wander a new neighbourhood” is replaced with a named family option when one exists.
+- Country-aware health notes cover tap water, mosquitoes and food safety for common destinations, plus packing for insect repellent and reef-safe sunscreen.
+- Baby travel abroad: infants need their own passport; a consent-letter reminder if a child travels without both parents; flying-abroad diapers are “Pack ~2 days in your carry-on; buy the rest there” (full count only for driving or remote places); and a nap break back at the hotel.
+- Money, language and plugs: a currency line (e.g. Mexican pesos), a few kid-friendly local phrases, and “Same plugs as home — no adapter needed” when types match.
+- A Grandparent traveler type and optional ages on adults (up to 120) unlock gentle pacing, shade/seating notes and a medicines reminder for 65+ travelers.
+- Wet-day wording is consistent: the summary uses the same rainy-day definition as “Wet days ~N”. A hot, mostly-dry trip gets a light rain poncho in the main list, not a waterproof shell in Start here.
+- A flying depart day says “head to the airport”.
+- Cache keys are `places|v19` and `eats|v8`. Budget is unchanged.
+
+
 ## 1.17.2 — Kid pacing, US packing wording, and national-park specifics
 
 - Family days no longer stack a half-day outing with several extras. A full- or half-day attraction (Warner Bros. Studio Tour, theme parks, Windsor Castle as a day trip) is followed by rest or one light activity. With kids under 8, afternoons get at most one add-on; the double-decker and Platform 9¾ move to lighter days. Two big sights are not paired — a park, playground or other small outdoor stop is used instead. The “with kids” note matches the actual day.

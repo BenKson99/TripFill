@@ -160,8 +160,7 @@ test("v1.17: a mild London July is a hoodie and rain jacket, not seven identical
   const mid = whatToWear({ tmax: 19, tmin: 11, precipProb: 0, summary: "Usually dry" });
   assert.equal(mid, "T-shirt plus a hoodie; pack a rain jacket");
   const days = Array.from({ length: 7 }, () => whatToWear({ tmax: 22, tmin: 14, precipProb: 30, summary: "Partly cloudy" }));
-  const shown = days.filter((l, i) => i === 0 || l !== days[i - 1]);
-  assert.equal(shown.length, 1);
+  assert.ok(days.every(l => l === line));
   assert.equal(localizeEn(line, "us"), line);
 });
 

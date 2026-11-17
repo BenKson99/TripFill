@@ -12,7 +12,9 @@ import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPl
 import { presetItinerary, type Preset } from "./presets.js";
 import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns } from "../shared/family.js";
 import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, curatedParkSights, visitorCenterName, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
-import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups } from "../shared/interestVenues.js";
+import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup } from "../shared/interestVenues.js";
+import { filterHighlightList, isJunkSight, namedIceCream } from "../shared/junkVenues.js";
+import { BEACH_SAFETY_NOTE, NAP_BREAK_NOTE, SENIOR_PACE_NOTE, hasInfantTraveler, hasSeniorTraveler, isOceanBeachDestination, preferredFamilyBeaches } from "../shared/travelAdvice.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
   return fitContextFromWeather(w, placeName);
@@ -127,19 +129,48 @@ function dayMentionsPlace(d: ItinDay | undefined, name: string) {
   return blob.includes(name.toLowerCase());
 }
 
+function tidyPlaceName(name: string) {
+  return (name || "").split("|")[0].trim();
+}
+
+function dayHasBeach(d?: ItinDay) {
+  if (!d) return false;
+  return /🏖|playa |beach\b/i.test(`${d.morning || ""} ${d.afternoon || ""}`);
+}
+
 function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay, days: ItinDay[] = [], slot?: "morning" | "afternoon" | "evening") {
-  const list = (id === "beach" || id === "surf") ? hlFor(id, hl).filter(isRealBeach) : hlFor(id, hl);
+  let list = (id === "beach" || id === "surf") ? hlFor(id, hl).filter(isRealBeach) : hlFor(id, hl).filter(h => !isJunkSight(h));
+  list = list.map(h => h.name && h.name.includes("|") ? { ...h, name: tidyPlaceName(h.name) } : h);
+  if (id === "beach" || id === "surf") {
+    const preferred = preferredFamilyBeaches(placeName || inp.destination || "", inp as any && (inp as any).countryCode || "");
+    list = [...list].sort((a, b) => {
+      const ia = preferred.findIndex(n => (a.name || "").toLowerCase().includes(n.toLowerCase().replace(/ \(calm\)$/i, "")));
+      const ib = preferred.findIndex(n => (b.name || "").toLowerCase().includes(n.toLowerCase().replace(/ \(calm\)$/i, "")));
+      const ra = ia >= 0 ? ia : preferred.length + 1;
+      const rb = ib >= 0 ? ib : preferred.length + 1;
+      return ra - rb;
+    });
+    // Don't add a *different* second beach the same day. If the afternoon is still generic
+    // "Beach time", reuse the beach already named this morning (keeps a real name on the slot).
+    if (dayHasBeach(day) && slot === "afternoon") {
+      const same = list.find(x => x.name && dayMentionsPlace(day, x.name));
+      if (same) {
+        used.add(same.name);
+        return same;
+      }
+      return undefined;
+    }
+  }
   const onOtherDay = (name: string) => days.some(d => d !== day && dayMentionsPlace(d, name));
   const realistic = (x: Highlight) => isRealisticDayTrip(x, inp, { name: placeName });
   const free = (x: Highlight) => realistic(x) && !dayMentionsPlace(day, x.name);
-  // Prefer an unused venue, but if the only named place of this kind is already
-  // on this day (e.g. itinerary put Camps Bay in the morning, then the beach
-  // preset overwrote the afternoon with generic text) or on a weaker slot
-  // elsewhere, still claim it rather than falling back to generic wording.
+  // Prefer unused places. Never steal a highlight already named on another day (sunset/walks count)
+  // when scheduling hiking. Other activities may reuse the only named venue on the *same* day or
+  // if nothing else exists (a museum already used as a highlight still gets a museum slot).
   const h = list.find(x => !used.has(x.name) && !onOtherDay(x.name) && free(x))
     || list.find(x => !onOtherDay(x.name) && free(x))
-    || list.find(x => free(x))
-    || list.find(x => realistic(x));
+    || (id === "hiking" ? undefined : list.find(x => free(x)))
+    || (id === "hiking" || id === "beach" || id === "surf" ? undefined : list.find(x => realistic(x)));
   if (h) {
     used.add(h.name);
     if (day && slot) releasePlaceFromOtherSlots(days.length ? days : (day ? [day] : []), h.name, { day, slot });
@@ -160,6 +191,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
   stripUnsuitableActivities(days, unfit);
   const wx = (d: ItinDay) => w.days.find(x => x.date === d.date);
   const usedHl = new Set<string>();
+  for (const d of days) for (const h of hl) if (h?.name && dayMentionsPlace(d, tidyPlaceName(h.name))) usedHl.add(tidyPlaceName(h.name));
   const taken = new Set<string>(); // `${date}:${slot}`
   const load = new Map<string, number>();
   const bump = (d: ItinDay) => load.set(d.date, (load.get(d.date) || 0) + 1);
@@ -237,7 +269,7 @@ const PRESET_ACTIVITY: Record<string, ActivityId | undefined> = {
   ski: "ski", hiking: "hiking", beach: "beach", city: "sightseeing", kids: "family", roadtrip: "scenic",
 };
 
-export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherResult, hl: Highlight[], ps: Preset[], placeName?: string) {
+export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherResult, hl: Highlight[], ps: Preset[], placeName?: string, eats?: { restaurants?: { name?: string }[]; cafes?: { name?: string }[] }) {
   const ctx = fitContext(w, placeName);
   const fit = suitableActivities(inp, w, placeName);
   const youngDrive = hasChildUnder(6, inp);
@@ -246,12 +278,17 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
     name: s.name, description: s.description || "A kid-friendly stop in the park.", indoor: !!s.indoor,
     setting: s.setting, type: s.type, source: "TripFill",
   } as Highlight));
-  const merged = [...hl];
+  const merged = filterHighlightList([...hl]).map(h => h.name && h.name.includes("|") ? { ...h, name: tidyPlaceName(h.name) } : h);
   for (const s of parkSights) if (!merged.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) merged.unshift(s);
+  for (const name of preferredFamilyBeaches(placeName || inp.destination || "")) {
+    if (!merged.some(h => (h.name || "").toLowerCase().includes(name.toLowerCase().replace(/ \(calm\)$/i, "")))) {
+      merged.unshift({ name, description: "A well-known family beach.", indoor: false, setting: "outdoor", type: "beach", source: "TripFill", activity: "beach" } as Highlight);
+    }
+  }
   const small = hasChildUnder(8, inp);
   const usable = merged.filter(h => (!h.dayTrip || isRealisticDayTrip(h, inp, { name: placeName }))
     && !isLodgingOrStay(h) && !isDestinationItself(h.name, dest) && !isVagueSight(h) && !isOffParkBase(h.name, dest)
-    && isNearBase(h, { smallChild: youngDrive }) && !(small && isHikeInOrInnerCanyon(h)));
+    && isNearBase(h, { smallChild: youngDrive }) && !(small && isHikeInOrInnerCanyon(h)) && !isJunkSight(h));
   const psFit = ps.filter(p => {
     const id = PRESET_ACTIVITY[p];
     if (!id) return true;
@@ -262,9 +299,13 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   stripUnsuitableActivities(days, resolveActivities(inp).filter(id => !activityFit(id, ctx).ok));
   dedupeItineraryPlaces(days, usable, placeName);
   fillPreferredParks(days, usable, inp.interests || "");
-  applyInterestVenues(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay);
+  applyInterestVenues(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, { youngChild: hasChildUnder(6, inp) });
   fillNamedAfternoons(days, usable, isTravelOrLeaveDay);
-  applyInterestAddOns(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, { maxAddOns: hasChildUnder(8, inp) ? 1 : 2 });
+  applyInterestAddOns(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, {
+    maxAddOns: hasChildUnder(8, inp) ? 1 : 2,
+    youngChild: hasChildUnder(6, inp),
+    iceCreamName: namedIceCream(eats) || namedIceCream(usable),
+  });
   replaceVagueNearbySlots(days, usable, inp.interests || "", isTravelOrLeaveDay);
   paceItineraryForKids(days, inp, usable);
   softenHikesForKidsAndHeat(days, inp, w, placeName);
@@ -296,9 +337,59 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
     const sameDay = `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(named.toLowerCase());
     if (!outdoor && !unsuitable && !sameDay) continue;
     const used = new Set(days.flatMap(x => [x.morning, x.afternoon, x.rainyBackup]).map(t => (t || "").toLowerCase()));
-    const alt = usable.find(h => h.name && (h.indoor || h.setting === "indoor") && !used.has(h.name.toLowerCase()) && /visitor (?:centre|center)|museum|gallery|library|studio|hopi house/i.test(`${h.name} ${h.type || ""}`));
+    const alreadyBak = new Set(days.map(x => (x.rainyBackup || "").toLowerCase()));
+    const alt = usable.find(h => h.name && isIndoorishBackup(h) && !used.has(h.name.toLowerCase()) && ![...alreadyBak].some(b => b.includes(h.name!.toLowerCase())));
     const replacement = alt?.name || (vc && !sameDay ? vc : "the visitor center or a nearby museum");
     d.rainyBackup = /^If it rains/i.test(bak) ? `If it rains: ${replacement}` : /^Rain likely/i.test(bak) ? `Rain likely — try ${replacement}` : bak;
   }
+  assignUniqueRainBackups(days, usable, visitorCenterName(merged, dest));
+  // Replace leftover generic free-mornings with a named family option when one exists.
+  const usedNow = (name: string) => days.some(d => `${d.morning} ${d.afternoon} ${d.evening}`.toLowerCase().includes(name.toLowerCase()));
+  const familyPick = () => preferredFamilyBeaches(placeName || "", "").find(n => !usedNow(n))
+    || usable.find(h => h.name && !usedNow(h.name) && /beach|playa|park|aquarium|museum|zoo|ruins|pyramid|snorkel/i.test(`${h.name} ${h.type || ""}`))?.name;
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    if (/^Free morning — wander a new neighbou?rhood/i.test(d.morning || "")) {
+      const next = familyPick();
+      if (next) d.morning = next;
+    }
+    // One beach per day — drop a second beach afternoon.
+    if (dayHasBeach({ ...d, afternoon: "" } as ItinDay) && dayHasBeach({ ...d, morning: "" } as ItinDay)) {
+      const same = tidyPlaceName(d.morning || "") && (d.afternoon || "").toLowerCase().includes(tidyPlaceName(d.morning || "").toLowerCase());
+      if (!same) {
+        const next = usable.find(h => h.name && !usedNow(h.name) && !isRealBeach(h) && !isJunkSight(h));
+        if (next?.name) d.afternoon = next.name;
+      }
+    }
+  }
+  if (isOceanBeachDestination(placeName || inp.destination || "")) {
+    for (const d of days) {
+      if (isTravelOrLeaveDay(d)) continue;
+      if (/🏖|playa |beach\b|snorkel/i.test(`${d.morning} ${d.afternoon}`)) {
+        if (!d.notes?.includes(BEACH_SAFETY_NOTE)) d.notes = [d.notes, BEACH_SAFETY_NOTE].filter(Boolean).join(" · ");
+      }
+    }
+  }
+  if (hasInfantTraveler(inp)) {
+    for (const d of days) {
+      if (isTravelOrLeaveDay(d)) continue;
+      if (!d.notes?.includes(NAP_BREAK_NOTE)) d.notes = [d.notes, NAP_BREAK_NOTE].filter(Boolean).join(" · ");
+    }
+  }
+  if (hasSeniorTraveler(inp)) {
+    for (const d of days) {
+      if (isTravelOrLeaveDay(d)) continue;
+      if (!d.notes?.includes(SENIOR_PACE_NOTE)) d.notes = [d.notes, SENIOR_PACE_NOTE].filter(Boolean).join(" · ");
+    }
+  }
+  for (const d of days) {
+    for (const slot of ["morning", "afternoon", "evening", "rainyBackup"] as const) {
+      const v = d[slot];
+      if (v && v.includes("|")) (d as any)[slot] = tidyPlaceName(v);
+    }
+  }
   applyKidPaceNotes(days, inp, usable);
+  // Late slot fills (free-morning replacement, kid icons) can collide with an earlier backup.
+  assignUniqueRainBackups(days, usable, visitorCenterName(merged, dest));
 }
+
