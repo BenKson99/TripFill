@@ -51,6 +51,57 @@ export function precipProbLabel(d: PrecipDay, kind = precipKind(d)): string {
   return kind === "snow" ? " snow" : kind === "mixed" ? " rain/snow" : " rain";
 }
 
+/** Nearest plain fraction for a historical rain frequency (e.g. 33 → "1 in 3"). */
+export function rainFractionLabel(prob: number): string {
+  const p = Math.max(0, Math.min(100, prob));
+  if (p >= 88) return "almost all";
+  if (Math.abs(p - 50) <= 8) return "half";
+  const parts: [number, number][] = [[1, 2], [1, 3], [2, 3], [1, 4], [3, 4], [1, 5], [2, 5], [3, 5], [1, 6], [5, 6], [1, 8], [1, 10]];
+  let best = parts[0], bestDiff = Infinity;
+  for (const [n, d] of parts) {
+    const diff = Math.abs(p - (100 * n) / d);
+    if (diff < bestDiff) { best = [n, d]; bestDiff = diff; }
+  }
+  return `${best[0]} in ${best[1]}`;
+}
+
+/** Plain wet-chance phrase. Typical days use a past-years fraction; 0% adds nothing. */
+export function rainChancePhrase(d: PrecipDay, kind = precipKind(d)): string {
+  if (d.precipProb == null) return "";
+  const p = d.precipProb;
+  if (d.typical) {
+    if (p <= 0) return "";
+    const frac = rainFractionLabel(p);
+    if (kind === "snow") return `snowed on about ${frac} of these days in past years`;
+    if (kind === "mixed") return `had rain or snow on about ${frac} of these days in past years`;
+    return `rained on about ${frac} of these days in past years`;
+  }
+  if (p <= 0) return "";
+  if (kind === "snow") return `${p}% chance of snow`;
+  if (kind === "mixed") return `${p}% chance of rain or snow`;
+  return `${p}% chance of rain`;
+}
+
+/** Compact day line: "Usually dry · {tr:22.3:27.8} · rained on about 1 in 3 of these days in past years". */
+export function formatDayWeather(d: PrecipDay): string {
+  const kind = precipKind(d);
+  const summary = (d.summary || "").trim() || typicalPrecipSummary(d.precipProb ?? 0, kind);
+  const lo = d.tmin, hi = d.tmax;
+  const temps = Number.isFinite(lo) && Number.isFinite(hi) ? `{tr:${lo}:${hi}}` : Number.isFinite(hi) ? `{t:${hi}}` : Number.isFinite(lo) ? `{t:${lo}}` : "";
+  const chance = rainChancePhrase(d, kind);
+  return [summary, temps, chance].filter(Boolean).join(" · ");
+}
+
+/** Expand {t:c} and {tr:lo:hi} temperature tokens into the display unit. */
+export function renderTempTokens(text: string, unit: "C" | "F" = "C"): string {
+  const conv = (c: number) => unit === "F" ? Math.round(c * 9 / 5 + 32) : Math.round(c);
+  const u = unit === "F" ? "°F" : "°C";
+  return (text || "")
+    .replace(/\{tr:(-?[\d.]+):(-?[\d.]+)\}/g, (_m, a, b) => `${conv(Number(a))}–${conv(Number(b))}${u}`)
+    .replace(/\{t:(-?[\d.]+)\}/g, (_m, v) => `${conv(Number(v))}${u}`)
+    .replace(/(-?\d+(?:\.\d+)?)°C\b/g, (_m, v) => unit === "F" ? `${Math.round(Number(v) * 9 / 5 + 32)}°F` : `${Math.round(Number(v))}°C`);
+}
+
 export function itineraryPrecipCopy(kind: PrecipKind, ski: boolean, indoorName?: string): string {
   if (kind === "snow") return ski ? "Fresh snow, great for skiing; dress warm" : "Snow likely — dress warm and wear shoes with grip";
   if (kind === "mixed") return ski ? "Mixed snow and rain possible — check conditions; dress warm" : indoorName ? `Mixed rain and snow — waterproof layers; indoor option: ${indoorName}` : "Mixed rain and snow — waterproof layers; indoor sights if it turns to rain";

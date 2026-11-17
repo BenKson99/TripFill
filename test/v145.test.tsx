@@ -26,7 +26,7 @@ function assertNoRepeat(days: any[], hl: any[], placeName = "Cape Town") {
   const names = itineraryPlaceNames(hl);
   const seen = new Map<string, string>();
   for (const d of days.slice(1, -1)) {
-    for (const n of namesInText(`${d.morning} ${d.afternoon} ${d.evening} ${d.rainyBackup || ""}`, names)) {
+    for (const n of namesInText(`${d.morning} ${d.afternoon} ${d.evening}`, names)) {
       if (n.toLowerCase() === placeName.toLowerCase()) continue;
       const prev = seen.get(n.toLowerCase());
       assert.equal(prev, undefined, `${n} repeats on ${prev} and ${d.date}:\n${midBlob(days)}`);

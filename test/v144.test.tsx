@@ -49,7 +49,7 @@ test("v1.14.4: a named place is not scheduled on two different days", () => {
   const names = itineraryPlaceNames(capeHl);
   const seen = new Map<string, string>();
   for (const d of mid) {
-    for (const n of namesInText(`${d.morning} ${d.afternoon} ${d.evening} ${d.rainyBackup || ""}`, names)) {
+    for (const n of namesInText(`${d.morning} ${d.afternoon} ${d.evening}`, names)) {
       if (n.toLowerCase() === "cape town") continue;
       const prev = seen.get(n.toLowerCase());
       assert.equal(prev, undefined, `${n} repeats on ${prev} and ${d.date}:\n${blob}`);

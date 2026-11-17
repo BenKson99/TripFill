@@ -423,7 +423,44 @@ export function fillPreferredParks<T extends { morning: string; afternoon: strin
     used.add(next.name);
     const prefix = /^[^A-Za-z0-9"]+/.exec(d.morning || "");
     d.morning = prefix ? `${prefix[0].trimEnd()} ${next.name}` : next.name;
-    if (isMajorAttraction(d.afternoon || "")) d.afternoon = KIDS_POOL_REST;
+    if (isMajorAttraction(next.name) || isMajorAttraction(d.morning)) d.afternoon = KIDS_POOL_REST;
   }
+  return days;
+}
+
+/** A major theme-park morning always pairs with a pool or rest afternoon. */
+export function ensureParkDayRest<T extends { morning: string; afternoon: string; label?: string }>(days: T[]): T[] {
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    if (isMajorAttraction(d.morning) && !isRestSlot(d.afternoon)) d.afternoon = KIDS_POOL_REST;
+  }
+  return days;
+}
+
+const SAFETY_NOTE = /lifeguard|beach flag|swim where|railings|hold little hands|altitude|drink extra water|^Hot!|height limits|waterproof|Wet departure|pack a rain layer|never approach or feed|check flags|stay behind/i;
+const OPTIONAL_NOTE = /^Optional(?: big day trip)?:/i;
+
+/** At most 3 notes per day: safety first, then the optional trip, then one more. */
+export function capDayNotes(notes?: string, max = 3): string {
+  const parts = (notes || "").split(/\s+·\s+/).map(s => s.trim()).filter(Boolean);
+  if (!parts.length) return "";
+  const seen = new Set<string>();
+  const uniq: string[] = [];
+  for (const p of parts) {
+    const k = p.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(p);
+  }
+  const optionals = uniq.filter(p => OPTIONAL_NOTE.test(p));
+  const rest = uniq.filter(p => !OPTIONAL_NOTE.test(p));
+  const merged = optionals.length ? [optionals.find(p => /Optional big day trip:/.test(p)) || optionals[0]] : [];
+  const safety = rest.filter(p => SAFETY_NOTE.test(p));
+  const other = rest.filter(p => !SAFETY_NOTE.test(p));
+  return [...safety, ...merged, ...other].filter(Boolean).slice(0, max).join(" · ");
+}
+
+export function capItineraryNotes<T extends { notes?: string }>(days: T[], max = 3): T[] {
+  for (const d of days) d.notes = capDayNotes(d.notes, max);
   return days;
 }

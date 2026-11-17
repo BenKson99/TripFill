@@ -49,7 +49,8 @@ test("new mixed five-profile family: every traveler gets a real list, shared onc
   const p = family5(), l = p.packing as PackingList;
   for (const m of kids5) assert.ok(own(l, m.id).length >= 8, m.name);
   const baby = own(l, "traveler-5").map(i => i.item);
-  for (const x of ["Diapers / nappies", "Wipes, changing mat & diaper cream", "Feeding supplies (as you feed)", "Baby outfits / bodysuits", "Passport / accepted travel ID & entry documents"]) assert.ok(baby.some(n => n === x || n.startsWith(x)), x);
+  for (const x of ["Diapers / nappies", "Wipes, changing mat & diaper cream", "Feeding supplies (as you feed)", "Baby outfits / bodysuits"]) assert.ok(baby.some(n => n === x || n.startsWith(x)), x);
+  assert.ok(baby.some(n => /Passport/.test(n) && /needs their own/i.test(n)) || baby.some(n => n.startsWith("Passport / accepted travel ID") || n === "Government photo ID"), baby.join(" | "));
   for (const x of ["Tops", "Bottoms", "Payment card + backup / local cash", "Phone & charger", "Deodorant & personal care", "Comfortable walking shoes"]) assert.ok(!baby.includes(x), x);
   const feed = own(l, "traveler-5").find(i => i.item.startsWith("Feeding"))!.reason; assert.match(feed, /bottles, pump, formula or food/);
   for (const k of ["traveler-3", "traveler-4"]) { const c = own(l, k).map(i => i.item); assert.ok(c.includes("Tops") && c.includes("Toothbrush & toothpaste") && c.includes("Entertainment / comfort item for transit")); assert.ok(!c.includes("Payment card + backup / local cash")); }

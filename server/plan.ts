@@ -2,7 +2,7 @@ import { suggestPacking } from "../shared/packing.js";
 import { departAfternoon, resolveTravelMode, TIMELINE_DRIVE_EXTRA } from "../shared/travel.js";
 import type { WeatherResult, DayWeather, Place } from "./weather.js";
 import { isRainy, todayIn } from "./weather.js";
-import { precipKind, itineraryPrecipCopy, precipProbLabel } from "../shared/precip.js";
+import { precipKind, itineraryPrecipCopy, formatDayWeather } from "../shared/precip.js";
 import { isBroadRegion } from "../shared/region.js";
 import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
@@ -69,13 +69,14 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   const activityHl = hl.filter(activityOk);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
   const kids = tripHasKids(inp);
+  const casualDinner = !!(hasInfantTraveler(inp) || hasChildUnder(7, inp) || kids);
   const nearFood = food.filter(e => isNearBase(e as any, { smallChild: youngDrive }) && !isOffParkBase(e?.name, destName));
   const abroad = opts.domestic === false;
-  const dinnerOpts = { kids, infant: hasInfantTraveler(inp), senior: hasSeniorTraveler(inp), abroad };
-  food = kids || dinnerOpts.infant || dinnerOpts.senior || abroad
-    ? filterDinnerList(familyDinnerList(nearFood.length ? nearFood : food, kids), dinnerOpts)
+  const dinnerOpts = { kids: casualDinner, infant: hasInfantTraveler(inp), senior: hasSeniorTraveler(inp), abroad };
+  food = casualDinner || dinnerOpts.senior || abroad
+    ? filterDinnerList(familyDinnerList(nearFood.length ? nearFood : food, casualDinner), dinnerOpts)
     : filterDinnerList(nearFood.length ? nearFood : food, dinnerOpts);
-  const dinnerName = (i: number) => food.length ? food[i % food.length].name : (kids ? CASUAL_DINNER_FALLBACK : "");
+  const dinnerName = (i: number) => food.length ? food[i % food.length].name : (casualDinner ? CASUAL_DINNER_FALLBACK : "");
   const dinnerTag = (i: number) => {
     const f = food[i % Math.max(food.length, 1)];
     return food.length && f?.tag && f.tag !== "restaurant" ? ` (${f.tag})` : "";
@@ -120,7 +121,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   const row = (day: any) => { rememberPlaces(`${day.morning || ""} ${day.afternoon || ""} ${day.evening || ""}`); built.push(day); return day; };
   return days.map((d, i) => {
     const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
-    const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? `, ${d.precipProb}%${precipProbLabel(d, kind)}`.replace("sampled years", "past years") : ""}`.trim();
+    const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${formatDayWeather(d)}`.trim();
     const driveMin = opts.driveMin ?? 0;
     const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
     const overnight = drivingLong && driveMin >= 10 * 60;

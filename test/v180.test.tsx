@@ -136,15 +136,16 @@ test("v1.18: rain backups are unique named indoor places when alternatives exist
   assert.ok(isIndoorishBackup({ name: "Hopi House", type: "Historic trading post / boutique", indoor: false, setting: "mixed" }));
 });
 
-test("v1.18: same-day rain backup falls back to a generic line when no unused indoor remains", () => {
+test("v1.18: same-day rain backup reuses another named indoor place when uniques are used", () => {
   const days = [
     { morning: "Junior Ranger program at the visitor center", afternoon: "Desert View Watchtower", evening: "Dinner", rainyBackup: "If it rains: Yavapai Geology Museum", notes: "" },
     { morning: "Walk the Rim Trail between Mather Point and Yavapai Point (flat, paved)", afternoon: "Hopi House", evening: "Dinner", rainyBackup: "If it rains: Grand Canyon Visitor Center", notes: "" },
     { morning: "Kolb Studio", afternoon: "Watch wildlife from a distance", evening: "Dinner", rainyBackup: "If it rains: Kolb Studio", notes: "" },
   ] as any;
   assignUniqueRainBackups(days, gcHl, "Grand Canyon Visitor Center");
-  assert.match(days[2].rainyBackup, /café, museum or covered market/i);
-  assert.ok(!/If it rains: Kolb Studio/i.test(days[2].rainyBackup));
+  assert.ok(!/café, museum or covered market/i.test(days[2].rainyBackup), days[2].rainyBackup);
+  assert.ok(!/If it rains: Kolb Studio/i.test(days[2].rainyBackup), days[2].rainyBackup);
+  assert.match(days[2].rainyBackup, /Yavapai|Hopi House|Visitor Center/i);
   const named = days.slice(0, 2).map((d: any) => d.rainyBackup.replace(/^If it rains:\s*/i, "").toLowerCase());
   assert.equal(new Set(named).size, 2, days.map((d: any) => d.rainyBackup).join(" | "));
 });
@@ -172,10 +173,8 @@ test("v1.18: pyramids and snorkeling near Cancún, with closer ruins when a baby
   assert.match(nearby, /El Rey|El Meco/i);
   assert.ok(!/Chichén Itzá/i.test(nearby), nearby);
   const notes = optionalFarInterestNotes(cancúnKids.interests, dest, true).join("\n");
-  assert.match(notes, /Chichén Itzá/i);
-  assert.match(notes, /about 2\.5 h each way by bus; a grown-up decides/i);
+  assert.match(notes, /Optional big day trip: Chichén Itzá \(~2\.5 h by bus\) or Tulum \(~2 h\) — a grown-up decides/);
   assert.ok(!/\(ask a grown-up\)/i.test(notes), notes);
-  assert.match(notes, new RegExp(CHICHEN_BABY_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   const older = curatedInterestVenues("pyramids, snorkeling", dest).map(s => s.name).join("\n");
   assert.match(older, /Chichén Itzá/i);
   assert.match(older, /Tulum/i);

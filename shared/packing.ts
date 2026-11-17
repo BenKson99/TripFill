@@ -382,7 +382,14 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   const underQty = Math.min(cycle + (settings.includeSpares ? 1 : 0), 31);
   const coldEssential = !uncertain && lo !== null && lo <= 0;
   const rainEssential = !uncertain && rain;
-  each(D, plan.trip?.domestic ? "Government photo ID" : "Passport / accepted travel ID & entry documents", "Check official entry and carrier rules for every destination and transit; requirements vary (infants and children usually need their own)", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
+  if (plan.trip?.domestic) {
+    each(D, "Government photo ID", "Check official ID rules for every destination and transit", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
+  } else {
+    each(D, "Passport / accepted travel ID & entry documents", "Check official entry and carrier rules for every destination and transit; requirements vary (children usually need their own)", 1, { essential: true, bag: "personal", lastMinute: true }, "notInfant");
+    for (const m of members) if (memberKind(m) === "infant") {
+      add(D, `Passport · ${m.name} needs their own`, "Babies need their own passport on international trips (grown-up task)", 1, { essential: true, bag: "personal", lastMinute: true, grownUp: true }, m.id);
+    }
+  }
   add(D, "Bookings & tickets (offline copies)", "Keep arrival details available without a connection", 1, { essential: true, bag: "personal" });
   each(D, "Payment card + backup / local cash", "Choose payment options for your route; separate backups", 1, { essential: true, bag: "personal", lastMinute: true }, "adults");
   each(D, "Travel insurance / emergency contact details", "Check coverage and keep a non-sensitive offline copy", 1, { bag: "personal" }, "adults");

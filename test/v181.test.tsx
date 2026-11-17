@@ -175,10 +175,7 @@ test("v1.18.1: a wet departure day gets a short rain note", () => {
 test("v1.18.1: optional Cancún day trips use real drive times, named indoor backups, and a specific infant passport line", () => {
   const dest = { name: "Cancún", country: "Mexico", countryCode: "MX" };
   const notes = optionalFarInterestNotes("pyramids", dest, true).join("\n");
-  assert.match(notes, /Chichén Itzá/);
-  assert.match(notes, /about 2\.5 h each way by bus; a grown-up decides/);
-  assert.match(notes, /Tulum/);
-  assert.match(notes, /about 2 h each way by bus; a grown-up decides/);
+  assert.match(notes, /Optional big day trip: Chichén Itzá \(~2\.5 h by bus\) or Tulum \(~2 h\) — a grown-up decides/);
   assert.ok(!/\(ask a grown-up\)/i.test(notes), notes);
   const indoor = curatedIndoorBackups(dest).map(s => s.name).join("\n");
   assert.match(indoor, /Museo Maya de Cancún/);

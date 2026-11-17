@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.18.2 — Plain weather labels, named rain backups, and visible infant passport
+
+- Weather labels no longer glue a wet-percent onto “usually dry”. Typical days read e.g. “Usually dry · 72–82°F · rained on about 1 in 3 of these days in past years”. A 0% day omits the chance phrase. Temperature ranges no longer repeat the unit on both ends.
+- Bridges, roads, highways, tunnels and interchanges are dropped from activity slots and Local highlights, except famous walkable landmark bridges (Tower Bridge, Golden Gate, Brooklyn Bridge, and a short similar list).
+- Rain backups name a real indoor place whenever the city has one, reusing a venue rather than falling back to “café, museum or covered market”. Cancún adds Plaza Kukulcán and Plaza Las Américas. Backups and activity slots get a short kid-friendly hint, e.g. “Interactive Aquarium Cancún (see sea animals indoors)”.
+- Every major theme-park day pairs with a pool or rest afternoon, even when a later fill had left “Explore a market or local street”.
+- The religious-attraction filter also applies to the Local highlights card on kid trips, unless the interests ask for it.
+- An infant on an international trip shows “Baby needs their own passport” in the visible prep list, and a packing row such as “Passport · Infant needs their own”.
+- Day notes cap at three, ordered safety first, then the optional trip. Far Cancún ruins merge into one line: “Optional big day trip: Chichén Itzá (~2.5 h by bus) or Tulum (~2 h) — a grown-up decides”.
+- Dinner slots with an infant or children under 7 prefer casual family restaurants; names such as Le Coq Au Vin and Kres Chophouse are treated as fine dining.
+- Cache keys are `places|v21` and `eats|v9`. Budget is unchanged.
+
+
 ## 1.18.1 — Restore Disney park days, tighter filters, and consistent wet-day wording
 
 - Critical regression: an Orlando family trip with interests “Disney World, theme parks, princesses, rides” scheduled no Disney park. Theme-park Wikipedia blurbs that mention an on-site theatre or “Walt Disney World Resort” were being dropped as city theatres or lodging. The interest dictionary now matches both “Disney” and “Disney World” and injects Magic Kingdom, EPCOT, Hollywood Studios and Animal Kingdom (one park per day with pool rest). Religious attractions such as Holy Land Experience stay off kid family days unless the interests ask for them.

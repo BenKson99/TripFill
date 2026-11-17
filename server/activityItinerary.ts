@@ -10,9 +10,9 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns } from "../shared/family.js";
+import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, ensureParkDayRest, capItineraryNotes, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns } from "../shared/family.js";
 import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, curatedParkSights, visitorCenterName, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
-import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups } from "../shared/interestVenues.js";
+import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups, applyKidPlaceHints } from "../shared/interestVenues.js";
 import { filterHighlightList, isJunkSight, isUnsolicitedReligiousAttraction, namedIceCream } from "../shared/junkVenues.js";
 import { BEACH_SAFETY_NOTE, NAP_BREAK_NOTE, SENIOR_PACE_NOTE, hasInfantTraveler, hasSeniorTraveler, isOceanBeachDestination, preferredFamilyBeaches } from "../shared/travelAdvice.js";
 
@@ -402,5 +402,8 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   applyKidPaceNotes(days, inp, usable);
   // Late slot fills (free-morning replacement, kid icons) can collide with an earlier backup.
   assignUniqueRainBackups(days, usable, visitorCenterName(merged, dest));
+  ensureParkDayRest(days);
+  if (kids) applyKidPlaceHints(days, usable);
+  capItineraryNotes(days, 3);
 }
 

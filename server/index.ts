@@ -151,7 +151,7 @@ app.post("/api/generate", async (req, res) => {
     const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic, home || facts?.home), it);
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
-      weather, highlights: places.highlights, eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
+      weather, highlights: preferredHighlights(places.highlights, inp), eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
       timeline: mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso),

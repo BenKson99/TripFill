@@ -1,5 +1,5 @@
 import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
-import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand } from "./family.js";
+import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, KIDS_POOL_REST } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
@@ -153,6 +153,8 @@ export function curatedIndoorBackups(dest?: DestRef | string): { name: string; t
       { name: "Museo Maya de Cancún", type: "museum", indoor: true, setting: "indoor", source: "TripFill", description: "Mayan archaeology museum next to the Hotel Zone." },
       { name: "Interactive Aquarium Cancún", type: "aquarium", indoor: true, setting: "indoor", source: "TripFill", description: "An indoor aquarium in the Hotel Zone." },
       { name: "La Isla Shopping Village", type: "mall", indoor: true, setting: "indoor", source: "TripFill", description: "A covered shopping village with food and indoor walking." },
+      { name: "Plaza Kukulcán", type: "mall", indoor: true, setting: "indoor", source: "TripFill", description: "A covered shopping mall in the Hotel Zone." },
+      { name: "Plaza Las Américas", type: "mall", indoor: true, setting: "indoor", source: "TripFill", description: "A large indoor shopping centre in downtown Cancún." },
     ];
   }
   return [];
@@ -183,12 +185,12 @@ export function curatedInterestVenues(interests: string, dest?: DestRef | string
   return out;
 }
 
-/** Far iconic sites held back when a little child is on the trip. */
+/** Far iconic sites held back when a little child is on the trip — one merged optional-trip line. */
 export function optionalFarInterestNotes(interests: string, dest?: DestRef | string, youngChild = false): string[] {
   if (!youngChild) return [];
   const text = interests || "";
   const place = destBlob(dest);
-  const notes: string[] = [];
+  const trips: string[] = [];
   const seen = new Set<string>();
   for (const e of ENTRIES) {
     if (!e.interest.test(text) || !e.place.test(place)) continue;
@@ -197,14 +199,15 @@ export function optionalFarInterestNotes(interests: string, dest?: DestRef | str
       const k = slot.name.toLowerCase();
       if (seen.has(k)) continue;
       seen.add(k);
-      const baby = slot.note ? `. ${slot.note}` : "";
-      const hours = slot.driveHours != null
-        ? `about ${String(slot.driveHours).replace(/\.0$/, "")} h each way by bus; a grown-up decides`
-        : "a big day trip; a grown-up decides";
-      notes.push(`Optional: ${slot.name} — ${hours}${baby}`);
+      const short = slot.name.replace(/\s+archaeological zone$/i, "").replace(/\s+archaeological site$/i, "");
+      const n = slot.driveHours != null ? String(slot.driveHours).replace(/\.0$/, "") : "";
+      const byBus = trips.length === 0 && slot.driveHours != null;
+      const hours = n ? ` (~${n} h${byBus ? " by bus" : ""})` : "";
+      trips.push(`${short}${hours}`);
     }
   }
-  return notes;
+  if (!trips.length) return [];
+  return [`Optional big day trip: ${trips.join(" or ")} — a grown-up decides`];
 }
 
 /** Highlights whose names mention an interest phrase (e.g. "Harry Potter" in the title). */
@@ -307,6 +310,7 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
       if (preferGeneric && !generic) continue;
       const next = majors.shift()!;
       d.morning = next.name;
+      if (isMajorAttraction(next.name)) d.afternoon = KIDS_POOL_REST;
       appendNote(d, next.note);
     }
   }
@@ -402,44 +406,112 @@ export function formatRainBackup(previous: string | undefined, name: string) {
   return `If it rains: ${name}`;
 }
 
-/** Give each day a distinct named indoor backup when an alternative exists; never repeat Yavapai if Hopi House (etc.) is free. */
+/** Give each day a distinct named indoor backup when an alternative exists; if uniques run out, reuse a real indoor place rather than a generic line. */
 export function assignUniqueRainBackups<T extends { morning?: string; afternoon?: string; evening?: string; rainyBackup?: string }>(
   days: T[],
   alternatives: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string }[] = [],
   fallbackName?: string,
 ): T[] {
-  const activityUsed = new Set<string>();
-  for (const d of days) {
-    const blob = `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`.toLowerCase();
-    for (const h of alternatives) if (h.name && blob.includes(h.name.toLowerCase())) activityUsed.add(h.name.toLowerCase());
-  }
+  const sameDay = (d: T, name?: string) => !!(name && `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(name.toLowerCase()));
   const seen = new Set<string>();
-  const take = (d: T) => alternatives.find(h => {
-    if (!h.name || seen.has(h.name.toLowerCase()) || activityUsed.has(h.name.toLowerCase())) return false;
-    if (`${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(h.name.toLowerCase())) return false;
-    return isIndoorishBackup(h);
-  });
+  const order: string[] = [];
+  const take = (d: T, reuse = false) => {
+    const pool = alternatives.filter(h => h.name && isIndoorishBackup(h) && !sameDay(d, h.name));
+    if (!reuse) return pool.find(h => !seen.has(h.name!.toLowerCase()));
+    // Cycle the least-recently used named indoor place, never the same day's activity.
+    const ranked = [...pool].sort((a, b) => {
+      const ia = order.lastIndexOf(a.name!.toLowerCase());
+      const ib = order.lastIndexOf(b.name!.toLowerCase());
+      return ia - ib;
+    });
+    return ranked[0];
+  };
   const GENERIC_LINE = "café, museum or covered market";
+  const hasRealIndoor = alternatives.some(h => h.name && isIndoorishBackup(h));
   for (const d of days) {
     const bak = d.rainyBackup || "";
     if (!bak) continue;
-    const named = rainBackupName(bak);
+    const named = rainBackupName(bak).replace(/\s*\([^)]*\)\s*$/, "").trim();
     const generic = !named || GENERIC_RAIN_BACKUP.test(named);
     const repeat = !!(named && seen.has(named.toLowerCase()));
-    const sameDay = !!(named && `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(named.toLowerCase()));
-    if (!generic && !repeat && !sameDay) {
+    const clash = sameDay(d, named);
+    if (!generic && !repeat && !clash) {
       seen.add(named.toLowerCase());
+      order.push(named.toLowerCase());
       continue;
     }
-    const next = take(d);
-    const fallbackOk = fallbackName && !seen.has(fallbackName.toLowerCase()) && !activityUsed.has(fallbackName.toLowerCase());
-    const replacement = next?.name || (fallbackOk ? fallbackName : undefined) || ((repeat || generic || sameDay) ? GENERIC_LINE : named);
-    if (replacement && (generic || repeat || sameDay)) {
+    const next = take(d) || (hasRealIndoor ? take(d, true) : undefined);
+    const fallbackOk = fallbackName && !sameDay(d, fallbackName) && (!seen.has(fallbackName.toLowerCase()) || !next);
+    const replacement = next?.name || (fallbackOk ? fallbackName : undefined) || ((repeat || generic || clash) && !hasRealIndoor ? GENERIC_LINE : (!generic && !clash ? named : GENERIC_LINE));
+    if (replacement && (generic || repeat || clash)) {
       d.rainyBackup = formatRainBackup(bak, replacement);
-      if (!GENERIC_RAIN_BACKUP.test(replacement)) seen.add(replacement.toLowerCase());
+      if (!GENERIC_RAIN_BACKUP.test(replacement)) {
+        const k = replacement.toLowerCase();
+        seen.add(k);
+        order.push(k);
+      }
     } else if (!generic && named) {
       seen.add(named.toLowerCase());
     }
+  }
+  return days;
+}
+
+
+const KID_HINTS: { re: RegExp; hint: string }[] = [
+  { re: /aquarium/i, hint: "see sea animals indoors" },
+  { re: /museo maya|mayan?.{0,20}museum/i, hint: "Mayan artefacts indoors" },
+  { re: /museum|museo|visitor (?:centre|center)/i, hint: "indoor exhibits" },
+  { re: /isla shopping|shopping village|\bmall\b|plaza kukul|plaza las am[eé]ricas/i, hint: "covered shops and snacks" },
+  { re: /hopi house/i, hint: "indoor craft shop and rest" },
+  { re: /kolb studio/i, hint: "indoor gallery" },
+  { re: /planetarium/i, hint: "stars indoors" },
+  { re: /\bzoo\b/i, hint: "see animals" },
+];
+const HINT_SKIP = /dinner\s*:|hotel pool|quiet rest|airport|arriv|depart|explore a market|café, museum or covered market|check in|free morning|long lunch/i;
+
+/** Short kid-friendly what-it-is phrase, or undefined when the name already explains itself. */
+export function kidPlaceHint(name: string, meta?: { type?: string; description?: string }): string | undefined {
+  const bare = (name || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (!bare || HINT_SKIP.test(bare) || /\(/.test(name || "")) return undefined;
+  const blob = `${bare} ${meta?.type || ""} ${meta?.description || ""}`;
+  const hit = KID_HINTS.find(h => h.re.test(blob));
+  return hit?.hint;
+}
+
+export function withKidHint(name: string, meta?: { type?: string; description?: string }): string {
+  const hint = kidPlaceHint(name, meta);
+  return hint ? `${name.replace(/\s*\([^)]*\)\s*$/, "").trim()} (${hint})` : name;
+}
+
+export function applyKidPlaceHints<T extends { morning?: string; afternoon?: string; evening?: string; rainyBackup?: string }>(
+  days: T[],
+  highlights: { name?: string; type?: string; description?: string }[] = [],
+): T[] {
+  const metaOf = (text?: string) => {
+    const bare = rainBackupName(text).replace(/\s*\([^)]*\)\s*$/, "").trim();
+    return highlights.find(h => (h.name || "").toLowerCase() === bare.toLowerCase());
+  };
+  const slot = (text?: string, kind?: "evening" | "backup" | "slot") => {
+    if (!text) return text;
+    if (kind === "evening" && /dinner/i.test(text)) return text;
+    if (kind === "backup") {
+      const named = rainBackupName(text);
+      if (!named || GENERIC_RAIN_BACKUP.test(named)) return text;
+      const hinted = withKidHint(named, metaOf(named));
+      return hinted === named ? text : formatRainBackup(text, hinted);
+    }
+    if (HINT_SKIP.test(text) || /\(/.test(text)) return text;
+    const bare = text.replace(/^[^A-Za-z0-9"]+/, "").trim();
+    const hinted = withKidHint(bare, metaOf(bare));
+    if (hinted === bare) return text;
+    return text.replace(bare, hinted);
+  };
+  for (const d of days) {
+    if (d.morning) d.morning = slot(d.morning, "slot")!;
+    if (d.afternoon) d.afternoon = slot(d.afternoon, "slot")!;
+    if (d.evening) d.evening = slot(d.evening, "evening")!;
+    if (d.rainyBackup) d.rainyBackup = slot(d.rainyBackup, "backup")!;
   }
   return days;
 }

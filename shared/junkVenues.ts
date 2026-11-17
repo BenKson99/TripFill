@@ -22,8 +22,24 @@ export function isCinemaOrCityTheatre(h: { name?: string; type?: string; descrip
   return false;
 }
 
+const INFRA_NAME = /\b(vehicular\s+bridge|road\s+bridge|highway|motorway|freeway|interstate|turnpike|expressway|ring\s+road|bypass|overpass|underpass|interchange|junction|tunnel|causeway)\b/i;
+const BRIDGE_WORD = /\b(bridge|puente|pont|ponte|brücke|brucke|brug)\b/i;
+const FAMOUS_WALKABLE_BRIDGE = /\b(tower bridge|golden gate(?:\s+bridge)?|brooklyn bridge|london bridge|harbour bridge|sydney harbour|ponte vecchio|rialto(?:\s+bridge)?|charles bridge|karl[uů]v|karlsbr[uü]cke|pont neuf|pont des arts|bridge of sighs|westminster bridge|millennium bridge)\b/i;
+const INFRA_TYPE = /\b(highway|motorway|trunk|primary_link|motorway_link|trunk_link|raceway|interchange|junction|tunnel|man_made=bridge|bridge=yes)\b/i;
+
+/** Roads, highways, tunnels, interchanges and ordinary bridges — not famous walkable landmark bridges. */
+export function isInfrastructureSight(h: { name?: string; type?: string; description?: string } | string): boolean {
+  const name = typeof h === "string" ? h : (h.name || "");
+  const typ = typeof h === "string" ? "" : (h.type || "");
+  const blob = `${name} ${typ}`;
+  if (FAMOUS_WALKABLE_BRIDGE.test(blob)) return false;
+  if (INFRA_NAME.test(blob) || INFRA_TYPE.test(typ)) return true;
+  if (BRIDGE_WORD.test(name)) return true;
+  return false;
+}
+
 export function isJunkSight(h: { name?: string; type?: string; description?: string; source?: string } | string): boolean {
-  return isCinemaOrCityTheatre(h);
+  return isCinemaOrCityTheatre(h) || isInfrastructureSight(h);
 }
 
 export function isNamelessFoodStall(e: { name?: string } | string): boolean {
