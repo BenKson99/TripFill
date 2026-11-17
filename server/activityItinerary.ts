@@ -8,7 +8,7 @@ import {
   weatherAllows, type ActivityId, type FitCtx,
 } from "../shared/activities.js";
 import { driveLabel } from "./plan.js";
-import { dedupeItineraryPlaces } from "./itineraryPlaces.js";
+import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
@@ -116,14 +116,24 @@ function dayMentionsPlace(d: ItinDay | undefined, name: string) {
   return blob.includes(name.toLowerCase());
 }
 
-function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay, days: ItinDay[] = []) {
+function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay, days: ItinDay[] = [], slot?: "morning" | "afternoon" | "evening") {
   const list = (id === "beach" || id === "surf") ? hlFor(id, hl).filter(isRealBeach) : hlFor(id, hl);
   const onOtherDay = (name: string) => days.some(d => d !== day && dayMentionsPlace(d, name));
-  const ok = (x: Highlight) => isRealisticDayTrip(x, inp, { name: placeName }) && !dayMentionsPlace(day, x.name);
-  const h = list.find(x => !used.has(x.name) && !onOtherDay(x.name) && ok(x))
-    || list.find(x => !onOtherDay(x.name) && ok(x))
-    || list.find(x => ok(x)); // last resort: nothing else is available
-  if (h) used.add(h.name);
+  const realistic = (x: Highlight) => isRealisticDayTrip(x, inp, { name: placeName });
+  const free = (x: Highlight) => realistic(x) && !dayMentionsPlace(day, x.name);
+  // Prefer an unused venue, but if the only named place of this kind is already
+  // on this day (e.g. itinerary put Camps Bay in the morning, then the beach
+  // preset overwrote the afternoon with generic text) or on a weaker slot
+  // elsewhere, still claim it rather than falling back to generic wording.
+  const h = list.find(x => !used.has(x.name) && !onOtherDay(x.name) && free(x))
+    || list.find(x => !onOtherDay(x.name) && free(x))
+    || list.find(x => free(x))
+    || list.find(x => realistic(x));
+  if (h) {
+    used.add(h.name);
+    if (day && slot) releasePlaceFromOtherSlots(days.length ? days : (day ? [day] : []), h.name, { day, slot });
+    else if (days.length) releasePlaceFromOtherSlots(days, h.name, { day, slot });
+  }
   return h;
 }
 
@@ -152,7 +162,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
       bump(d);
       if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
         const id: ActivityId = /Surf time/.test(d.afternoon) && fit.includes("surf") ? "surf" : "beach";
-        const h = pickPlace(id, hl, usedHl, inp, placeName, d, days);
+        const h = pickPlace(id, hl, usedHl, inp, placeName, d, days, "afternoon");
         if (h) d.afternoon = activityLabel(id, h);
       }
     } else if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
@@ -199,7 +209,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
   }
 
   for (const a of assignments) {
-    const h = pickPlace(a.id, hl, usedHl, inp, placeName, a.day, days);
+    const h = pickPlace(a.id, hl, usedHl, inp, placeName, a.day, days, a.slot);
     const text = activityLabel(a.id, h);
     if (a.slot === "evening") a.day.evening = `${text}; ${a.day.evening}`;
     else if (a.slot === "morning") a.day.morning = text;

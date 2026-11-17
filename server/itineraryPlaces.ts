@@ -94,6 +94,48 @@ function swapNamedPlace(text: string, name: string, replacement: string | undefi
   return text;
 }
 
+function slotFallback(slot: Slot) {
+  if (slot === "morning") return "Free morning — wander a new neighbourhood";
+  if (slot === "afternoon") return "Explore a market or local street";
+  return "";
+}
+
+/** Remove a place from a slot, using a generic fallback when the slot was just that name. */
+export function clearPlaceFromSlot(text: string, name: string, slot: "morning" | "afternoon" | "evening" | "rainyBackup") {
+  if (!text) return text;
+  const swapped = swapNamedPlace(text, name, undefined, slot);
+  if (!namesInText(swapped, [name]).length) {
+    if (slot === "rainyBackup" && /^If it rains:\s*$/i.test(swapped)) return "If it rains: café, museum or covered market";
+    return swapped;
+  }
+  const stripped = swapped
+    .replace(new RegExp(escapeRe(name), "ig"), "")
+    .replace(/[🏖🖼🍷🍸🥾🚶🍽🤿🏄🏙]/g, "")
+    .replace(/^[;·,\s]+|[;·,\s]+$/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!stripped || stripped.length < 4) return slotFallback(slot);
+  return stripped;
+}
+
+/**
+ * After an activity slot claims a named venue, drop weaker mentions of it
+ * (other days, rain backups, hike follow-ups, or the same day's leftover highlight).
+ * Ski-sector mornings are left alone so rotation can repeat.
+ */
+export function releasePlaceFromOtherSlots(days: ItinDay[], name: string, keep?: { day?: ItinDay; slot?: string }) {
+  if (!name) return;
+  for (const d of days) {
+    for (const slot of SLOTS) {
+      if (keep?.day === d && keep.slot === slot) continue;
+      const text = (d[slot] || "") as string;
+      if (!text || !namesInText(text, [name]).length) continue;
+      if (isSkiMorningSlot(text) && isSkiSector({ name })) continue;
+      (d as any)[slot] = clearPlaceFromSlot(text, name, slot);
+    }
+  }
+}
+
 /**
  * A named highlight should not appear on more than one day (including hike
  * follow-ups, rest-day options and rain backups). Repeats are kept only for
@@ -143,7 +185,7 @@ export function dedupeItineraryPlaces(days: ItinDay[], hl: Highlight[], placeNam
     const kind = mentionKind(text, h.name);
     const canSwap = kind === "then" || kind === "rest" || h.slot === "rainyBackup";
     const alt = canSwap ? hl.find(x => x.name && !used.has(x.name.toLowerCase()) && !(placeName && x.name.toLowerCase() === placeName.toLowerCase()) && !isAdminOrReligiousOrg(x) && !isSeriousPeak(x) && !isSkiSector(x)) : undefined;
-    const next = swapNamedPlace(text, h.name, alt?.name, h.slot);
+    const next = alt ? swapNamedPlace(text, h.name, alt.name, h.slot) : clearPlaceFromSlot(text, h.name, h.slot);
     (h.day as any)[h.slot] = next;
     if (alt) used.add(alt.name.toLowerCase());
   }

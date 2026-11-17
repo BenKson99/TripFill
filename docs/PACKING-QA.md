@@ -111,6 +111,10 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
 
+## Named beach when one is available (1.14.5)
+
+Confirm `/healthz` says **1.14.5**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. The beach afternoon should name a real beach (Camps Bay, Clifton or Muizenberg), not “Beach time at a nearby beach”. That beach should not also appear as that morning’s leftover highlight or on another day. Museum, tasting and nightlife slots should still name real venues. A Zermatt ski plan should still rotate sectors.
+
 ## Faster first Simple toggle and unique sights (1.14.4)
 
 Confirm `/healthz` says **1.14.4**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. Lion’s Head (or any other named sight) must not appear on two different days, including a “Hike continues … then …” follow-up or a rain backup. Nightlife should still name a real bar. A Zermatt ski plan should still rotate sectors, keep unique rest-day options, and stay free of dioceses.

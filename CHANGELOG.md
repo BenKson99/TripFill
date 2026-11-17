@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.14.5 — Named beach when one is available
+
+- The beach afternoon no longer stays as generic “Beach time at a nearby beach” when a real beach is already on that morning (or only appears as a rain backup or leftover highlight). The beach slot claims the named venue and the weaker mention is cleared. Museum, tasting and nightlife slots get the same claim-and-release treatment.
+
 ## 1.14.4 — Faster first Simple toggle and no repeated sights
 
 - The first Simple mode switch no longer re-renders the whole App (itinerary, map, budget, and the other tab panes). Simple mode is a local store, so only the packing lists, the Before you leave disclosure, and the pre-trip timeline update. The idle preload of those lists is kept.
