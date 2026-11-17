@@ -94,12 +94,14 @@ export const packingProgress = (items: PackingItem[]) => { const eligible = item
 /** Categories for the short "Start here" packing list (about 8–10 must-haves). */
 export const START_HERE_KEYS: { key: string; test: RegExp }[] = [
   { key: "id", test: /passport|photo id|travel id|government photo id/i },
-  { key: "licence", test: /driving licence|vehicle documents/i },
+  { key: "licence", test: /driving licen[cs]e|vehicle documents|driver'?s license/i },
   { key: "meds", test: /usual medicines|personal health supplies|first-aid/i },
   { key: "phone", test: /phone & charger/i },
   { key: "diapers", test: /diapers \/ nappies|diapers\/nappies/i },
   { key: "feeding", test: /feeding supplies/i },
   { key: "wipes", test: /wipes, changing mat/i },
+  { key: "sun", test: /sun hat|sunscreen/i },
+  { key: "water", test: /gallon per person|drinking water \(~1 gallon|reusable water bottle/i },
   { key: "jacket", test: /\b(jacket|rain shell|warm (layer|coat)|waterproof shell|fleece|hoodie|coat)\b/i },
   { key: "shoes", test: /comfortable walking shoes|hiking shoes|trail layers/i },
   { key: "payment", test: /payment card/i },
@@ -115,6 +117,7 @@ export function startHereItems(list: PackingList, limit = 10): PackingItem[] {
     if (!matches.length) continue;
     // One row per category: prefer a shared item, otherwise the first traveler.
     const choice = matches.find(i => ownerOf(i) === SHARED) || matches[0];
+    if (key === "jacket" && /waterproof shell|rain shell/i.test(choice.item) && !items.some(i => /rain|snow|wet conditions|umbrella/i.test(`${i.item} ${i.reason || ""}`) && !/waterproof shell/i.test(i.item))) continue;
     picked.push(choice);
     used.add(choice.id);
     void key;
@@ -392,7 +395,8 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (lo !== null && lo <= 0) { each(C, "Hat, gloves & scarf", coldReason, 1, { essential: coldEssential }, "all"); each(C, "Thermal base layers", coldReason, 2, { essential: coldEssential }); }
   if (hi !== null && hi >= 27) { each(C, "Sun hat", hotReason, 1, {}, "all"); each(C, "Lightweight shorts / warm-weather layer", hotReason, Math.min(2, cycle)); }
   const shellReason = snow && !rain ? (skiTrip ? "Fresh snow — waterproof shell and warm layers, not an umbrella" : "Snow expected — waterproof shell and warm layers, not an umbrella") : kits.includes("hiking") && !rain && !snow ? "Hiking — exposed conditions can change; check route-specific weather" : `${weatherPrefix(rainEssential && rain)}${rain ? `${basis} · wet conditions appear in available data${uncertaintyNote}` : snow ? "Snow expected — waterproof shell and warm layers, not an umbrella" : "Hiking — exposed conditions can change; check route-specific weather"}`;
-  if (rain || snow || kits.includes("hiking")) each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
+  const desertHot = !rain && !snow && hi !== null && hi >= 32;
+  if ((rain || snow || (kits.includes("hiking") && !desertHot))) each(C, "Packable waterproof shell", shellReason, 1, { essential: (rainEssential && rain) || (!uncertain && snow && skiTrip) });
   if (snow || (lo !== null && lo <= 0 && rain)) each(C, snow ? "Insulated snow boots" : "Waterproof boots with grip", snow ? (skiTrip ? "Snow underfoot — insulated snow boots; dress warm" : "Snow expected — insulated snow boots, not an umbrella") : `${coldReason} · wet/snow conditions possible; verify locally`, 1, { essential: coldEssential || (!uncertain && snow) });
   each(H, "Toothbrush & toothpaste", "Daily essentials"); each(H, "Deodorant & personal care", "Adjust to your routine; travel sizes if useful", 1, {}, "adults");
   each(H, "Usual medicines / personal health supplies (if needed)", "Bring your own required supplies; check official transport/import rules. No medical advice or details needed", 1, { essential: true, bag: "personal", lastMinute: true }, "all");
@@ -426,6 +430,10 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
       else each(it.group, it.item, it.reason, it.qty ?? 1, opts, (it.who || "notInfant") as Who);
     }
   }
+  if (desertHot || (hi !== null && hi >= 32) || kits.includes("hiking")) {
+    const people = Math.max(1, members.length);
+    add(X, "Drinking water (~1 gallon per person per day)", `Hot or hiking days — about ${people} gallon${people === 1 ? "" : "s"} per day for this group; refill wherever drinking water is safe`, Math.max(1, people), { essential: true, bag: driving ? "car" : "day-bag" });
+  }
   each(X, "Reusable water bottle", driving ? "Refill where drinking water is safe" : "Refill where drinking water is safe; empty before security if required");
   add(X, "Day bag / tote", "Daily essentials"); if (rain && !snow) add(X, "Compact umbrella", `${basis} · handy for rain and drizzle in town; the shell still covers heavier weather${uncertaintyNote}`, 1);
   add(X, "Laundry / worn-clothes bag", settings.laundryEvery ? "Laundry planned — confirm facilities and drying time" : "Separate worn clothing; no washing facilities assumed");
@@ -434,7 +442,7 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (kits.includes("hiking")) { each(A, "Hiking shoes / trail layers", "Hiking activity — choose gear for the actual route and check conditions"); each(A, "Daypack, trail snacks & water capacity", "Hiking activity — tailor water and supplies to the route, not a fixed universal amount"); add(A, "Offline trail map & headlamp", "Hiking activity — know your route and daylight limits"); }
   if (kits.includes("ski")) { each(A, "Ski jacket & pants", "Ski activity — weather-appropriate layers"); each(A, "Ski socks", "Ski activity — dry spare pairs", Math.min(3, cycle + 1)); each(A, "Goggles & helmet / rental booking", "Ski activity — confirm fit and rentals"); }
   if (kits.includes("kids")) { add(A, "Children's spare outfit, wipes & snacks", "Family plans — tailor to age and individual needs"); add(A, "Children's entertainment / comfort item", "Family plans — transit and downtime"); }
-  if (kits.includes("roadtrip")) { add(A, "Driving licence & rental documents", "Road-trip activity — check official licence/permit and insurance rules", 1, { bag: "personal", essential: true }); add(A, "Car charger / phone mount", "Road-trip activity — navigation"); }
+  if (kits.includes("roadtrip")) { if (!driving) add(A, "Driving licence & rental documents", "Road-trip activity — check official licence/permit and insurance rules", 1, { bag: "personal", essential: true }); if (!driving) add(A, "Car charger / phone mount", "Road-trip activity — navigation"); }
   if (driving) {
     add(D, "Driving licence & vehicle documents", "Check official licence, insurance and any rental or permit rules", 1, { essential: true, bag: "personal" });
     add(E, "Car charger / phone mount", "Navigation and charging on the road", 1, { bag: "personal" });
@@ -469,6 +477,23 @@ export function suggestPacking(plan: any, rawSettings?: Partial<PackingSettings>
   if (input.walkingTolerance === "low") each(X, "Usual mobility aids & accessibility notes", "Adjust to your own needs; verify route access, not medical advice", 1, {}, "all");
   if (input.walkingTolerance === "high") each(H, "Spare walking socks / foot care", "Longer outings selected — adjust to your needs");
   if (input.dietaryNeeds && input.dietaryNeeds !== "none") add(X, "Dietary translation card & backup snacks", "Confirm ingredients and cross-contact directly; not an allergy-safety guarantee");
+
+  // Collapse near-duplicate licence/document rows (across groups) and a bare Headlamp when a trail-map headlamp exists.
+  const hasTrailLamp = groups.some(g => g.items.some(i => /headlamp/i.test(i.item) && /trail map|offline/i.test(i.item)));
+  const hasVehicleDocs = groups.some(g => g.items.some(i => /vehicle documents/i.test(i.item)));
+  const seenLicence = new Set<string>();
+  for (const g of groups) {
+    g.items = g.items.filter(i => {
+      if (hasTrailLamp && /^headlamp$/i.test(i.item.trim())) return false;
+      if (hasVehicleDocs && /rental documents/i.test(i.item) && !/vehicle documents/i.test(i.item)) return false;
+      const n = i.item.toLowerCase().replace(/licen[cs]e/g, "license");
+      const a = /driving license.*documents|vehicle documents/.test(n) ? "licence-docs" : "";
+      if (!a) return true;
+      if (seenLicence.has(a)) return false;
+      seenLicence.add(a);
+      return true;
+    });
+  }
   return { modelVersion: 2, settings: { ...settings, activityKits: kits, members: members.map(m => ({ ...m })) }, groups, dismissed: [], leaveAtHome: [] };
 }
 /** Explicit refresh: update unedited suggestions only, preserve checks/skips; never delete or resurrect removals. */

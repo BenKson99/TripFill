@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.17.1 — Guaranteed interest days, family dinners, and Grand Canyon kid/heat safety
+
+- Root cause of the live London mismatch: Render still served a 24-hour `places|v17` / `eats|v6` cache of pre-1.17 restaurant order and highlights, and `applyInterestVenues` only filled *generic* mornings, so a richer activity/highlight set in production left Warner Bros. Studio Tour in Suggestions only. Cache keys are now `places|v18` and `eats|v7`. Explicit interest matches (Harry Potter → Warner Bros. Studio Tour London) now take a mid-day slot even when other named sights already filled the morning. The red double-decker is a short afternoon add-on.
+- Family dinner ranking is applied at itinerary time, not only as a list sort, and recognizes more luxury names (Bob Bob Ricard, The Wolseley, The Dorchester, Le Gavroche, Restaurant Gordon Ramsay, and similar). Fine dining is left off family evening slots when any casual option exists; otherwise the line is “Casual family dinner near your stay (pizza, a pub or a cafe)”. The same scoring is used in the Eats list. `purpose: Family` also counts as traveling with kids.
+- A US plan no longer lists both “Driving licence & vehicle documents” and “Driver's license…”. Those rows are deduped, with US wording for US homes. The UK plug prep item no longer adds a “GB type G; home sockets are type A/B” note.
+- Kid and heat hiking: with a child under 6, or highs ≥ 90°F, a full “Day hike / Hike continues” becomes a short rim or easy walk, with notes “Hot! Walk early or late, rest in shade midday, bring lots of water” and, near canyons or cliffs, “Stay behind railings and hold little hands near the edge”. Packing adds drinking water at ~1 gallon per person per day.
+- Side trips are capped at about 1 hour each way when a child is under 6 (no Wupatki-at-2h05m). Rain backups prefer a nearby visitor center or museum and never a hike-in or canyon-bottom site such as Phantom Ranch.
+- Dry desert Start here drops the packable waterproof shell and leads with sun hat, sunscreen or water. A bare Headlamp is dropped when a trail-map headlamp is already on the list.
+- Interests: “stars” → “Stargazing after dark — bring a flashlight with red light”; “animals” → wildlife watching from a distance and a Junior Ranger program at the visitor center; “camping” → a named OSM campground, or “Your campsite (a grown-up books it)”.
+- Nature-destination Day 1 uses “Sunset at [viewpoint]” instead of an easy neighbourhood walk.
+- “Which one did you mean?” no longer blocks Generate: the best match (national parks, cities, big places — not airports) is preselected, at most four options are kept, and each has a short description.
+- Activity chips auto-ticked from interests reset when the destination or interests change, unless the traveler ticked them by hand.
+- Kid-readable grown-up wording for “Check the forecast and finish the packing list”, photo ID, travel insurance, and trail-condition / hut-reservation tasks.
+- Budget is unchanged.
+
 ## 1.17.0 — Kid-friendliness batch 4
 
 - Free-text interests map to named, famous places from a small static dictionary (Harry Potter → Warner Bros. Studio Tour London and Platform 9¾; a red double-decker on route 11 or 15; Tower of London / Windsor Castle; dinosaurs → Natural History Museum, and a handful of other kid favourites). A keyword search in Wikidata/OSM names is the fallback. A bare category such as “Theme & water parks” is never an itinerary slot; if nothing is found the line is concrete (“Pick a theme park nearby (ask a grown-up)”). Water-park swimwear is packed only when a water park is actually scheduled.

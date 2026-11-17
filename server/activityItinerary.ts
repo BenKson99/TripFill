@@ -10,8 +10,8 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay, tripHasKids } from "../shared/family.js";
-import { applyInterestVenues, fillNamedAfternoons, isBareCategorySlot } from "../shared/interestVenues.js";
+import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, softenHikesForKidsAndHeat } from "../shared/family.js";
+import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups } from "../shared/interestVenues.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
   return fitContextFromWeather(w, placeName);
@@ -251,10 +251,11 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   dedupeItineraryPlaces(days, usable, placeName);
   fillPreferredParks(days, hl, inp.interests || "");
   applyInterestVenues(days, inp.interests || "", placeName, hl, isTravelOrLeaveDay);
-  fillNamedAfternoons(days, hl, isTravelOrLeaveDay);
+  reassignUsedRainBackups(days, usable);
+  fillNamedAfternoons(days, usable, isTravelOrLeaveDay);
+  applyInterestAddOns(days, inp.interests || "", placeName, hl, isTravelOrLeaveDay);
+  replaceVagueNearbySlots(days, usable, inp.interests || "", isTravelOrLeaveDay);
   paceItineraryForKids(days, inp);
-  for (const d of days) {
-    if (isBareCategorySlot(d.morning)) d.morning = "Pick a theme park nearby (ask a grown-up)";
-    if (isBareCategorySlot(d.afternoon)) d.afternoon = "Pick a place nearby (ask a grown-up)";
-  }
+  softenHikesForKidsAndHeat(days, inp, w, placeName);
+  replaceVagueNearbySlots(days, usable, inp.interests || "", isTravelOrLeaveDay);
 }

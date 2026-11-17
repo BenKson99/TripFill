@@ -58,3 +58,40 @@ export function placeQueryFallbacks(q: string): string[] {
   add(expandCity((raw.split(",")[0] || "").trim()));
   return out;
 }
+
+export type PlaceLike = { id?: number; name?: string; admin1?: string; country?: string; countryCode?: string; population?: number; featureCode?: string };
+
+export function placeKindLabel(p: PlaceLike): string {
+  const name = p.name || "";
+  const code = p.featureCode || "";
+  if (/^AIRP/i.test(code) || /\b(airport|aerodrome)\b/i.test(name)) return "airport";
+  if (/national park/i.test(name) || (/^PRK/i.test(code) && /national/i.test(name))) return "national park";
+  if (/game preserve|wildlife refuge|wildlife preserve/i.test(name)) return "wildlife preserve";
+  if (/caverns?|caves?/i.test(name)) return "caverns";
+  if (/village/i.test(name) || /^PPL$/i.test(code) && /village/i.test(name)) return "village";
+  if (/^PPL/i.test(code) || (p.population || 0) >= 1000) return p.admin1 ? `city in ${p.admin1}` : "city";
+  if (/monument|forest|recreation area|wilderness/i.test(name)) return "nature area";
+  return p.admin1 || p.country || "place";
+}
+
+/** Higher is better: national parks and real cities beat airports, bars and minor namesakes. */
+export function placeChoiceScore(p: PlaceLike): number {
+  const name = p.name || "";
+  const code = p.featureCode || "";
+  const pop = p.population || 0;
+  if (/^AIRP/i.test(code) || /\b(airport|aerodrome)\b/i.test(name)) return -200 + Math.min(pop, 500) / 100;
+  if (/\bbar \d+\b/i.test(name)) return -150;
+  if (/national park/i.test(name) || (/^PRK/i.test(code) && /park/i.test(name))) return 500 + Math.min(pop, 50000) / 1000;
+  if (/game preserve|wildlife/i.test(name)) return 120;
+  if (/caverns?|caves?/i.test(name) && !/national park/i.test(name)) return 40;
+  if (/^PPL/i.test(code) && pop >= 10000) return 320 + Math.log10(pop + 1) * 20;
+  if (/^PPL/i.test(code) && pop >= 1000) return 260 + pop / 200;
+  if (/^PPL/i.test(code)) return 200 + pop / 50;
+  if (/monument|forest|recreation area|wilderness|nature/i.test(name)) return 220;
+  if (/village/i.test(name)) return 180 + pop / 50;
+  return 50 + Math.min(pop, 20000) / 200;
+}
+
+export function rankPlaceMatches<T extends PlaceLike>(matches: T[], limit = 4): T[] {
+  return [...(matches || [])].sort((a, b) => placeChoiceScore(b) - placeChoiceScore(a) || (b.population || 0) - (a.population || 0) || (a.name || "").localeCompare(b.name || "")).slice(0, Math.max(1, limit));
+}

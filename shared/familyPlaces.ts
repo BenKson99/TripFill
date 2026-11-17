@@ -1,4 +1,5 @@
 import { isNightlifeVenue, isRestaurantLike } from "./activities.js";
+import { familyEatScore } from "./familyEats.js";
 
 const KID_GOOD = /\b(playground|play\s*area|kids[_\s-]?area|children'?s?\s*(museum|zoo|garden|theatre|theater|park)|family|zoo|aquarium|theme park|amusement park|water park|splash|legoland|disney|science centre|science center|fairground|carnival|miniature|petting)\b/i;
 const KID_FOOD = /\b(pizza|ice\s*cream|gelato|burger|diner|pancake|waffle|family|kids?\s*menu|breakfast|cafe|café|bakery|sandwich|noodle|taco)\b/i;
@@ -37,6 +38,7 @@ export function familyPlaceScore(h: { name?: string; type?: string; description?
   if (/museum|gallery/i.test(blob(h)) && /child|kids|family/i.test(blob(h))) s += 2;
   if ((h.indoor || h.setting === "indoor") && !isOutdoorFamilyPlace(h)) s += 1;
   if (isBarStyleVenue(h)) s -= 6;
+  s += familyEatScore(h);
   return s;
 }
 

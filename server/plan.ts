@@ -8,7 +8,8 @@ import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
-import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2 } from "../shared/family.js";
+import { familyDinnerList, CASUAL_DINNER_FALLBACK } from "../shared/familyEats.js";
+import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2, isNatureDestination, sunsetViewpointLine } from "../shared/family.js";
 import { formatShortDuration } from "../shared/distance.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
@@ -23,7 +24,7 @@ const addDays = (iso: string, k: number) => { const d = new Date(iso + "T00:00:0
 
 /** Shared deterministic packing engine also powers explicit client-side refresh. */
 export function packing(inp: TripInput, w: WeatherResult, place: Place, nights: number, domestic = false) {
-  return suggestPacking({ input: inp, weather: w, place, trip: { domestic } });
+  return suggestPacking({ input: inp, weather: w, place, trip: { domestic, home: inp.home } });
 }
 
 const dist = (a: { lat?: number; lon?: number }, b: { lat?: number; lon?: number }) => { const r = (x: number) => x * Math.PI / 180; const h = Math.sin(r(b.lat! - a.lat!) / 2) ** 2 + Math.cos(r(a.lat!)) * Math.cos(r(b.lat!)) * Math.sin(r(b.lon! - a.lon!) / 2) ** 2; return 12742 * Math.asin(Math.sqrt(h)); };
@@ -41,6 +42,12 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   hl = preferredHighlights(hl, inp);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
   const kids = tripHasKids(inp);
+  food = kids ? familyDinnerList(food, true) : food;
+  const dinnerName = (i: number) => food.length ? food[i % food.length].name : (kids ? CASUAL_DINNER_FALLBACK : "");
+  const dinnerTag = (i: number) => {
+    const f = food[i % Math.max(food.length, 1)];
+    return food.length && f?.tag && f.tag !== "restaurant" ? ` (${f.tag})` : "";
+  };
   const perDay = kids ? 1 : style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
   hl = hl.filter(h => !isBroadRegion(h)); extraIndoor = extraIndoor.filter(h => !isBroadRegion(h));
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
@@ -71,16 +78,16 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
           ? "Check in & rest — skip the neighbourhood walk today"
           : flyNight
             ? "Sleep on the plane — you'll arrive tomorrow"
-            : "Easy walk around your neighbourhood";
+            : (isNatureDestination(opts.destName || inp.destination) ? sunsetViewpointLine(hl) : "Easy walk around your neighbourhood");
       const notes = [overnight && !stop ? "Consider an overnight stop around the midpoint" : "", lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ");
       const tag = overnight ? "Drive" : flyNight ? "Fly" : "Arrive";
-      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : (food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay"), notes };
+      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : (dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay"), notes };
     }
     if (overnight && i === 1 && days.length > 2) {
-      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: holidayNote(d.date, opts.countryCode) || "" };
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay", notes: holidayNote(d.date, opts.countryCode) || "" };
     }
     if (flyNight && i === 1 && days.length > 2) {
-      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: food[0] ? `Early dinner nearby: ${food[0].name}` : "Early dinner near your stay", notes: [lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerName(0) ? `Early dinner nearby: ${dinnerName(0)}` : "Early dinner near your stay", notes: [lag, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") };
     }
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" };
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
@@ -97,17 +104,25 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       const lunch = `${/beach|bay|coast|lake/i.test(trip.type || trip.name) ? "Swim or walk the shore" : /park|mountain|peak|glacier|waterfall|arch/i.test(trip.type || trip.name) ? "Short walk or viewpoint stop" : /winery|vineyard|estate/i.test(trip.type || trip.name) ? "Tasting & long lunch" : "Lunch locally"} at ${trip.name}, then head back${back}`;
       slots.push(label(trip), (near && !(kids && isMajorAttraction(near))) ? `Also nearby: ${near.name}, then head back${back}` : lunch); }
     else for (let k = 0; k < perDay; k++) { const h = rain ? pick(indoor.length ? indoor : hl, true) : pick(inp.interests?.trim() ? hl : outdoorF.length ? outdoorF : hl, true); if (h) slots.push(h.name); }
-    const f = food.length ? food[i % food.length] : undefined;
     // Each backup is a distinct venue, and is taken out of the queue so it is never scheduled again
     // Prefer extra indoor venues (not on the highlight list), then unscheduled indoor highlights
-    const bh = rain ? undefined : extraIndoor.find(h => !usedBackup.has(h.name)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name));
+    const backupBlob = (h: Highlight) => `${h.name} ${h.type || ""} ${h.description || ""}`;
+    const safeIndoor = (h: Highlight) => {
+      const blob = backupBlob(h);
+      if (farDayTrip(h) || h.setting === "outdoor") return false;
+      if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|plateau point trail to the river|wildlife from a distance|stargazing|day hike|rim or easy walk/i.test(blob)) return false;
+      return !!(h.indoor || h.setting === "indoor" || /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(blob));
+    };
+    const nearbyIndoor = (h: Highlight) => safeIndoor(h) && (h.driveMin == null || h.driveMin <= 25);
+    const preferBackup = (h: Highlight) => nearbyIndoor(h) && /visitor (centre|center)|museum|gallery|library|studio|junior ranger|hopi house/i.test(backupBlob(h));
+    const bh = rain ? undefined : extraIndoor.find(h => !usedBackup.has(h.name) && preferBackup(h)) || extraIndoor.find(h => !usedBackup.has(h.name) && nearbyIndoor(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && preferBackup(h)) || indoor.find(h => queue.includes(h) && !h.dayTrip && !h.ski && !usedBackup.has(h.name) && nearbyIndoor(h));
     if (bh) { usedBackup.add(bh.name); if (queue.includes(bh)) queue.splice(queue.indexOf(bh), 1); }
     const backup = bh?.name;
     return {
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,
       morning: slots[0] || "Free morning — wander a new neighbourhood",
       afternoon: slots.slice(1).join(" → ") || (style === "Slow" ? "Long lunch & downtime" : "Explore a market or local street"),
-      evening: f ? `Dinner: ${f.name}${f.tag && f.tag !== "restaurant" ? ` (${f.tag})` : ""}` : "Dinner somewhere local",
+      evening: dinnerName(i) ? `Dinner: ${dinnerName(i)}${dinnerTag(i)}` : (kids ? CASUAL_DINNER_FALLBACK : "Dinner somewhere local"),
       rainyBackup: itineraryPrecipCopy(kind, ski, rain ? undefined : backup),
       notes: holidayNote(d.date, opts.countryCode) || "",
     };
@@ -118,12 +133,12 @@ export function timeline(start: string, international: boolean, todayIso?: strin
   const t = (k: number, task: string): Task => ({ id: id(), due: addDays(start, -k), task, done: false });
   const today = todayIso || todayIn();
   const list = [
-    t(60, international ? "Make sure everyone's passport is good for 6+ months after you come home (grown-up task)" : "Confirm ID is valid"),
+    t(60, international ? "Make sure everyone's passport is good for 6+ months after you come home (grown-up task)" : "Make sure everyone has a valid photo ID (grown-up task)"),
     t(45, travelMode === "driving" ? "Confirm the route, vehicle and accommodation" : "Book flights/transport and accommodation"),
-    t(30, international ? "Buy travel insurance; check vaccinations/health advice (grown-up task)" : "Consider travel insurance"),
+    t(30, international ? "Buy travel insurance; check vaccinations/health advice (grown-up task)" : "Think about travel insurance in case plans change (grown-up task)"),
     t(21, "Book must-do tickets & any restaurant reservations"),
     t(14, international ? "Tell your bank you're travelling so they don't freeze the card (grown-up task)" : "Tell your bank you're travelling"),
-    t(7, "Check the forecast & finalise packing list"),
+    t(7, "Check the forecast and finish the packing list (grown-up task)"),
     t(3, international ? "Download offline maps, tickets and translation pack" : "Download offline maps and tickets"),
     t(2, "Arrange pet/plant care, hold mail"),
     t(1, travelMode === "driving" ? "Check the car (tyres, fluids, lights), charge or fuel up, pack" : "Online check-in, and make a plan to get to the airport (grown-up task)"),

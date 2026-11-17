@@ -23,8 +23,8 @@ export function defaultPrep(plan: any): PrepItem[] {
     out.push(["Tell your bank & card issuer you're travelling (grown-up task)", "so they don't freeze the card; check foreign-transaction fees"]);
     out.push(["Set up a phone roaming plan or eSIM (grown-up task)"]);
   } else {
-    out.push(["Photo ID packed", "domestic trip"]);
-    out.push(["Consider travel insurance (cancellation)"]);
+    out.push(["Make sure everyone has a valid photo ID (grown-up task)", "domestic trip"]);
+    out.push(["Think about travel insurance in case plans change (grown-up task)"]);
   }
   const plugs = ccs.map(c => PLUGS[c] && `${c} type ${PLUGS[c]}`).filter(Boolean);
   const homePlug = homeCC && PLUGS[homeCC];
@@ -33,7 +33,7 @@ export function defaultPrep(plan: any): PrepItem[] {
     const task = gb
       ? "UK plugs have 3 big prongs — bring a UK plug adapter (grown-up: check voltage)"
       : `Bring a plug adapter for ${names.join(", ") || "your destination"} (grown-up: check voltage)`;
-    out.push([task, plugs.join(", ") + (homePlug ? `; home sockets are type ${homePlug}` : "")]);
+    out.push([task]);
   }
   out.push(["Chargers, power bank & cables packed"]);
   out.push([`Download offline maps for ${(plan.legs?.length > 1 ? plan.legs.map((l: any) => l.place.name) : [plan.place?.name]).join(", ")}`]);

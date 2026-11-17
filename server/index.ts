@@ -6,7 +6,7 @@ const APP_VERSION: string = JSON.parse(__rf(new URL("../package.json", import.me
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { geocode, getWeather, dateRange, todayIn, isPopulated, type Place } from "./weather.js";
+import { geocode, getWeather, dateRange, todayIn, type Place } from "./weather.js";
 import { getPlaces } from "./places.js";
 import { packing, itinerary, timeline, type TripInput } from "./plan.js";
 import { budget } from "./budget.js";
@@ -23,8 +23,9 @@ import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
 import { resolveActivities, syncActivityInput } from "../shared/activities.js";
 import { tripHasKids } from "../shared/family.js";
 import { curatedInterestVenues } from "../shared/interestVenues.js";
-import { preferFamilyEats } from "../shared/familyEats.js";
+import { preferFamilyEats, familyDinnerList } from "../shared/familyEats.js";
 import { dropUnusedWaterParkSwimwear } from "../shared/packing.js";
+import { rankPlaceMatches } from "../shared/placeQuery.js";
 import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 // Minimal .env loader (no dependency)
@@ -76,13 +77,10 @@ app.post("/api/generate", async (req, res) => {
     if (!place) {
       const matches = await geocode(inp.destination);
       if (!matches.length) return res.status(404).json({ error: friendlyError(`Couldn't find "${inp.destination}"`) });
-      // Prefer real towns/cities over islands, glaciers and other natural features (Tromsø)
-      const towns = matches.filter(isPopulated);
-      const distinct = (towns.length ? towns : matches).filter(m => (m.population ?? 0) > 0 || matches.length === 1 || towns.length === 1);
-      // Ask unless the top match dwarfs EVERY other one (Queenstown ZA 119k vs Queenstown NZ 10k is not decisive)
-      const runnerUp = Math.max(0, ...distinct.slice(1).map(m => m.population || 0));
-      if (distinct.length > 1 && !(distinct[0].population && distinct[0].population > 20 * runnerUp)) return res.json({ needsChoice: true, matches });
-      place = (distinct[0] || matches[0]); (inp as any)._matches = matches;
+      // Preselect the best match (national parks, cities, big places) and generate with it.
+      // Keep a short alternative list so the user can switch if we guessed wrong.
+      const ranked = rankPlaceMatches(matches, 4);
+      place = ranked[0] || matches[0]; (inp as any)._matches = ranked;
     }
     const home = await resolveHomeCity(inp);
     const prelim = home ? tripFacts(home, place, inp.start) : null;
@@ -113,11 +111,21 @@ app.post("/api/generate", async (req, res) => {
     const aiPolished = await polish(places.highlights);
     places.eats = dietaryEats(places.eats, inp);
     if (tripHasKids(inp)) {
-      places.eats = { ...places.eats, restaurants: preferFamilyEats(places.eats.restaurants), cafes: preferFamilyEats(places.eats.cafes) };
+      const restaurants = familyDinnerList(places.eats.restaurants, true);
+      const cafes = familyDinnerList(places.eats.cafes, true);
+      places.eats = {
+        ...places.eats,
+        restaurants: restaurants.length ? restaurants : preferFamilyEats(places.eats.restaurants),
+        cafes: cafes.length ? cafes : preferFamilyEats(places.eats.cafes),
+      };
     }
     const extraVenues = curatedInterestVenues(inp.interests || "", place)
       .filter(v => !places.highlights.some((h: any) => (h.name || "").toLowerCase() === v.name.toLowerCase()))
-      .map(v => ({ name: v.name, description: "A well-known place that matches your interests.", source: "TripFill", indoor: true, setting: "indoor" as const, type: "attraction" as const }));
+      .map(v => {
+        const indoor = /studio tour|museum|gallery|visitor (?:centre|center)|junior ranger|library|platform\s*9/i.test(v.name)
+          && !/stargaz|wildlife from a distance|double-decker|sunset|day hike/i.test(v.name);
+        return { name: v.name, description: "A well-known place that matches your interests.", source: "TripFill", indoor, setting: (indoor ? "indoor" : "outdoor") as "indoor" | "outdoor", type: "attraction" as const };
+      });
     if (extraVenues.length) places.highlights = [...extraVenues, ...places.highlights];
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
     const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name); walkingNotes(it, inp);

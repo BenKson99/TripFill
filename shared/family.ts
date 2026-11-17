@@ -38,7 +38,79 @@ export function tripHasKids(input?: any, members?: any[]): boolean {
   if (Array.isArray(list) && list.some(looksLikeChild)) return true;
   if ((input?.presets || []).includes("kids")) return true;
   if ((input?.activities || []).includes("family")) return true;
+  if (/^family$/i.test(input?.purpose || "")) return true;
+  if (Array.isArray(list) && list.some(m => Number.isFinite(m?.age) && m.age <= 17)) return true;
   return false;
+}
+
+/** Ages of travelers who look like children. */
+export function childAges(input?: any, members?: any[]): number[] {
+  const list = members || input?.members || [];
+  return (Array.isArray(list) ? list : []).filter(looksLikeChild).map(m => Number(m.age)).filter(n => Number.isFinite(n) && n >= 0);
+}
+
+export function hasChildUnder(maxAge: number, input?: any, members?: any[]): boolean {
+  const list = members || input?.members || [];
+  if (Array.isArray(list) && list.some(m => m?.profile === "infant") && maxAge > 1) return true;
+  return childAges(input, members).some(a => a < maxAge);
+}
+
+export const HOT_HIKE_C = 32.2; // 90°F
+
+export function isHotDay(d?: { tmax?: number | null } | null, threshold = HOT_HIKE_C): boolean {
+  return d != null && Number.isFinite(d.tmax) && (d.tmax as number) >= threshold;
+}
+
+export function isCanyonOrCliff(dest?: { name?: string; type?: string } | string): boolean {
+  const t = typeof dest === "string" ? dest : `${dest?.name || ""} ${dest?.type || ""}`;
+  return /canyon|cliff|gorge|rim|overlook|precipice/i.test(t);
+}
+
+export function isNatureDestination(dest?: { name?: string; type?: string; featureCode?: string } | string): boolean {
+  const t = typeof dest === "string" ? dest : `${dest?.name || ""} ${dest?.type || ""} ${dest?.featureCode || ""}`;
+  return /national park|nature|forest|wilderness|reserve|monument|canyon|cape|reef|safari|wildlife|state park|^PRK$|recreation area/i.test(t);
+}
+
+export const HEAT_HIKE_NOTE = "Hot! Walk early or late, rest in shade midday, bring lots of water";
+export const CLIFF_NOTE = "Stay behind railings and hold little hands near the edge";
+export const EASY_RIM_WALK = "🥾 Short rim or easy walk — keep it short, go early or late";
+export const EASY_RIM_AFTERNOON = "Rest in the shade midday; another short easy walk if it's cooler";
+
+export function shouldEaseHikes(input: any, weather?: { days?: { tmax?: number | null }[]; stats?: { avgHigh?: number } }): boolean {
+  if (hasChildUnder(6, input)) return true;
+  if ((weather?.stats?.avgHigh ?? 0) >= HOT_HIKE_C) return true;
+  return (weather?.days || []).some(d => isHotDay(d));
+}
+
+export function softenHikesForKidsAndHeat<T extends { date?: string; morning: string; afternoon: string; notes?: string }>(
+  days: T[],
+  input: any,
+  weather?: { days?: { date?: string; tmax?: number | null }[]; stats?: { avgHigh?: number } },
+  destName?: string,
+): T[] {
+  if (!days?.length) return days;
+  const ease = shouldEaseHikes(input, weather);
+  const canyon = isCanyonOrCliff(destName || input?.destination);
+  for (const d of days) {
+    const wx = (weather?.days || []).find(x => x.date && d.date && x.date === d.date);
+    const hot = isHotDay(wx) || (weather?.stats?.avgHigh ?? 0) >= HOT_HIKE_C;
+    if (ease) {
+      if (/Day hike|Hike continues/i.test(d.morning || "")) d.morning = EASY_RIM_WALK;
+      if (/Day hike|Hike continues/i.test(d.afternoon || "")) d.afternoon = EASY_RIM_AFTERNOON;
+    }
+    const extra: string[] = [];
+    if (hot || (ease && /rim or easy walk|hike|trail|canyon/i.test(`${d.morning} ${d.afternoon}`))) extra.push(HEAT_HIKE_NOTE);
+    if (canyon) extra.push(CLIFF_NOTE);
+    for (const n of extra) {
+      if (n && !(d.notes || "").includes(n)) d.notes = [d.notes, n].filter(Boolean).join(" · ");
+    }
+  }
+  return days;
+}
+
+export function sunsetViewpointLine(highlights: { name?: string; type?: string; description?: string }[] = []): string {
+  const v = highlights.find(h => /viewpoint|overlook|lookout|sunset|rim point|mather point|yavapai|hopi point|desert view/i.test(`${h.name || ""} ${h.type || ""} ${h.description || ""}`));
+  return v?.name ? `Sunset at ${v.name}` : "Sunset at a viewpoint";
 }
 
 export function isUsThanksgiving(iso: string): boolean {
@@ -63,7 +135,7 @@ export function holidayNote(iso: string, countryCode?: string): string | undefin
 }
 
 const GROWN_UP_PACKING = /passport|photo id|licence|license|vehicle documents|insurance|bookings? & tickets|house keys|medicines?|medication|health supplies|feeding supplies|cash|payment card|thermostat|car emergency|driving|plug adapter|voltage/i;
-const GROWN_UP_TASKS = /passport|visa|entry rules|insurance|bank|card issuer|roaming|esim|car:|tyres|tires|fluids|papers|parking|tolls|hold mail|thermostat|lock up|plant & pet|empty the fridge|bookings?|documents|medicines?|feeding|photo id|online check-in|plug adapter|voltage|grown-up task|check voltage/i;
+const GROWN_UP_TASKS = /passport|visa|entry rules|insurance|bank|card issuer|roaming|esim|car:|tyres|tires|fluids|papers|parking|tolls|hold mail|thermostat|lock up|plant & pet|empty the fridge|bookings?|documents|medicines?|feeding|photo id|online check-in|plug adapter|voltage|grown-up task|check voltage|confirm id|forecast|packing list|trail conditions|hut reservations|finalize packing|finalise packing/i;
 
 export function isGrownUpPackingItem(name: string): boolean {
   return GROWN_UP_PACKING.test(name || "");

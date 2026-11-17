@@ -1,6 +1,6 @@
 /** Prefer casual, family-friendly restaurants when kids are on the trip. */
 
-const FINE = /michelin|fine[_\s-]?dining|haute cuisine|high-?end|tasting menu|gordon ramsay|le gavroche|the dorchester|claridge'?s|the savoy|savoy grill|the ritz\b|le bristol|hôtel plaza|four seasons|mandarin oriental|the connaught|the langham|the peninsula|the berkeley|sketch\b|alain ducasse|helene darroze|core by|dinner by|restaurant gordon/i;
+const FINE = /michelin|fine[_\s-]?dining|haute cuisine|high-?end|tasting menu|gordon ramsay|le gavroche|the dorchester|claridge'?s|the savoy|savoy grill|the ritz\b|le bristol|hôtel plaza|four seasons|mandarin oriental|the connaught|the langham|the peninsula|the berkeley|sketch\b|alain ducasse|helene darroze|core by|dinner by|restaurant gordon|bob bob ricard|the wolseley|the ivy\b|le caprice|hibiscus\b|dinner by heston|alain ducasse|cut at 45|the ledbury|maison fran[cç]ois|wild honey|pollen street|sadi?ler'?s wells restaurant/i;
 const CASUAL = /fast[_\s-]?food|pizza|burger|diner|cafe|café|coffee|family|fish and chips|fish & chips|ice cream|gelato|pub|pizz|noodle|dumpling|street food|food court|bakery|sandwich|taco|bbq|barbecue/i;
 const HOTEL = /\b(hotel|hilton|marriott|hyatt|sheraton|westin|intercontinental|waldorf|raffles|st\.?\s*regis)\b/i;
 
@@ -30,3 +30,14 @@ export function preferFamilyEats<T extends { name?: string; tag?: string; kind?:
   if (!list?.length) return list || [];
   return [...list].sort((a, b) => familyEatScore(b) - familyEatScore(a));
 }
+
+/** Family itinerary dinners: drop fine dining when any casual option exists; otherwise use a generic line. */
+export function familyDinnerList<T extends { name?: string; tag?: string; kind?: string; description?: string }>(list: T[] | undefined, kids: boolean): T[] {
+  if (!list?.length) return [];
+  if (!kids) return list;
+  const ranked = preferFamilyEats(list);
+  const casual = ranked.filter(e => !isFineDining(e));
+  return casual.length ? casual : [];
+}
+
+export const CASUAL_DINNER_FALLBACK = "Casual family dinner near your stay (pizza, a pub or a cafe)";

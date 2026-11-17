@@ -23,6 +23,7 @@ import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel, WrongPlace } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
 import { englishVariant, localizeEn } from "../shared/enLocale";
+import { placeKindLabel } from "../shared/placeQuery";
 import { friendlyError } from "../shared/friendlyError";
 import { dateWarnings } from "../shared/dateWarnings";
 import { defaultPrep, mergePrepForMode } from "./Prep";
@@ -332,12 +333,12 @@ export default function App() {
           <label>Dietary preference<select value={form.dietaryNeeds || "none"} onChange={e => setForm({ ...form, dietaryNeeds: e.target.value })}>{[["none", "No preference"], ["vegetarian", "Vegetarian"], ["vegan", "Vegan"], ["gluten_free", "Gluten-free"], ["halal", "Halal"]].map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select></label>
           <p className="muted small wide">Limited walking means shorter outings; we have not checked step-free access. Always check allergies with the restaurant — ask a grown-up.</p>
           <MoreInfo><p className="muted small">Limited walking takes priority over hiking, skiing and walking-tour presets. Dietary tags are incomplete: source-tagged matches are preferred, name hints stay unverified, unknown venues stay visible and known conflicts are left out. Confirm ingredients and cross-contact directly — this is not an allergy-safety guarantee.</p></MoreInfo>
-          <ActivityPicker value={resolveActivities(form)} interests={form.interests} disabled={!!readOnly} onChange={(ids: ActivityId[]) => setForm((f: Any) => syncActivityInput({ ...f }, ids))} onInterests={text => setForm((f: Any) => ({ ...f, interests: text }))} />
+          <ActivityPicker value={resolveActivities(form)} interests={form.interests} destination={form.destination} disabled={!!readOnly} onChange={(ids: ActivityId[]) => setForm((f: Any) => syncActivityInput({ ...f }, ids))} onInterests={text => setForm((f: Any) => ({ ...f, interests: text }))} />
         </fieldset>
         <GrownUpNote show={showGrownUpNote(form)} />
         <button className="generate-btn" disabled={loading || !online || !!dates.order}>{!online ? "Offline — connect to generate" : loading ? "Building your plan… (~10s)" : "Make my trip plan ✨"}</button>
       </form>}
-      {matches && !readOnly && <div className="card noprint"><b>Which one did you mean?</b><div className="chips">{matches.map(m => <button key={m.id} onClick={() => generate(m)}>{placeLabel(m)}</button>)}</div></div>}
+      {matches && !readOnly && <div className="card noprint"><b>Which one did you mean?</b><p className="muted small">We&apos;ll use the first one unless you pick another.</p><div className="chips">{matches.slice(0, 4).map((m: Any, i: number) => <button key={m.id} className={i === 0 ? "on" : ""} onClick={() => generate(m)}>{placeLabel(m)}<small className="muted"> — {placeKindLabel(m)}</small></button>)}</div></div>}
 
       {plan && <>
         <section className="card trip-head">

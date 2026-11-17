@@ -1,3 +1,4 @@
+import { placeKindLabel } from "../shared/placeQuery";
 import { useEffect, useState } from "react";
 import { placeLabel } from "../shared/homeCity";
 import { friendlyError } from "../shared/friendlyError";
@@ -48,7 +49,7 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
 export function WrongPlace({ alts, onPick, resolved = true, label = "Wrong place?" }: { alts: Any[]; onPick: (p: Any) => void; resolved?: boolean; label?: string }) {
   const [open, setOpen] = useState(false);
   if (!alts?.length) return null;
-  const links = alts.map((o: Any, i: number) => <a key={o.id || o.name || i} href="#" onMouseDown={e => { e.preventDefault(); onPick(o); setOpen(false); }} onClick={e => { e.preventDefault(); onPick(o); setOpen(false); }}>{i ? " · " : ""}{placeLabel(o)}</a>);
+  const links = alts.slice(0, 4).map((o: Any, i: number) => <a key={o.id || o.name || i} href="#" onMouseDown={e => { e.preventDefault(); onPick(o); setOpen(false); }} onClick={e => { e.preventDefault(); onPick(o); setOpen(false); }}>{i ? " · " : ""}{placeLabel(o)} ({placeKindLabel(o)})</a>);
   if (!resolved) return <small className="muted">{label} {links}</small>;
   return <small className="muted place-alts noprint">{open ? <> <button type="button" className="linkish" data-testid="wrong-place" onClick={() => setOpen(false)}>{label}</button> {links}</> : <button type="button" className="linkish" data-testid="wrong-place" onClick={() => setOpen(true)}>{label}</button>}</small>;
 }

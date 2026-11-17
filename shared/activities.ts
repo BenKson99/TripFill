@@ -52,7 +52,7 @@ export const ACTIVITIES: ActivityDef[] = [
       { group: "Activities", item: "Offline trail map & headlamp", reason: "Hiking activity — know your route and daylight limits", who: "shared" },
     ],
     prep: [
-      { task: "Pick routes and check trail conditions or hut reservations", why: "weather and closures change; confirm difficulty and daylight", daysBefore: 7 },
+      { task: "Pick routes and check trail conditions or hut reservations (grown-up task)", why: "weather and closures change; a grown-up should confirm the trail is ok for the kids and the heat", daysBefore: 7 },
     ] },
   { id: "food", label: "Food & dining", emoji: "🍽", popular: true,
     aliases: /\b(food|dining|restaurant|eat(?:ing)?|culinary|foodie|cuisine|gastronom)\b/i,
@@ -352,6 +352,9 @@ export function isRealisticDayTrip(h: { dayTrip?: boolean; driveMin?: number; di
   const driving = input?.travelMode === "driving";
   if (isCarFreePlace(dest) && mins > 25) return false;
   if (!driving && mins > 40) return false;
+  const people = input?.members || [];
+  const young = Array.isArray(people) && people.some((m: any) => m && (m.profile === "infant" || (m.child && Number.isFinite(m.age) && m.age < 6) || (m.profile === "boy" || m.profile === "girl") && Number.isFinite(m.age) && m.age < 6));
+  if (young && mins > 60) return false;
   return true;
 }
 
