@@ -167,8 +167,8 @@ test("v1.16.1: Plan steps and a friendly Generate label are in the questionnaire
 });
 
 test("v1.16.1: user-visible errors are calm sentences, never raw HTTP or stacks", () => {
-  assert.equal(friendlyError('Couldn\'t find "Narnia"'), "We couldn't find that town. Check the spelling or try a bigger city nearby.");
-  assert.equal(friendlyError('Couldn\'t find home city "Xxqzt"'), "We couldn't find that home town. Check the spelling or try a bigger city nearby.");
+  assert.equal(friendlyError('Couldn\'t find "Narnia"'), 'We couldn\'t find "Narnia". Check the spelling or try a bigger city nearby.');
+  assert.equal(friendlyError('Couldn\'t find home city "Xxqzt"'), 'We couldn\'t find "Xxqzt". Check the spelling or try a bigger city nearby.');
   assert.match(friendlyError("Weather unavailable for some dates. Try again later; no zero-temperature placeholders were used."), /couldn't load the weather/i);
   assert.match(friendlyError("overpass 504"), /map data is taking too long/i);
   assert.match(friendlyError(new Error("Failed to fetch")), /couldn't reach the internet/i);

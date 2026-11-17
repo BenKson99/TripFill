@@ -37,9 +37,16 @@ const TO_US: [RegExp, string][] = [
   [/\bOrganising\b/g, "Organizing"],
 ];
 
+const US_CACHE = new Map<string, string>();
+const US_CACHE_MAX = 2000;
+
 export function localizeEn(text: string, variant: EnVariant = "us"): string {
   if (!text || variant === "uk") return text;
+  const hit = US_CACHE.get(text);
+  if (hit !== undefined) return hit;
   let s = text;
   for (const [re, to] of TO_US) s = s.replace(re, to);
+  if (US_CACHE.size >= US_CACHE_MAX) US_CACHE.clear();
+  US_CACHE.set(text, s);
   return s;
 }

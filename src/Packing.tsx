@@ -63,7 +63,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={isSimple} data-testid="simple-toggle" className={isSimple ? "on" : "ghost"} onClick={() => { const next = !isSimple; if (simple === undefined) setSimplePacking(next); onSimpleChange?.(next); }}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{isSimple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
   return <div className={`packing-workspace${isSimple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
-    <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} T={T} />
+    <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} T={tFn} />
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
     {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
     {mountedDetailed && <div hidden={isSimple} className={isSimple ? "noprint" : undefined} data-testid="packing-detailed-pane">
@@ -193,8 +193,8 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
 
 function shortItemName(name: string) { return name.replace(/\s*\(~[^)]*\)\s*$/, "").trim(); }
 
-function StartHere({ p, readOnly, onCheck, T = (s: string) => s }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string }) {
-  const items = startHereItems(p);
+const StartHere = memo(function StartHere({ p, readOnly, onCheck, T = (s: string) => s }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string }) {
+  const items = useMemo(() => startHereItems(p), [p]);
   if (!items.length) return <p className="packing-encouragement noprint" data-testid="packing-encouragement">{T(packingEncouragement(p, items))}</p>;
   return <section className="start-here noprint" data-testid="start-here">
     <header><h3>Start here</h3><p className="packing-encouragement" data-testid="packing-encouragement">{T(packingEncouragement(p, items))}</p></header>
@@ -205,7 +205,7 @@ function StartHere({ p, readOnly, onCheck, T = (s: string) => s }: { p: PackingL
       <GrownUpBadge name={i.item} flagged={i.grownUp} />
     </li>)}</ul>
   </section>;
-}
+});
 
 /** Simple mode: whole active lists (ignores detailed search/filters), same item ids, checks only. */
 export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {

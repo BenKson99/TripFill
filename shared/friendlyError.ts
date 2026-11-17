@@ -2,10 +2,10 @@
 export function friendlyError(err: unknown): string {
   const m = (err instanceof Error ? err.message : typeof err === "string" ? err : "").trim();
   const low = m.toLowerCase();
-  if (/home city/i.test(m) && /couldn'?t find|could not find|unknown/i.test(m)) {
-    return "We couldn't find that home town. Check the spelling or try a bigger city nearby.";
-  }
-  if (/couldn'?t find|could not find|unknown city|not find "/i.test(m)) {
+  const named = m.match(/couldn'?t find(?:\s+home city)?\s+"([^"]+)"/i) || m.match(/could not find(?:\s+home city)?\s+"([^"]+)"/i);
+  if (named || /couldn'?t find|could not find|unknown city|not find "/i.test(m) || (/home city/i.test(m) && /unknown/i.test(m))) {
+    const name = named?.[1]?.trim();
+    if (name) return `We couldn't find "${name}". Check the spelling or try a bigger city nearby.`;
     return "We couldn't find that town. Check the spelling or try a bigger city nearby.";
   }
   if (/weather unavailable|no usable weather|no historical weather|historical temperatures unavailable|conditions unavailable/i.test(m)) {

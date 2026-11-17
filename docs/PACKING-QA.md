@@ -111,6 +111,10 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
 
+## Faster first Simple toggle (1.16.2)
+
+Confirm `/healthz` says **1.16.2**. On the Orlando family plan (5 travelers, ~92 items), the first Simple-mode toggle should feel instant — under about 300ms even with 6× CPU throttle — and stay comparable to 1.14.4 or better. A typo in Home city such as `Zzqxhome` should read: We couldn't find "Zzqxhome". Check the spelling or try a bigger city nearby. Budget is unchanged.
+
 ## Kid-friendliness batch 3 (1.16.1)
 
 Confirm `/healthz` says **1.16.1**. Generate the Orlando family fixture, then reload: the plan must come back (not a blank page). “Day by day ↓” should land on the Day by day heading. Day 1 should be an overnight drive to the midpoint (e.g. Knoxville) and Day 2 should finish the drive with no major park. US wording should appear (Driver’s license, diapers not “nappies”). Date mistakes should show an inline hint. Budget is unchanged.

@@ -27,7 +27,7 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
     try {
       const r = await (await fetch(`/api/geocode?q=${encodeURIComponent(t.split(",")[0])}`)).json();
       const res: Any[] = r.results || [];
-      if (!res.length) { setState(`Couldn't find "${t}"`); return; }
+      if (!res.length) { setState(friendlyError(`Couldn't find "${t}"`)); return; }
       const best = [...res].sort((a, b) => (b.population || 0) - (a.population || 0))[0];
       onChange(best); onText(placeLabel(best)); setOpts(res.filter(x => x.id !== best.id).slice(0, 4)); setState("");
     } catch (e) { setState(friendlyError(e)); }

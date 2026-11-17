@@ -1,7 +1,7 @@
 import { PackingWorkspace } from "./Packing";
 import { packingProgress } from "../shared/packing";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { SettingsMenu } from "./SettingsMenu";
 import { TravelerFields, travelerRows, editTraveler, setAllTypes, withMembers, syncFormMembers } from "./Travelers";
@@ -92,7 +92,7 @@ export default function App() {
   const [layout, setLayout] = useLayout(Object.keys(TITLES));
   const [homeCity, setHomeCity] = useHomeCity();
   const en = englishVariant(plan?.trip?.home || homeCity);
-  const T = (s: string) => localizeEn((s || "").replace(/\{t:(-?[\d.]+)\}/g, (_m, v) => deg(Number(v))).replace(/(-?\d+(?:\.\d+)?)°C\b/g, (_m, v) => deg(Number(v))), en);
+  const T = useCallback((s: string) => localizeEn((s || "").replace(/\{t:(-?[\d.]+)\}/g, (_m, v) => unit === "F" ? `${Math.round(Number(v) * 9 / 5 + 32)}°F` : `${Math.round(Number(v))}°C`).replace(/(-?\d+(?:\.\d+)?)°C\b/g, (_m, v) => unit === "F" ? `${Math.round(Number(v) * 9 / 5 + 32)}°F` : `${Math.round(Number(v))}°C`), en), [unit, en]);
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(() => {
     const savedU = localStorage.getItem(KEY + ":distance");
     if (isDistanceUnit(savedU)) return savedU;

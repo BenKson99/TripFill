@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.2 — Faster first Simple toggle and friendlier unknown-city errors
+
+- The first Simple-mode toggle no longer spends seconds resizing every packing, prep and timeline label one at a time. Checklist textareas share one ResizeObserver and batch height writes into a single animation frame, so layout work is O(1) reflows instead of O(n). `T()` is memoized, US English strings are cached, and Start here is memoized.
+- Unknown-city errors now keep the typed name everywhere, including the Home city field: “We couldn't find "Zzqxhome". Check the spelling or try a bigger city nearby.”
+- Budget is unchanged.
+
 ## 1.16.1 — Kid-friendliness batch 3
 
 - Reloading a saved trip no longer shows a blank page. A local `placeLabel` helper had been shadowing the import and crashed `useState` when a home city was already in this browser. Loading is also more tolerant of malformed or older saved plans.
