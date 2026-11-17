@@ -154,12 +154,14 @@ test("v1.17: with kids, casual family restaurants rank above fine dining", () =>
   assert.ok(isCasualFamilyEat({ name: "Pizza Pilgrims", tag: "pizza" }));
 });
 
-test("v1.17: a mild London July is a hoodie and rain jacket, not seven identical shorts lines", () => {
-  const line = whatToWear({ tmax: 22, tmin: 14, precipProb: 30, summary: "Partly cloudy" });
-  assert.equal(line, "T-shirt plus a hoodie; pack a rain jacket");
-  const mid = whatToWear({ tmax: 19, tmin: 11, precipProb: 0, summary: "Usually dry" });
-  assert.equal(mid, "T-shirt plus a hoodie; pack a rain jacket");
-  const days = Array.from({ length: 7 }, () => whatToWear({ tmax: 22, tmin: 14, precipProb: 30, summary: "Partly cloudy" }));
+test("v1.17: a mild London July is a hoodie, not seven identical shorts lines", () => {
+  const line = whatToWear({ tmax: 22, tmin: 14, precipProb: 30, summary: "Partly cloudy", typical: true });
+  assert.equal(line, "T-shirt plus a hoodie");
+  const mid = whatToWear({ tmax: 19, tmin: 11, precipProb: 0, summary: "Usually dry", typical: true });
+  assert.equal(mid, "T-shirt plus a hoodie");
+  const wet = whatToWear({ tmax: 22, tmin: 14, precipProb: 60, summary: "Often wet", typical: true });
+  assert.equal(wet, "T-shirt plus a hoodie and a light rain jacket");
+  const days = Array.from({ length: 7 }, () => whatToWear({ tmax: 22, tmin: 14, precipProb: 30, summary: "Partly cloudy", typical: true }));
   assert.ok(days.every(l => l === line));
   assert.equal(localizeEn(line, "us"), line);
 });

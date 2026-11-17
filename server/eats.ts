@@ -7,7 +7,7 @@ import { isJunkEat, isNamelessFoodStall } from "../shared/junkVenues.js";
 export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string; sourceUrl?: string; retrievedAt?: string; cuisineEvidence?: string; dietary?: Record<string, string>; dietaryStatus?: string }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v8|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v9|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));

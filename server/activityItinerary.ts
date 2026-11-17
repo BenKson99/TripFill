@@ -12,8 +12,8 @@ import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPl
 import { presetItinerary, type Preset } from "./presets.js";
 import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns } from "../shared/family.js";
 import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, curatedParkSights, visitorCenterName, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
-import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup } from "../shared/interestVenues.js";
-import { filterHighlightList, isJunkSight, namedIceCream } from "../shared/junkVenues.js";
+import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups } from "../shared/interestVenues.js";
+import { filterHighlightList, isJunkSight, isUnsolicitedReligiousAttraction, namedIceCream } from "../shared/junkVenues.js";
 import { BEACH_SAFETY_NOTE, NAP_BREAK_NOTE, SENIOR_PACE_NOTE, hasInfantTraveler, hasSeniorTraveler, isOceanBeachDestination, preferredFamilyBeaches } from "../shared/travelAdvice.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
@@ -280,15 +280,25 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   } as Highlight));
   const merged = filterHighlightList([...hl]).map(h => h.name && h.name.includes("|") ? { ...h, name: tidyPlaceName(h.name) } : h);
   for (const s of parkSights) if (!merged.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) merged.unshift(s);
+  for (const s of curatedIndoorBackups(dest)) if (!merged.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) merged.push(s as Highlight);
+  for (const slot of curatedInterestVenues(inp.interests || "", dest, { youngChild: hasChildUnder(6, inp) })) {
+    if (slot.kind === "evening" || slot.far) continue;
+    if (!merged.some(h => (h.name || "").toLowerCase() === slot.name.toLowerCase() || (h.name || "").toLowerCase().includes(slot.name.toLowerCase()))) {
+      const typ = /magic kingdom|epcot|hollywood studios|animal kingdom|disneyland|theme park|universal|islands of adventure/i.test(slot.name) ? "theme park" : (slot.kind === "major" ? "attraction" : "sight");
+      merged.unshift({ name: slot.name, description: "A well-known stop that matches this trip's interests.", indoor: typ === "theme park" ? false : undefined, setting: typ === "theme park" ? "outdoor" : undefined, type: typ, source: "TripFill" } as Highlight);
+    }
+  }
   for (const name of preferredFamilyBeaches(placeName || inp.destination || "")) {
     if (!merged.some(h => (h.name || "").toLowerCase().includes(name.toLowerCase().replace(/ \(calm\)$/i, "")))) {
       merged.unshift({ name, description: "A well-known family beach.", indoor: false, setting: "outdoor", type: "beach", source: "TripFill", activity: "beach" } as Highlight);
     }
   }
   const small = hasChildUnder(8, inp);
+  const kids = tripHasKids(inp);
   const usable = merged.filter(h => (!h.dayTrip || isRealisticDayTrip(h, inp, { name: placeName }))
     && !isLodgingOrStay(h) && !isDestinationItself(h.name, dest) && !isVagueSight(h) && !isOffParkBase(h.name, dest)
-    && isNearBase(h, { smallChild: youngDrive }) && !(small && isHikeInOrInnerCanyon(h)) && !isJunkSight(h));
+    && isNearBase(h, { smallChild: youngDrive }) && !(small && isHikeInOrInnerCanyon(h)) && !isJunkSight(h)
+    && !(kids && isUnsolicitedReligiousAttraction(h, inp.interests || "")));
   const psFit = ps.filter(p => {
     const id = PRESET_ACTIVITY[p];
     if (!id) return true;
@@ -300,6 +310,7 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   dedupeItineraryPlaces(days, usable, placeName);
   fillPreferredParks(days, usable, inp.interests || "");
   applyInterestVenues(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, { youngChild: hasChildUnder(6, inp) });
+  fillPreferredParks(days, usable, inp.interests || "");
   fillNamedAfternoons(days, usable, isTravelOrLeaveDay);
   applyInterestAddOns(days, inp.interests || "", placeName, usable, isTravelOrLeaveDay, {
     maxAddOns: hasChildUnder(8, inp) ? 1 : 2,

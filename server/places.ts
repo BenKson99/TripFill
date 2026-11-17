@@ -4,6 +4,7 @@ import type { Place } from "./weather.js";
 import { getEats, wvListings, type Eat, type Eats } from "./eats.js";
 
 import { isBroadRegion } from "../shared/region.js";
+import { isMajorAttraction } from "../shared/family.js";
 import { cleanVenueName, isAdminOrReligiousOrg, isRestDayFriendly, isSkiSector } from "../shared/activities.js";
 export interface Highlight { name: string; driveMin?: number; driveSrc?: "osrm" | "estimate"; dayTrip?: boolean; distanceKm?: number; ski?: boolean; description: string; indoor: boolean; setting?: "indoor" | "outdoor" | "mixed"; type?: string; views30d?: number; source: string; url?: string; lat?: number; lon?: number; activity?: string }
 
@@ -271,7 +272,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v19|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
+  return cached(`places|v20|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];
@@ -330,7 +331,7 @@ async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {})
     highlights = [...boost, ...highlights.filter(h => !boost.some(b => b.name.toLowerCase() === h.name.toLowerCase()))];
   }
   // Drop "Table Mountain National Park" when "Table Mountain" exists, but keep "Matterhorn Museum".
-  highlights = highlights.filter(h => isRestDayFriendly(h) || !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
+  highlights = highlights.filter(h => isRestDayFriendly(h) || isMajorAttraction(h) || !highlights.some(o => o !== h && !o.ski && nm(h.name) !== nm(o.name) && nm(h.name).includes(nm(o.name)) && near5(o, h)));
   { const seenN = new Set<string>(); highlights = highlights.filter(h => { const k = nm(h.name); if (seenN.has(k)) return false; seenN.add(k); return true; }); }
   // Prefer items with real descriptions
   highlights.sort((a, b) => Number(!!b.ski) - Number(!!a.ski) || Number(b.description.length > 40) - Number(a.description.length > 40));

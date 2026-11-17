@@ -173,7 +173,8 @@ test("v1.18: pyramids and snorkeling near Cancún, with closer ruins when a baby
   assert.ok(!/Chichén Itzá/i.test(nearby), nearby);
   const notes = optionalFarInterestNotes(cancúnKids.interests, dest, true).join("\n");
   assert.match(notes, /Chichén Itzá/i);
-  assert.match(notes, /big day trip \(ask a grown-up\)/i);
+  assert.match(notes, /about 2\.5 h each way by bus; a grown-up decides/i);
+  assert.ok(!/\(ask a grown-up\)/i.test(notes), notes);
   assert.match(notes, new RegExp(CHICHEN_BABY_NOTE.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   const older = curatedInterestVenues("pyramids, snorkeling", dest).map(s => s.name).join("\n");
   assert.match(older, /Chichén Itzá/i);
@@ -249,7 +250,7 @@ test("v1.18: packing and prep for a Cancún flying family trip with a baby and a
   assert.ok(!/waterproof shell|rain shell/i.test(start), start);
   assert.match(start, /Diapers \/ nappies \(~2 days/);
   const prep = defaultPrep(p).map(t => t.task).join("\n");
-  assert.match(prep, /Infants need their own passport/);
+  assert.match(prep, /Baby needs their own passport/);
   assert.match(prep, /consent letter/i);
   assert.match(prep, /Same plugs as home — no adapter needed/);
   assert.ok(!/plug adapter for/i.test(prep));

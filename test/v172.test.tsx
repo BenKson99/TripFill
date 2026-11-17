@@ -165,9 +165,9 @@ test("v1.17.2: a rendered US plan has no UK-only spelling in packing, prep or ti
   const detailed = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} onChange={() => {}} T={T} simple={false} />);
   const simple = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} onChange={() => {}} T={T} simple={true} />);
   const lists = renderToStaticMarkup(
-    <div>
-      {(p.prep || []).map((t: any) => <div key={t.id}>{T(t.task)} {T(t.why || "")}</div>)}
-      {(p.timeline || []).map((t: any) => <div key={t.id}>{T(t.task)}</div>)}
+    <div data-testid="prep-and-timeline">
+      {(p.prep || []).map((t: any) => <div key={t.id} data-testid="prep-item"><button aria-label={T(t.task)} />{T(t.task)} {T(t.why || "")}</div>)}
+      {(p.timeline || []).map((t: any) => <div key={t.id}><button aria-label={T(t.task)} />{T(t.task)}</div>)}
     </div>
   );
   const visible = (html: string) => html
@@ -178,6 +178,8 @@ test("v1.17.2: a rendered US plan has no UK-only spelling in packing, prep or ti
     .replace(/&quot;/g, '"');
   const html = visible(`${detailed}\n${simple}\n${lists}`);
   assert.match(html, /Driver's license/);
+  assert.match(html, /ask a neighbor/);
+  assert.ok(!/ask a neighbour/i.test(html), "prep still has UK neighbour");
   const uk = /\b(licence|nappies|jumper|tyres|travelling|neighbour|colour|organise|centre)\b/i;
   const hit = html.match(uk);
   assert.equal(hit, null, `UK wording still visible: ${hit && hit[0]}`);

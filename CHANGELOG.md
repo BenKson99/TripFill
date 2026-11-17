@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.18.1 — Restore Disney park days, tighter filters, and consistent wet-day wording
+
+- Critical regression: an Orlando family trip with interests “Disney World, theme parks, princesses, rides” scheduled no Disney park. Theme-park Wikipedia blurbs that mention an on-site theatre or “Walt Disney World Resort” were being dropped as city theatres or lodging. The interest dictionary now matches both “Disney” and “Disney World” and injects Magic Kingdom, EPCOT, Hollywood Studios and Animal Kingdom (one park per day with pool rest). Religious attractions such as Holy Land Experience stay off kid family days unless the interests ask for them.
+- The restaurants list on kid trips also drops sports bars (e.g. Champions Sports Bar). Dinner slots no longer use parks, plazas or squares (e.g. Parque de las Palapas).
+- Prep “ask a neighbour” is routed through T()/localizeEn, including checkbox aria-labels, so a US home shows “neighbor”.
+- Wet-day summary, per-day labels and notes share the 50% rainy-day threshold. A wet departure day gets a short rain note. A light rain jacket appears only on days counted as wet.
+- Optional far day trips use one short reason with real times (“about 2.5 h each way by bus; a grown-up decides” for Chichén Itzá, about 2 h for Tulum) instead of repeating “(ask a grown-up)”. Cancún rain backups name real indoor places (Museo Maya de Cancún, an aquarium or a covered mall) when available.
+- International trips with an infant say “Baby needs their own passport”.
+- Cache keys are `places|v20` and `eats|v9`. Budget is unchanged.
+
+
 ## 1.18.0 — Cancún family travel, unique park days, and clearer wear & weather
 
 - Grand Canyon leftovers: a curated walk or sunset that names Mather Point (or Yavapai Point) counts as using that place, so it is not also scheduled as a standalone hike. Rain backups no longer repeat Yavapai Geology Museum when another indoor or indoor-ish rim building (Hopi House, Kolb Studio, the visitor center) is free. Day 4 gets a named backup instead of the generic café/museum line when one exists.

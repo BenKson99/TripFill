@@ -18,7 +18,7 @@ test("v1.13.0: freezing precipitation is snow; Open-Meteo snowfall overrides rai
   assert.equal(isRainy(zermattDay()), false);
   assert.equal(isWet(zermattDay()), true);
   assert.equal(typicalPrecipSummary(60, "snow"), "Often snowy");
-  assert.equal(typicalPrecipSummary(40, "snow"), "Sometimes snowy");
+  assert.equal(typicalPrecipSummary(40, "snow"), "Usually dry");
   assert.equal(adjustForecastSummary("Rain showers", "snow"), "Snowy");
   // snowfall_sum present on a borderline-warm day → mixed; with cold temps → snow
   assert.equal(precipKind({ tmax: 6, tmin: 2, precipMm: 5, precipProb: 80, snowCm: 3.2 }), "mixed");

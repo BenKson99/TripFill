@@ -9,9 +9,9 @@ import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
 import { familyDinnerList, CASUAL_DINNER_FALLBACK } from "../shared/familyEats.js";
-import { filterDinnerList, filterHighlightList, preferFamilySights } from "../shared/junkVenues.js";
+import { filterDinnerList, filterHighlightList, preferFamilySights, isUnsolicitedReligiousAttraction } from "../shared/junkVenues.js";
 import { hasInfantTraveler, hasSeniorTraveler, preferredFamilyBeaches } from "../shared/travelAdvice.js";
-import { isIndoorishBackup } from "../shared/interestVenues.js";
+import { isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups } from "../shared/interestVenues.js";
 import { tripHasKids, hasChildUnder, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName, isOvernightFlight, jetLagNote, OVERNIGHT_FLY_DAY1, OVERNIGHT_FLY_DAY2, isNatureDestination, sunsetViewpointLine, altitudeNote } from "../shared/family.js";
 import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, visitorCenterName, campsiteSetupLine, curatedParkSights, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
 import { formatShortDuration } from "../shared/distance.js";
@@ -54,9 +54,17 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     setting: s.setting, type: s.type, source: "TripFill",
   } as Highlight));
   for (const s of parkSights) if (!hl.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) hl = [s, ...hl];
+  for (const s of curatedIndoorBackups(destName)) if (!extraIndoor.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase()) && !hl.some(h => (h.name || "").toLowerCase() === s.name.toLowerCase())) extraIndoor = [s as Highlight, ...extraIndoor];
+  for (const slot of curatedInterestVenues(inp.interests || "", destName, { youngChild: hasChildUnder(6, inp) })) {
+    if (slot.kind === "evening" || slot.far) continue;
+    if (!hl.some(h => (h.name || "").toLowerCase() === slot.name.toLowerCase())) {
+      const typ = /magic kingdom|epcot|hollywood studios|animal kingdom|disneyland|theme park|universal|islands of adventure/i.test(slot.name) ? "theme park" : "attraction";
+      hl = [{ name: slot.name, description: "A well-known stop that matches this trip's interests.", indoor: typ === "theme park" ? false : undefined, setting: typ === "theme park" ? "outdoor" : undefined, type: typ, source: "TripFill" } as Highlight, ...hl];
+    }
+  }
   const sourceHighlights = hl;
   const lightAddOnOnly = (h: Highlight) => /platform\s*9|double-?decker|hop-?on hop-?off|watch wildlife from a distance|stargazing after dark|set up at (?:your )?camp/i.test(h.name || "");
-  const activityOk = (h: Highlight) => !isLodgingOrStay(h) && !isDestinationItself(h.name, destName) && !isVagueSight(h) && !isOffParkBase(h.name, destName) && isNearBase(h, { smallChild: youngDrive }) && !(hasChildUnder(8, inp) && isHikeInOrInnerCanyon(h)) && !lightAddOnOnly(h);
+  const activityOk = (h: Highlight) => !isLodgingOrStay(h) && !isDestinationItself(h.name, destName) && !isVagueSight(h) && !isOffParkBase(h.name, destName) && isNearBase(h, { smallChild: youngDrive }) && !(hasChildUnder(8, inp) && isHikeInOrInnerCanyon(h)) && !lightAddOnOnly(h) && !(tripHasKids(inp) && isUnsolicitedReligiousAttraction(h, inp.interests || ""));
 
   const activityHl = hl.filter(activityOk);
   const style = inp.walkingTolerance === "low" ? "Slow" : inp.style || "Mix";
@@ -141,7 +149,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     if (flyNight && i === 1 && days.length > 2) {
       return row({ date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerName(0) ? `Early dinner nearby: ${dinnerName(0)}` : "Early dinner near your stay", notes: [lag, altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
     }
-    if (i === days.length - 1 && days.length > 1) return row({ date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" });
+    if (i === days.length - 1 && days.length > 1) return row({ date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: [isRainy(d) ? "Wet departure — pack a rain layer and allow a little extra time" : "", holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
     const okPick = (x: Highlight, noTrip = false) => !usedNames.has(x.name) && !(noTrip && farDayTrip(x)) && !isCompetitorPark(x.name, inp.interests || "", unusedPreferred());
     const pick = (pool: Highlight[], noTrip = false) => { const h = pool.find(x => queue.includes(x) && okPick(x, noTrip)) || queue.find(x => okPick(x, noTrip)); if (h) queue.splice(queue.indexOf(h), 1); return h; };

@@ -34,10 +34,10 @@ export const BEACH_SAFETY_NOTE = "Swim only where lifeguards are; check the beac
 export const NAP_BREAK_NOTE = "Plan a nap break back at the hotel";
 export const SENIOR_PACE_NOTE = "Take the day at a comfortable pace — plan shade and a place to sit";
 export const SENIOR_MEDS_NOTE = "Bring your usual medicines (grown-up reminder)";
-export const INFANT_PASSPORT_TASK = "Infants need their own passport (grown-up task)";
+export const INFANT_PASSPORT_TASK = "Baby needs their own passport (grown-up task)";
 export const CONSENT_LETTER_TASK = "If a child is travelling without both parents, a grown-up should carry a consent letter";
 export const CHICHEN_BABY_NOTE = "Long day with a baby — go early, or pick closer El Rey ruins in the Hotel Zone";
-export const BIG_DAY_TRIP = "big day trip (ask a grown-up)";
+export const BIG_DAY_TRIP = "a big day trip; a grown-up decides";
 export const DIAPERS_FLYING_ABROAD = "Pack ~2 days of diapers in your carry-on; buy the rest there";
 
 export const CURRENCY_NAMES: Record<string, string> = {
@@ -177,7 +177,6 @@ const FAMILY_BEACHES: { place: RegExp; names: string[] }[] = [
   { place: /clearwater/i, names: ["Clearwater Beach"] },
   { place: /siesta key|sarasota/i, names: ["Siesta Key Beach"] },
   { place: /key west|florida keys/i, names: ["Smathers Beach", "Fort Zachary Taylor Beach"] },
-  { place: /orlando/i, names: ["Discovery Cove", "Typhoon Lagoon"] },
   { place: /nassau|bahamas/i, names: ["Cabbage Beach", "Cable Beach"] },
   { place: /montego|negril|jamaica/i, names: ["Doctor's Cave Beach", "Seven Mile Beach"] },
   { place: /punta cana|bavaro/i, names: ["Bávaro Beach", "Arena Gorda"] },

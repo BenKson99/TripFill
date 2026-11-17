@@ -201,7 +201,7 @@ export const ACTIVITIES: ActivityDef[] = [
       { task: "Check park permits, timed entries or safari reservations", why: "many parks cap daily visitors", daysBefore: 21 },
     ] },
   { id: "parks", label: "Theme & water parks", emoji: "🎢",
-    aliases: /\b(theme park|amusement park|water park|waterpark|disney|universal studios)\b/i,
+    aliases: /\b(theme parks?|amusement parks?|water parks?|waterpark|disney(?:\s*world)?|universal(?:\s*studios)?)\b/i,
     slot: "morning", weather: "warm-dry", osm: "theme_park",
     packing: [
       { group: "Activities", item: "Swimwear (if a water park)", reason: "Water parks — confirm whether lockers and towels are provided" },

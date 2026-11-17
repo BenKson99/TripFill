@@ -126,12 +126,20 @@ export function isDestinationItself(name: string | undefined, dest?: { name?: st
 }
 
 /** Lodging, campsites and hotels should not fill activity slots (dinners are fine). */
+const THEME_OR_PARK_ATTRACTION = /theme park|amusement park|water park|magic kingdom|\bepcot\b|hollywood studios|animal kingdom|disneyland|disney\s*world|islands of adventure|universal studios|typhoon lagoon|blizzard beach|seaworld|busch gardens|legoland/i;
+
 export function isLodgingOrStay(h: { name?: string; type?: string; description?: string } | string): boolean {
-  const blob = typeof h === "string" ? h : `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
-  if (/dining room|restaurant|cafe|café|pizza|tavern|pub|bar\b/i.test(blob) && !/camp/i.test(blob)) return false;
-  if (/\bski(?:ing)?\s+(area|resort|field|station)|\bpiste\b|\bslopes\b/i.test(blob)) return false;
-  return /\b(hotel|motel|hostel|inn|resort|guest\s*house|bed and breakfast|\bb&b\b|campground|campsite|camp site|tourism=camp_site|your campsite|set up at your campsite|camp at )\b/i.test(blob)
-    || /\b(maswik|kashina|thunderbird|bright angel)?\s*lodge\b/i.test(blob);
+  const name = typeof h === "string" ? h : (h.name || "");
+  const typ = typeof h === "string" ? "" : (h.type || "");
+  const place = `${name} ${typ}`;
+  if (/dining room|restaurant|cafe|café|pizza|tavern|pub|bar\b/i.test(place) && !/camp/i.test(place)) return false;
+  if (/\bski(?:ing)?\s+(area|resort|field|station)|\bpiste\b|\bslopes\b/i.test(place)) return false;
+  // "Disney's Animal Kingdom Lodge" is lodging; "Magic Kingdom" is not, even if a blurb mentions the Resort.
+  if (/\b(hotel|motel|hostel|inn|resort|guest\s*house|bed and breakfast|\bb&b\b|campground|campsite|camp site|tourism=camp_site|your campsite|set up at your campsite|camp at |\blodge\b)\b/i.test(name)
+    && !/theme park|amusement park|water park/i.test(typ)) return true;
+  if (THEME_OR_PARK_ATTRACTION.test(place) || /theme park|amusement park|water park/i.test(typ)) return false;
+  return /\b(hotel|motel|hostel|inn|resort|guest\s*house|bed and breakfast|\bb&b\b|campground|campsite|camp site|tourism=camp_site|your campsite|set up at your campsite|camp at )\b/i.test(place)
+    || /\b(maswik|kashina|thunderbird|bright angel)?\s*lodge\b/i.test(place);
 }
 
 /** Vague ensemble or “the park itself” names, when a more specific alternative exists. */

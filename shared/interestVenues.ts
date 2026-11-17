@@ -1,9 +1,9 @@
 import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
-import { isFullOrHalfDayAttraction, isMajorAttraction } from "./family.js";
+import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
-export type InterestSlot = { name: string; kind?: "major" | "light" | "evening"; nearby?: boolean; far?: boolean; note?: string };
+export type InterestSlot = { name: string; kind?: "major" | "light" | "evening"; nearby?: boolean; far?: boolean; note?: string; driveHours?: number };
 
 type Entry = { interest: RegExp; place: RegExp; slots: InterestSlot[] };
 
@@ -66,6 +66,16 @@ const ENTRIES: Entry[] = [
   { interest: /disney/i, place: /paris|marne|france|^FR$/i, slots: [
     { name: "Disneyland Paris (book ahead)", kind: "major" },
   ]},
+  { interest: /disney/i, place: /orlando|kissimmee|lake buena vista|bay lake|walt disney world/i, slots: [
+    { name: "Magic Kingdom", kind: "major" },
+    { name: "EPCOT", kind: "major" },
+    { name: "Disney's Hollywood Studios", kind: "major" },
+    { name: "Disney's Animal Kingdom", kind: "major" },
+  ]},
+  { interest: /disney/i, place: /anaheim|disneyland/i, slots: [
+    { name: "Disneyland Park", kind: "major" },
+    { name: "Disney California Adventure", kind: "major" },
+  ]},
   { interest: /stars?|stargaz|astronomy|night sky/i, place: /.*/, slots: [
     { name: "Stargazing after dark — bring a flashlight with red light", kind: "evening" },
   ]},
@@ -76,8 +86,8 @@ const ENTRIES: Entry[] = [
   { interest: /pyramids?|mayan\s*ruins?|maya\s*ruins?|mayan\s*sites?|chich[eé]n\s*itz[aá]|tulum/i, place: /canc[uú]n|cancun|riviera maya|playa del carmen|yucat[aá]n|quintana roo|cozumel|isla mujeres|^MX$|mexico/i, slots: [
     { name: "Zona Arqueológica El Rey (Hotel Zone)", kind: "major", nearby: true },
     { name: "El Meco archaeological site", kind: "major", nearby: true },
-    { name: "Chichén Itzá", kind: "major", far: true, note: "Long day with a baby — go early, or pick closer El Rey ruins in the Hotel Zone" },
-    { name: "Tulum archaeological zone", kind: "major", far: true },
+    { name: "Chichén Itzá", kind: "major", far: true, driveHours: 2.5, note: "Long day with a baby — go early, or pick closer El Rey ruins in the Hotel Zone" },
+    { name: "Tulum archaeological zone", kind: "major", far: true, driveHours: 2 },
   ]},
   { interest: /snorkel/i, place: /canc[uú]n|cancun|riviera maya|playa del carmen|isla mujeres|cozumel|puerto morelos|^MX$|mexico/i, slots: [
     { name: "Snorkel the reef at Puerto Morelos (calm water, book a guide)", kind: "major" },
@@ -134,6 +144,19 @@ function destBlob(dest: DestRef | string | undefined) {
   return `${dest.name || ""} ${dest.admin1 || ""} ${dest.country || ""} ${dest.countryCode || ""}`;
 }
 
+
+/** Named indoor rain backups for destinations that often lack OSM indoor highlights. */
+export function curatedIndoorBackups(dest?: DestRef | string): { name: string; type: string; indoor: true; setting: "indoor"; source: string; description: string }[] {
+  const place = destBlob(dest);
+  if (/canc[uú]n|cancun/i.test(place)) {
+    return [
+      { name: "Museo Maya de Cancún", type: "museum", indoor: true, setting: "indoor", source: "TripFill", description: "Mayan archaeology museum next to the Hotel Zone." },
+      { name: "Interactive Aquarium Cancún", type: "aquarium", indoor: true, setting: "indoor", source: "TripFill", description: "An indoor aquarium in the Hotel Zone." },
+      { name: "La Isla Shopping Village", type: "mall", indoor: true, setting: "indoor", source: "TripFill", description: "A covered shopping village with food and indoor walking." },
+    ];
+  }
+  return [];
+}
 export function interestPhrases(interests = ""): string[] {
   return (interests || "").split(/[,;/]+/).map(s => s.trim()).filter(s => s.length >= 3);
 }
@@ -175,7 +198,10 @@ export function optionalFarInterestNotes(interests: string, dest?: DestRef | str
       if (seen.has(k)) continue;
       seen.add(k);
       const baby = slot.note ? `. ${slot.note}` : "";
-      notes.push(`Optional: ${slot.name} — big day trip (ask a grown-up)${baby}`);
+      const hours = slot.driveHours != null
+        ? `about ${String(slot.driveHours).replace(/\.0$/, "")} h each way by bus; a grown-up decides`
+        : "a big day trip; a grown-up decides";
+      notes.push(`Optional: ${slot.name} — ${hours}${baby}`);
     }
   }
   return notes;
@@ -185,9 +211,12 @@ export function optionalFarInterestNotes(interests: string, dest?: DestRef | str
 export function keywordInterestHits<T extends { name?: string; type?: string; description?: string }>(interests: string, highlights: T[] = []): T[] {
   const phrases = interestPhrases(interests).filter(p => p.length >= 4 && !/^(and|the|with|kids?|family|fun)$/i.test(p));
   if (!phrases.length) return [];
+  const brands = interestBrands(interests);
   return highlights.filter(h => {
     const blob = `${h.name || ""} ${h.type || ""}`;
-    return phrases.some(p => blob.toLowerCase().includes(p.toLowerCase()));
+    if (phrases.some(p => blob.toLowerCase().includes(p.toLowerCase()))) return true;
+    // "Disney World" should still match Magic Kingdom / EPCOT, not only titles that contain those exact words.
+    return brands.some(b => matchesBrand(h.name || "", b));
   });
 }
 
@@ -355,7 +384,8 @@ export function isIndoorishBackup(h: { name?: string; type?: string; description
   if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
   if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|plateau point|wildlife from a distance|stargazing|day hike|rim trail|easy walk|viewpoint|overlook/i.test(blob)) return false;
   if (h.indoor || h.setting === "indoor") return true;
-  return /visitor (?:centre|center)|museum|gallery|library|studio|junior ranger|hopi house|kolb studio|verkamp|trading post|market hall/i.test(blob);
+  if (/studio tour|theme park|amusement park|warner\s*bros/i.test(blob)) return false;
+  return /visitor (?:centre|center)|museum|gallery|library|junior ranger|hopi house|kolb studio|verkamp|trading post|market hall/i.test(blob);
 }
 
 const GENERIC_RAIN_BACKUP = /café, museum or covered market|the visitor center or a nearby museum/i;

@@ -29,8 +29,8 @@ export const isRainy = (d: PrecipDay) => precipKind(d) === "rain" || precipKind(
 export const isSnowy = (d: PrecipDay) => precipKind(d) === "snow" || precipKind(d) === "mixed";
 
 export function typicalPrecipSummary(prob: number, kind: PrecipKind): string {
+  // Same 50% threshold as isWet / isRainy / wetDaysSummary.
   if (prob >= 50) return kind === "snow" ? "Often snowy" : kind === "mixed" ? "Often mixed rain/snow" : "Often wet";
-  if (prob >= 34) return kind === "snow" ? "Sometimes snowy" : kind === "mixed" ? "Sometimes mixed rain/snow" : "Sometimes wet";
   return "Usually dry";
 }
 
@@ -42,7 +42,12 @@ export function adjustForecastSummary(summary: string, kind: PrecipKind): string
 
 export function precipProbLabel(d: PrecipDay, kind = precipKind(d)): string {
   if (d.precipProb == null) return "";
-  if (d.typical) return kind === "snow" ? " snow in sampled years" : kind === "mixed" ? " wet (rain or snow) in sampled years" : " wet in sampled years";
+  const wet = kind !== "none";
+  if (d.typical) {
+    if (!wet) return " usually dry in sampled years";
+    return kind === "snow" ? " snow in sampled years" : kind === "mixed" ? " wet (rain or snow) in sampled years" : " wet in sampled years";
+  }
+  if (!wet) return "";
   return kind === "snow" ? " snow" : kind === "mixed" ? " rain/snow" : " rain";
 }
 

@@ -403,6 +403,9 @@ export function applyHolidayNotes<T extends { date: string; notes?: string }>(da
 }
 
 /** After activity scheduling, use leftover interest-matched parks before competitors or weaker fillers. */
+const MAIN_THEME_PARK = /magic kingdom|\bepcot\b|hollywood studios|animal kingdom|disneyland(?:\s+park)?|california adventure/i;
+const WATER_PARK_DAY = /typhoon lagoon|blizzard beach|discovery cove|aquatica|volcano bay|wet\s*['’]?n['’]?\s*wild/i;
+
 export function fillPreferredParks<T extends { morning: string; afternoon: string; label?: string }>(days: T[], highlights: { name: string }[] = [], interests = ""): T[] {
   const brands = interestBrands(interests);
   if (!brands.length || !days?.length) return days;
@@ -410,9 +413,12 @@ export function fillPreferredParks<T extends { morning: string; afternoon: strin
   const used = new Set<string>();
   for (const d of days) for (const h of highlights) if (h?.name && mentioned(d).includes(h.name)) used.add(h.name);
   const leftover = highlights.filter(h => h?.name && brands.some(b => matchesBrand(h.name, b)) && !used.has(h.name));
+  leftover.sort((a, b) => Number(MAIN_THEME_PARK.test(b.name)) - Number(MAIN_THEME_PARK.test(a.name)));
   for (const d of days) {
     if (isTravelOrLeaveDay(d) || !leftover.length) continue;
-    if (brands.some(b => matchesBrand(d.morning || "", b) || matchesBrand(d.afternoon || "", b))) continue;
+    const alreadyBrand = brands.some(b => matchesBrand(d.morning || "", b) || matchesBrand(d.afternoon || "", b));
+    const waterOnly = WATER_PARK_DAY.test(mentioned(d)) && leftover.some(h => MAIN_THEME_PARK.test(h.name));
+    if (alreadyBrand && !waterOnly) continue;
     const next = leftover.shift()!;
     used.add(next.name);
     const prefix = /^[^A-Za-z0-9"]+/.exec(d.morning || "");
