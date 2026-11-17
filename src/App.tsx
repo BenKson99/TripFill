@@ -22,6 +22,7 @@ import { defaultDistanceUnit, isDistanceUnit, type DistanceUnit } from "../share
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel, WrongPlace } from "./Home";
 import { homeGenerateFields } from "../shared/homeCity";
+import { isSettlementPlace } from "../shared/placeQuery";
 import { englishVariant, localizeEn } from "../shared/enLocale";
 import { placeKindLabel } from "../shared/placeQuery";
 import { friendlyError } from "../shared/friendlyError";
@@ -347,7 +348,7 @@ export default function App() {
           <h2>{plan.legs?.length > 1 ? plan.title : placeLabel(plan.place)}</h2>
           <p className="dates">{fmtRange(plan.input.start, plan.input.end)}</p>
           <p className="muted">{plan.input.travelers} traveler(s) · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {plan.input.walkingTolerance || "standard"} walking · {(plan.input.dietaryNeeds || "none").replace(/_/g, " ")} dietary preference{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
-          {plan.matches?.length > 1 && <WrongPlace alts={plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4)} onPick={m => generate(m)} resolved />}
+          {plan.matches?.length > 1 && <WrongPlace alts={plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4)} onPick={m => generate(m)} resolved={isSettlementPlace(plan.place)} />}
           <div className="stats" data-testid="stats">
             <div className="stat"><CalendarDays size={18} /><div><b>{plan.itinerary.length} days</b><small>{plan.input.start} → {plan.input.end}</small></div></div>
             <div className="stat"><Users size={18} /><div><b>{plan.input.travelers}</b><small>traveler(s)</small></div></div>

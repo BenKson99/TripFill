@@ -61,6 +61,10 @@ const TO_US: [RegExp, string][] = [
   [/\bmoisturiser\b/g, "moisturizer"],
   [/\bFinalise\b/g, "Finalize"],
   [/\bfinalise\b/g, "finalize"],
+  [/\bArtefacts\b/g, "Artifacts"],
+  [/\bartefacts\b/g, "artifacts"],
+  [/\bArtefact\b/g, "Artifact"],
+  [/\bartefact\b/g, "artifact"],
 ];
 
 const US_CACHE = new Map<string, string>();

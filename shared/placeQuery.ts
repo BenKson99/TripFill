@@ -65,6 +65,9 @@ export function placeKindLabel(p: PlaceLike): string {
   const name = p.name || "";
   const code = p.featureCode || "";
   if (/^AIRP/i.test(code) || /\b(airport|aerodrome)\b/i.test(name)) return "airport";
+  if (/\bstadium\b/i.test(name)) return "stadium or park";
+  if (/state park/i.test(name)) return "state park";
+  if (/\bzoo\b/i.test(name) && !/^PPL/i.test(code)) return "zoo";
   if (/national park/i.test(name) || (/^PRK/i.test(code) && /national/i.test(name))) return "national park";
   if (/game preserve|wildlife refuge|wildlife preserve/i.test(name)) return "wildlife preserve";
   if (/caverns?|caves?/i.test(name)) return "caverns";
@@ -74,24 +77,55 @@ export function placeKindLabel(p: PlaceLike): string {
   return p.admin1 || p.country || "place";
 }
 
-/** Higher is better: national parks and real cities beat airports, bars and minor namesakes. */
-export function placeChoiceScore(p: PlaceLike): number {
+const PARK_QUERY = /national park|grand canyon|yellowstone|yosemite|\bzion\b|banff|glacier national|olympic national|death valley|joshua tree|arches national|bryce canyon|canyonlands|sequoia|kings canyon|everglades|acadia|mount rainier|rocky mountain national|hawaii volcanoes|hawai[iʻ]i volcanoes/i;
+const POI_NAME = /\b(stadium|arena|venue|ballpark|amphitheatre|amphitheater|state park|zoo|theme park|amusement park|golf course|shopping (?:center|centre|mall)|university campus)\b/i;
+
+export function isParkIntent(query = ""): boolean {
+  return PARK_QUERY.test(query || "");
+}
+
+/** Parks, stadiums, airports, zoos and other POIs — not cities or towns. */
+export function isPoiPlace(p: PlaceLike): boolean {
+  const name = p.name || "";
+  const code = p.featureCode || "";
+  if (/^AIRP/i.test(code) || /\b(airport|aerodrome)\b/i.test(name)) return true;
+  if (/^PPL/i.test(code) && (p.population || 0) >= 1000 && !POI_NAME.test(name)) return false;
+  if (POI_NAME.test(name) || (/^PRK/i.test(code) && !/national park/i.test(name))) return true;
+  if (/^STDM|^S\.STDM|^AMUS|^RECG/i.test(code)) return true;
+  return false;
+}
+
+/** City, town or other populated settlement (GeoNames PPL*). */
+export function isSettlementPlace(p: PlaceLike): boolean {
+  if (isPoiPlace(p)) return false;
+  return /^PPL/i.test(p.featureCode || "") || (p.population || 0) >= 1000;
+}
+
+/** Higher is better: cities and towns beat parks, stadiums and POIs that merely contain the name. */
+export function placeChoiceScore(p: PlaceLike, query = ""): number {
   const name = p.name || "";
   const code = p.featureCode || "";
   const pop = p.population || 0;
+  const q = (query || "").split(",")[0].trim();
+  const exact = !!q && name.toLowerCase() === q.toLowerCase();
+  const parkQ = isParkIntent(query);
   if (/^AIRP/i.test(code) || /\b(airport|aerodrome)\b/i.test(name)) return -200 + Math.min(pop, 500) / 100;
   if (/\bbar \d+\b/i.test(name)) return -150;
-  if (/national park/i.test(name) || (/^PRK/i.test(code) && /park/i.test(name))) return 500 + Math.min(pop, 50000) / 1000;
-  if (/game preserve|wildlife/i.test(name)) return 120;
-  if (/caverns?|caves?/i.test(name) && !/national park/i.test(name)) return 40;
-  if (/^PPL/i.test(code) && pop >= 10000) return 320 + Math.log10(pop + 1) * 20;
-  if (/^PPL/i.test(code) && pop >= 1000) return 260 + pop / 200;
-  if (/^PPL/i.test(code)) return 200 + pop / 50;
+  if (POI_NAME.test(name) && !parkQ) return (exact && /^PPL/i.test(code) ? 200 : -80) + Math.min(pop, 500) / 100;
+  if (/national park/i.test(name) || (parkQ && /^PRK/i.test(code))) return 500 + Math.min(pop, 50000) / 1000;
+  if (/game preserve|wildlife/i.test(name) && !/^PPL/i.test(code)) return 120;
+  if (/caverns?|caves?/i.test(name) && !/national park/i.test(name) && !/^PPL/i.test(code)) return 40;
+  const settleBonus = exact ? 40 : 0;
+  if (/^PPLC/i.test(code)) return 420 + Math.log10(pop + 1) * 20 + settleBonus;
+  if (/^PPLA/i.test(code)) return 390 + Math.log10(pop + 1) * 20 + settleBonus;
+  if (/^PPL/i.test(code) && pop >= 10000) return 320 + Math.log10(pop + 1) * 20 + settleBonus;
+  if (/^PPL/i.test(code) && pop >= 1000) return 260 + pop / 200 + settleBonus;
+  if (/^PPL/i.test(code)) return 200 + pop / 50 + settleBonus;
   if (/monument|forest|recreation area|wilderness|nature/i.test(name)) return 220;
   if (/village/i.test(name)) return 180 + pop / 50;
   return 50 + Math.min(pop, 20000) / 200;
 }
 
-export function rankPlaceMatches<T extends PlaceLike>(matches: T[], limit = 4): T[] {
-  return [...(matches || [])].sort((a, b) => placeChoiceScore(b) - placeChoiceScore(a) || (b.population || 0) - (a.population || 0) || (a.name || "").localeCompare(b.name || "")).slice(0, Math.max(1, limit));
+export function rankPlaceMatches<T extends PlaceLike>(matches: T[], limit = 4, query = ""): T[] {
+  return [...(matches || [])].sort((a, b) => placeChoiceScore(b, query) - placeChoiceScore(a, query) || (b.population || 0) - (a.population || 0) || (a.name || "").localeCompare(b.name || "")).slice(0, Math.max(1, limit));
 }

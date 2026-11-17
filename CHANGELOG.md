@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.19.0 — Honolulu geocoding, Hawaiʻi interests, and family venue quality
+
+- Geocoding ranks real cities and towns ahead of parks, stadiums, venues and other POIs that merely contain the name (so “Honolulu” is the city, not Honolulu Stadium State Park). Nominatim settlement results are a fallback when Open-Meteo has none. If the top result still is not a settlement, alternatives are shown up front.
+- Hawaiʻi interest dictionary: family luau (book ahead), Laniakea Beach turtles from 10 ft, a beginner surf lesson at Waikīkī, and Diamond Head on Oʻahu with a note that Hawaiʻi Volcanoes National Park is on the Big Island. Any interest that could not be placed is listed as “We couldn’t fit: X — try …”.
+- Dinner slots skip bars (Bar Leather Apron) and bakeries or treat shops (Leonard’s Bakery is breakfast or a treat). The same dinner is not reused. Famous family beaches (Waikīkī, Kailua, Hanauma Bay, Ko Olina lagoons, Ala Moana) outrank airport or industrial lagoons (Keʻehi, Kalaeloa). Ships such as USS Missouri are “battleship you can walk through”, not indoor exhibits. Private-house tours are not rain backups.
+- Weather uses plain kid words: “Usually sunny”, “Some rain likely”, “Rainy most days”, and “it rained on most of these days in past years”. Short tropical showers (hours or millimetres below a light threshold) are “quick showers are common but short” and are not counted as wet days that need indoor plans.
+- Day notes cap at three after every note source, drop bare interest tokens such as “beach” or “Surfing”, and show the beach-safety line once per trip (Start here or the first beach day).
+- US spelling: “artefacts” becomes “artifacts” through T()/localizeEn.
+- “Baby needs their own passport” is attached on generate and visible in the default (uncollapsed) prep view even when the live form strips members, using packing settings or the packing row as fallback.
+- Cache keys are `places|v22` and `eats|v10`. Budget is unchanged.
+
 ## 1.18.2 — Plain weather labels, named rain backups, and visible infant passport
 
 - Weather labels no longer glue a wet-percent onto “usually dry”. Typical days read e.g. “Usually dry · 72–82°F · rained on about 1 in 3 of these days in past years”. A 0% day omits the chance phrase. Temperature ranges no longer repeat the unit on both ends.

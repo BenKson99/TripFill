@@ -100,6 +100,18 @@ const ENTRIES: Entry[] = [
     { name: "Hanauma Bay Nature Preserve (book ahead — calm snorkeling)", kind: "major" },
     { name: "Waikiki Beach", kind: "light" },
   ]},
+  { interest: /luau|l[ūu]ʻ?au|hawaiian feast/i, place: /honolulu|hawaii|hawai[iʻ]i|oahu|oʻahu|maui|kauai|kauaʻi|kona|hilo|big island|waikiki/i, slots: [
+    { name: "Family luau (book ahead)", kind: "evening" },
+  ]},
+  { interest: /turtles?|honu\b/i, place: /honolulu|hawaii|hawai[iʻ]i|oahu|oʻahu|waikiki|north shore/i, slots: [
+    { name: "Laniakea Beach on the North Shore — view sea turtles from a respectful distance (10 ft)", kind: "major" },
+  ]},
+  { interest: /surf(?:ing)? lessons?|learn to surf|beginner surf/i, place: /honolulu|waikiki|oahu|oʻahu|hawaii|hawai[iʻ]i/i, slots: [
+    { name: "Beginner surf lesson at Waikīkī (book a family lesson)", kind: "major" },
+  ]},
+  { interest: /volcano(?:es)?|volcanic|caldera|crater/i, place: /honolulu|oahu|oʻahu|waikiki/i, slots: [
+    { name: "Diamond Head hike / crater (book ahead)", kind: "major", note: "Hawaiʻi Volcanoes National Park is on the Big Island, a short flight away" },
+  ]},
   { interest: /snorkel/i, place: /\bmaui\b/i, slots: [
     { name: "Snorkel at Molokini or Turtle Town (book a calm-water trip)", kind: "major" },
   ]},
@@ -387,6 +399,7 @@ export function isIndoorishBackup(h: { name?: string; type?: string; description
   if (/\b(cinema|cinemark|cin[eé]polis|theatre|theater|teatro)\b/i.test(`${h.name || ""} ${h.type || ""}`)) return false;
   if (/\b(palace|castle|bridge|abbey|cathedral|square|tower of london|buckingham)\b/i.test(h.name || "")) return false;
   if (/phantom ranch|inner canyon|canyon floor|bottom of (the )?canyon|hike-?in|hermit'?s? rest|indian garden|plateau point|wildlife from a distance|stargazing|day hike|rim trail|easy walk|viewpoint|overlook/i.test(blob)) return false;
+  if (/private house|house tour|historic home|mansion tour|residence tour|home tour/i.test(blob)) return false;
   if (h.indoor || h.setting === "indoor") return true;
   if (/studio tour|theme park|amusement park|warner\s*bros/i.test(blob)) return false;
   return /visitor (?:centre|center)|museum|gallery|library|junior ranger|hopi house|kolb studio|verkamp|trading post|market hall/i.test(blob);
@@ -459,6 +472,8 @@ export function assignUniqueRainBackups<T extends { morning?: string; afternoon?
 
 
 const KID_HINTS: { re: RegExp; hint: string }[] = [
+  { re: /uss missouri|battleship/i, hint: "battleship you can walk through" },
+  { re: /uss bowfin|submarine/i, hint: "submarine you can walk through" },
   { re: /aquarium/i, hint: "see sea animals indoors" },
   { re: /museo maya|mayan?.{0,20}museum/i, hint: "Mayan artefacts indoors" },
   { re: /museum|museo|visitor (?:centre|center)/i, hint: "indoor exhibits" },
@@ -589,4 +604,37 @@ export function fillNamedAfternoons<T extends { morning: string; afternoon: stri
 
 export function itineraryHasWaterPark(days: { morning?: string; afternoon?: string; evening?: string; notes?: string }[] = []): boolean {
   return days.some(d => /water ?park|waterpark|aquatica|volcano bay|typhoon lagoon|blizzard beach|wet\s*['’]?n['’]?\s*wild|discovery cove|schlitterbahn/i.test(`${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""} ${d.notes || ""}`));
+}
+
+
+const INTEREST_STOP = /^(and|the|with|kids?|family|fun|beach|beaches|swimming|lessons?)$/i;
+
+/** Interests from the form that never landed in a slot or note, with a short try-this hint. */
+export function unplacedInterestNotes(interests: string, days: { morning?: string; afternoon?: string; evening?: string; notes?: string; rainyBackup?: string }[] = [], dest?: DestRef | string): string[] {
+  const phrases = (interests || "").split(/[,;/]+/).map(s => s.trim()).filter(s => s.length >= 3 && !INTEREST_STOP.test(s));
+  if (!phrases.length) return [];
+  const blob = days.map(d => `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""} ${d.notes || ""} ${d.rainyBackup || ""}`).join(" \n ").toLowerCase();
+  const destText = typeof dest === "string" ? dest : `${dest?.name || ""} ${dest?.admin1 || ""} ${dest?.country || ""}`;
+  const curated = curatedInterestVenues(interests, dest).concat(
+    // include far slots in the "placed" check via notes
+  );
+  const out: string[] = [];
+  for (const phrase of phrases) {
+    const key = phrase.toLowerCase();
+    const hint = curated.find(s => s.name.toLowerCase().includes(key) || new RegExp(key.replace(/[^a-z0-9\s]/gi, "").split(/\s+/).filter(w => w.length >= 4).join("|") || "a^", "i").test(s.name));
+    const placed = blob.includes(key)
+      || (hint && blob.includes(hint.name.toLowerCase().slice(0, 18).toLowerCase()))
+      || /volcano/i.test(phrase) && /diamond head|volcanoes national park/i.test(blob)
+      || /turtles?/i.test(phrase) && /laniakea|turtle/i.test(blob)
+      || /luau|l[ūu]ʻ?au/i.test(phrase) && /luau/i.test(blob)
+      || /surf/i.test(phrase) && /surf/i.test(blob);
+    if (placed) continue;
+    const tryThis = hint?.name
+      || (/luau/i.test(phrase) ? "a Family luau (book ahead)" : "")
+      || (/turtle/i.test(phrase) ? "Laniakea Beach on the North Shore" : "")
+      || (/surf/i.test(phrase) ? "a beginner surf lesson at Waikīkī" : "")
+      || (/volcano/i.test(phrase) ? "Diamond Head on Oʻahu, or Hawaiʻi Volcanoes National Park on the Big Island" : "");
+    out.push(tryThis ? `We couldn't fit: ${phrase} — try ${tryThis}` : `We couldn't fit: ${phrase}`);
+  }
+  return out;
 }

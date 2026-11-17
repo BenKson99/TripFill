@@ -120,10 +120,13 @@ export function startHereItems(list: PackingList, limit = 10): PackingItem[] {
     const matches = items.filter(i => test.test(i.item) && !used.has(i.id));
     if (!matches.length) continue;
     // One row per category: prefer a shared item, otherwise the first traveler.
-    const choice = matches.find(i => ownerOf(i) === SHARED) || matches[0];
+    // For passports, also keep an infant "needs their own" row so it is visible in Start here.
+    const infantId = key === "id" ? matches.find(i => /needs their own/i.test(i.item)) : undefined;
+    const choice = (infantId && key === "id" ? infantId : undefined) || matches.find(i => ownerOf(i) === SHARED) || matches[0];
     if (key === "jacket" && /waterproof shell|rain shell/i.test(choice.item) && !items.some(i => /rain|snow|wet conditions|umbrella/i.test(`${i.item} ${i.reason || ""}`) && !/waterproof shell/i.test(i.item))) continue;
     picked.push(choice);
     used.add(choice.id);
+    if (infantId && choice !== infantId && picked.length < limit) { picked.push(infantId); used.add(infantId.id); }
     void key;
   }
   return picked.slice(0, limit);

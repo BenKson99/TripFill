@@ -22,12 +22,13 @@ import { osmActivities, mergeActivityPlaces } from "./osmActivities.js";
 import { runActivitySchedule, activityNotes } from "./activityItinerary.js";
 import { tripAdviceNotes } from "../shared/travelAdvice.js";
 import { resolveActivities, syncActivityInput } from "../shared/activities.js";
-import { tripHasKids, hasChildUnder } from "../shared/family.js";
-import { curatedInterestVenues } from "../shared/interestVenues.js";
+import { tripHasKids, hasChildUnder, capItineraryNotes } from "../shared/family.js";
+import { curatedInterestVenues, unplacedInterestNotes } from "../shared/interestVenues.js";
 import { curatedParkSights, isNearBase, preferredParkBase, isOffParkBase } from "../shared/nationalParks.js";
 import { preferFamilyEats, familyDinnerList } from "../shared/familyEats.js";
 import { dropUnusedWaterParkSwimwear } from "../shared/packing.js";
-import { rankPlaceMatches } from "../shared/placeQuery.js";
+import { defaultPrep } from "../src/Prep.js";
+import { rankPlaceMatches, isSettlementPlace } from "../shared/placeQuery.js";
 import { mergeActivityTimeline } from "../shared/activityPrep.js";
 
 // Minimal .env loader (no dependency)
@@ -79,10 +80,12 @@ app.post("/api/generate", async (req, res) => {
     if (!place) {
       const matches = await geocode(inp.destination);
       if (!matches.length) return res.status(404).json({ error: friendlyError(`Couldn't find "${inp.destination}"`) });
-      // Preselect the best match (national parks, cities, big places) and generate with it.
-      // Keep a short alternative list so the user can switch if we guessed wrong.
-      const ranked = rankPlaceMatches(matches, 4);
+      // Prefer cities and towns over parks, stadiums and POIs that contain the name.
+      const ranked = rankPlaceMatches(matches, 4, inp.destination);
       place = ranked[0] || matches[0]; (inp as any)._matches = ranked;
+      if (ranked.length > 1 && place && !isSettlementPlace(place) && !(/national park/i.test(inp.destination || "") || /national park/i.test(place.name || ""))) {
+        return res.json({ needsChoice: true, matches: ranked, generatedAt: new Date().toISOString() });
+      }
     }
     const home = await resolveHomeCity(inp);
     const prelim = home ? tripFacts(home, place, inp.start) : null;
@@ -148,14 +151,18 @@ app.post("/api/generate", async (req, res) => {
     if (nearCafes.length) places.eats.cafes = nearCafes;
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
     const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name, places.eats); walkingNotes(it, inp);
+    capItineraryNotes(it, 3);
     const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic, home || facts?.home), it);
+    const tl = mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso);
+    const prep = defaultPrep({ input: inp, packing: pk, place, trip: facts, timeline: tl });
     res.json({
       input: { ...inp, _matches: undefined, members: undefined }, matches: (inp as any)._matches || [], place, capped, generatedAt: new Date().toISOString(), aiPolished, trip: facts,
       weather, highlights: preferredHighlights(places.highlights, inp), eats: places.eats, sources: places.sources, guideUrl: places.guideUrl,
       packing: pk,
       itinerary: it,
-      timeline: mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso),
-      activityNotes: [...activityNotes(inp, weather, place.name), ...tripAdviceNotes({ input: inp, place, homeCC: facts?.home?.countryCode, domestic, members: (inp as any).members })],
+      timeline: tl,
+      prep,
+      activityNotes: [...activityNotes(inp, weather, place.name), ...tripAdviceNotes({ input: inp, place, homeCC: facts?.home?.countryCode, domestic, members: (inp as any).members }), ...unplacedInterestNotes(inp.interests || "", it, place)],
       budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
   } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: friendlyError(e) }); }

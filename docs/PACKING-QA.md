@@ -112,6 +112,10 @@ Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are re
 
 
 
+## Honolulu family leftovers (1.19.0)
+
+Confirm `/healthz` says **1.19.0**. On a **cold cache**, generate Seattle → Honolulu, Flying, 1–8 Jul 2027, Mom, Dad, Girl 10, Boy 8, Grandparent, interests “volcano, turtles, surfing lessons, luau, beach”. The destination must be the city of Honolulu, not Honolulu Stadium State Park. Mid days should include a family luau (book ahead), Laniakea Beach turtles (10 ft), a beginner surf lesson at Waikīkī, and Diamond Head (with a Big Island volcano note) — or a plain “We couldn’t fit” line. Dinners must not be Bar Leather Apron, must not repeat, and Leonard’s Bakery should not be dinner. Beaches should be Waikīkī, Kailua, Hanauma Bay, Ko Olina or Ala Moana rather than Keʻehi Lagoon or Kalaeloa. Ships are not “indoor exhibits”. July weather should use “Usually sunny” / “quick showers are common but short” rather than “rained on about almost all of these days”. Day notes cap at three with no stray “beach” token; beach safety appears once. Then Detroit → Cancún (same infant family as 1.18.2): “Baby needs their own passport” is visible in the default Before you leave view, and “artifacts” (not “artefacts”) in US wording. Budget is unchanged.
+
 ## Live QA leftovers: weather, backups, passport, dinners (1.18.2)
 
 Confirm `/healthz` says **1.18.2**. On a **cold cache**, regenerate Detroit → Cancún, Flying, 20–27 Mar 2027, Mom, Dad, Girl 10, Grandparent, Infant 1. Weather should read as a plain wet-chance line (not “33% usually dry”). Day 4 should not schedule Nichupté Vehicular Bridge. Every mid-trip rain backup should name a real indoor place, with a short kid hint where useful. Day notes should be at most three, with one merged optional Chichén Itzá / Tulum line. Prep and/or the infant packing row should show that the baby needs their own passport. Then Detroit → Orlando (Disney family as in 1.18.1): every major park day should have a pool or rest afternoon, Holy Land Experience should be absent from Local highlights, and dinner slots should not use Le Coq Au Vin or Kres Chophouse. Budget is unchanged.

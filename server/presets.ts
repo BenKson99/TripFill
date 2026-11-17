@@ -92,7 +92,7 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
     const warm = free.filter(d => (wx(d)?.tmax ?? 0) >= 18);
     // Only schedule on genuinely warm days; real beach names are applied in scheduleActivities.
     // One preset beach afternoon only; scheduleActivities balances remaining slots across activities.
-    if (warm[0]) { warm[0].afternoon = "🏖 Beach time at a nearby beach"; tag(warm[0], "beach"); used.add(warm[0]); }
+    if (warm[0]) { warm[0].afternoon = "🏖 Beach time at a nearby beach"; used.add(warm[0]); }
   }
   if (ps.includes("roadtrip") && mid.length) {
     const pool = (dry.length ? dry : mid).filter(x => !used.has(x)); const d = pool[Math.min(1, pool.length - 1)] || mid.find(x => !used.has(x));

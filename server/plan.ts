@@ -76,11 +76,19 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   food = casualDinner || dinnerOpts.senior || abroad
     ? filterDinnerList(familyDinnerList(nearFood.length ? nearFood : food, casualDinner), dinnerOpts)
     : filterDinnerList(nearFood.length ? nearFood : food, dinnerOpts);
-  const dinnerName = (i: number) => food.length ? food[i % food.length].name : (casualDinner ? CASUAL_DINNER_FALLBACK : "");
-  const dinnerTag = (i: number) => {
-    const f = food[i % Math.max(food.length, 1)];
-    return food.length && f?.tag && f.tag !== "restaurant" ? ` (${f.tag})` : "";
+  const dinnerUsed = new Set<string>();
+  const dinnerPick = () => {
+    const next = food.find(e => e.name && !dinnerUsed.has(e.name.toLowerCase()));
+    if (next?.name) { dinnerUsed.add(next.name.toLowerCase()); return next; }
+    return undefined;
   };
+  const dinnerLine = (prefix: string, fallback: string) => {
+    const e = dinnerPick();
+    if (!e?.name) return fallback;
+    const tag = e.tag && e.tag !== "restaurant" ? ` (${e.tag})` : "";
+    return `${prefix}${e.name}${tag}`;
+  };
+  const familyDinnerFallback = casualDinner || kids ? CASUAL_DINNER_FALLBACK : "Dinner somewhere local";
   const perDay = kids ? 1 : style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;
   hl = preferFamilySights(filterHighlightList(activityHl.filter(h => !isBroadRegion(h)))); extraIndoor = filterHighlightList(extraIndoor.filter(h => !isBroadRegion(h) && activityOk(h as Highlight)));
   const outdoor = hl.filter(h => h.setting !== "indoor"), indoor = [...hl.filter(h => h.setting === "indoor"), ...hl.filter(h => h.setting === "mixed")];
@@ -142,13 +150,13 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       const alt = !flyNight && !overnight ? altitudeNote(opts.elevationM ?? w.elevationM) : "";
       const notes = [overnight && !stop ? "Consider an overnight stop around the midpoint" : "", lag, alt, holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ");
       const tag = overnight ? "Drive" : flyNight ? "Fly" : "Arrive";
-      return row({ date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : (dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay"), notes });
+      return row({ date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : flyNight ? "Overnight on the plane" : dinnerLine("Dinner nearby: ", "Relaxed dinner near your stay"), notes });
     }
     if (overnight && i === 1 && days.length > 2) {
-      return row({ date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: dinnerName(0) ? `Dinner nearby: ${dinnerName(0)}` : "Relaxed dinner near your stay", notes: [altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
+      return row({ date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: dinnerLine("Dinner nearby: ", "Relaxed dinner near your stay"), notes: [altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
     }
     if (flyNight && i === 1 && days.length > 2) {
-      return row({ date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerName(0) ? `Early dinner nearby: ${dinnerName(0)}` : "Early dinner near your stay", notes: [lag, altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
+      return row({ date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: OVERNIGHT_FLY_DAY2, afternoon: "Check in & rest — keep today light", evening: dinnerLine("Early dinner nearby: ", "Early dinner near your stay"), notes: [lag, altitudeNote(opts.elevationM ?? w.elevationM), holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
     }
     if (i === days.length - 1 && days.length > 1) return row({ date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: [isRainy(d) ? "Wet departure — pack a rain layer and allow a little extra time" : "", holidayNote(d.date, opts.countryCode) || ""].filter(Boolean).join(" · ") });
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));
@@ -185,7 +193,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
       date: d.date, label: `Day ${i + 1} · ${fmt(d.date)}`, weather: wx,
       morning: slots[0] || familyFallback || "Free morning — wander a new neighbourhood",
       afternoon: slots.slice(1).join(" → ") || (style === "Slow" ? "Long lunch & downtime" : "Explore a market or local street"),
-      evening: dinnerName(i) ? `Dinner: ${dinnerName(i)}${dinnerTag(i)}` : (kids ? CASUAL_DINNER_FALLBACK : "Dinner somewhere local"),
+      evening: dinnerLine("Dinner: ", familyDinnerFallback),
       rainyBackup: itineraryPrecipCopy(kind, ski, named),
       notes: holidayNote(d.date, opts.countryCode) || "",
     });

@@ -1,9 +1,26 @@
 /** Rain vs snow, used by weather, itinerary and packing. No network. */
 export type PrecipKind = "none" | "rain" | "snow" | "mixed";
-export type PrecipDay = { tmax?: number; tmin?: number; precipMm?: number; precipProb?: number | null; snowCm?: number | null; summary?: string; code?: number | null; typical?: boolean };
+export type PrecipDay = { tmax?: number; tmin?: number; precipMm?: number; precipHours?: number | null; precipProb?: number | null; snowCm?: number | null; summary?: string; code?: number | null; typical?: boolean; passingShowers?: boolean };
 
-/** Same wet threshold as the pre-1.13 isRainy: 50% probability, or ≥2 mm on a forecast day. */
-export const isWet = (d: PrecipDay) => (d.precipProb ?? 0) >= 50 || (!d.typical && (d.precipMm ?? 0) >= 2);
+/** Warm-place short showers (hours or mm) — not a wet day that needs an indoor plan. */
+export function isBriefTropicalShower(d: PrecipDay): boolean {
+  if (d.passingShowers) return true;
+  const warm = (d.tmax ?? 0) >= 24 && (d.tmin == null || d.tmin >= 16);
+  if (!warm) return false;
+  if ((d.snowCm ?? 0) > 0) return false;
+  const mm = d.precipMm ?? 0;
+  const hours = d.precipHours;
+  if (!(mm > 0 || (hours != null && hours > 0))) return false;
+  if (hours != null && hours <= 3 && mm < 8) return true;
+  if (mm > 0 && mm < 5) return true;
+  return false;
+}
+
+/** Same wet threshold as the pre-1.13 isRainy: 50% probability, or ≥2 mm on a forecast day — except short tropical showers. */
+export const isWet = (d: PrecipDay) => {
+  if (isBriefTropicalShower(d)) return false;
+  return (d.precipProb ?? 0) >= 50 || (!d.typical && (d.precipMm ?? 0) >= 2);
+};
 const tmean = (d: PrecipDay) => Number.isFinite(d.tmax) && Number.isFinite(d.tmin) ? (d.tmax! + d.tmin!) / 2 : (d.tmax ?? d.tmin);
 /** Mean ≤ ~1°C, or high ≤ ~2°C. */
 export const isColdSnow = (d: PrecipDay) => { const m = tmean(d); return (m != null && m <= 1) || (d.tmax != null && d.tmax <= 2); };
@@ -28,10 +45,13 @@ export function precipKind(d: PrecipDay, loose = false): PrecipKind {
 export const isRainy = (d: PrecipDay) => precipKind(d) === "rain" || precipKind(d) === "mixed";
 export const isSnowy = (d: PrecipDay) => precipKind(d) === "snow" || precipKind(d) === "mixed";
 
-export function typicalPrecipSummary(prob: number, kind: PrecipKind): string {
-  // Same 50% threshold as isWet / isRainy / wetDaysSummary.
-  if (prob >= 50) return kind === "snow" ? "Often snowy" : kind === "mixed" ? "Often mixed rain/snow" : "Often wet";
-  return "Usually dry";
+export function typicalPrecipSummary(prob: number, kind: PrecipKind, d?: PrecipDay): string {
+  if (d && isBriefTropicalShower(d)) return "Usually sunny";
+  if (kind === "snow") return prob >= 50 ? "Often snowy" : "Usually dry";
+  if (kind === "mixed") return prob >= 50 ? "Often mixed rain/snow" : "Usually dry";
+  if (prob >= 70) return "Rainy most days";
+  if (prob >= 40) return "Some rain likely";
+  return d && (d.tmax ?? 0) >= 22 ? "Usually sunny" : "Usually dry";
 }
 
 export function adjustForecastSummary(summary: string, kind: PrecipKind): string {
@@ -71,10 +91,17 @@ export function rainChancePhrase(d: PrecipDay, kind = precipKind(d)): string {
   const p = d.precipProb;
   if (d.typical) {
     if (p <= 0) return "";
-    const frac = rainFractionLabel(p);
-    if (kind === "snow") return `snowed on about ${frac} of these days in past years`;
-    if (kind === "mixed") return `had rain or snow on about ${frac} of these days in past years`;
-    return `rained on about ${frac} of these days in past years`;
+    if (isBriefTropicalShower(d)) return "quick showers are common but short";
+    if (kind === "snow") {
+      if (p >= 70) return "it snowed on most of these days in past years";
+      return `snowed on about ${rainFractionLabel(p)} of these days in past years`;
+    }
+    if (kind === "mixed") {
+      if (p >= 70) return "it had rain or snow on most of these days in past years";
+      return `had rain or snow on about ${rainFractionLabel(p)} of these days in past years`;
+    }
+    if (p >= 70) return "it rained on most of these days in past years";
+    return `rained on about ${rainFractionLabel(p)} of these days in past years`;
   }
   if (p <= 0) return "";
   if (kind === "snow") return `${p}% chance of snow`;
@@ -85,7 +112,7 @@ export function rainChancePhrase(d: PrecipDay, kind = precipKind(d)): string {
 /** Compact day line: "Usually dry · {tr:22.3:27.8} · rained on about 1 in 3 of these days in past years". */
 export function formatDayWeather(d: PrecipDay): string {
   const kind = precipKind(d);
-  const summary = (d.summary || "").trim() || typicalPrecipSummary(d.precipProb ?? 0, kind);
+  const summary = (d.summary || "").trim() || typicalPrecipSummary(d.precipProb ?? 0, kind, d);
   const lo = d.tmin, hi = d.tmax;
   const temps = Number.isFinite(lo) && Number.isFinite(hi) ? `{tr:${lo}:${hi}}` : Number.isFinite(hi) ? `{t:${hi}}` : Number.isFinite(lo) ? `{t:${lo}}` : "";
   const chance = rainChancePhrase(d, kind);
@@ -122,6 +149,9 @@ export function maybeWetDay(d: PrecipDay): boolean {
 /** Same definition as stats.rainyDays (isRainy): 50% chance, or ≥2 mm on a forecast day. */
 export function wetDaysSummary(days: PrecipDay[] = []): { count: number; label: string } {
   const count = days.filter(isRainy).length;
-  if (count === 0) return { count: 0, label: "usually dry" };
+  if (count === 0) {
+    if (days.some(isBriefTropicalShower)) return { count: 0, label: "quick showers are common but short" };
+    return { count: 0, label: days.some(d => (d.tmax ?? 0) >= 22) ? "usually sunny" : "usually dry" };
+  }
   return { count, label: `Wet days ~${count}` };
 }

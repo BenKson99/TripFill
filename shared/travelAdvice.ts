@@ -169,7 +169,7 @@ const FAMILY_BEACHES: { place: RegExp; names: string[] }[] = [
   { place: /canc[uú]n|cancun|isla mujeres|riviera maya|hotel zone/i, names: ["Playa Langosta (calm)", "Playa Tortugas", "Playa Delfines"] },
   { place: /playa del carmen/i, names: ["Playa Mamitas", "Playa del Carmen beach"] },
   { place: /tulum(?!\s+archaeolog)/i, names: ["Playa Paraíso", "Playa Ruinas"] },
-  { place: /honolulu|waikiki|oahu|oʻahu/i, names: ["Waikiki Beach", "Lanikai Beach", "Kailua Beach"] },
+  { place: /honolulu|waikiki|oahu|oʻahu/i, names: ["Waikiki Beach", "Kailua Beach", "Hanauma Bay", "Ko Olina lagoons", "Ala Moana Beach"] },
   { place: /\bmaui\b/i, names: ["Kaanapali Beach", "Wailea Beach", "Kapalua Bay"] },
   { place: /kauai|kauaʻi/i, names: ["Poipu Beach", "Lydgate Beach Park"] },
   { place: /big island|kailua-kona|hilo/i, names: ["Hapuna Beach", "Kahaluu Beach Park"] },

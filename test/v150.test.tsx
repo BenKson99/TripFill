@@ -226,7 +226,7 @@ test("v1.15: Wrong place? alternatives stay hidden until the link is opened", ()
 test("v1.15: typical weather wet-day summary uses the same rainy-day definition as the stats line", () => {
   const days = wx().days;
   assert.equal(days.filter(maybeWetDay).length, 2);
-  assert.equal(wetDaysSummary(days).label, "usually dry");
+  assert.equal(wetDaysSummary(days).label, "usually sunny");
   assert.equal(wetDaysSummary(days).count, 0);
   assert.ok(!maybeWetDay({ precipProb: 10, typical: true }));
   assert.ok(maybeWetDay({ precipProb: 30, typical: true }));

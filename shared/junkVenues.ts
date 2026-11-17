@@ -77,8 +77,41 @@ export function isParkOrPlazaDinner(e: { name?: string; tag?: string; kind?: str
   return PARK_PLAZA.test(name);
 }
 
+const BAR_NAME = /^(bar)\s|\b(cocktail bar|wine bar|sports\s*bar|dive bar|tiki bar|karaoke bar)\b/i;
+const BAKERY_TREAT = /\b(bakery|bakeries|boulangerie|patisserie|pâtisserie|doughnut|donut|malasada|ice cream shop|gelateria|helader)/i;
+const NOT_BAR_RESTAURANT = /\b(grill|restaurant|kitchen|brasserie|tavern|bistro|cafe|café)\b/i;
+
+/** Cocktail / sports / name-starts-with-Bar venues — not family dinner. */
+export function isBarVenue(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string; amenity?: string } | string): boolean {
+  const name = typeof e === "string" ? e : (e.name || "");
+  const rest = typeof e === "string" ? "" : `${(e as any).tag || ""} ${(e as any).kind || ""} ${(e as any).type || ""} ${(e as any).amenity || ""}`;
+  if (isSportsBar(e)) return true;
+  if (/\bbar\b/i.test(rest) && !NOT_BAR_RESTAURANT.test(name)) return true;
+  if (BAR_NAME.test(name) && !NOT_BAR_RESTAURANT.test(name)) return true;
+  return false;
+}
+
+/** Bakeries and sweet shops are breakfast or a treat, not dinner. */
+export function isBakeryOrTreat(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string } | string): boolean {
+  const blob = typeof e === "string" ? e : `${e.name || ""} ${e.tag || ""} ${e.kind || ""} ${e.type || ""}`;
+  return BAKERY_TREAT.test(blob);
+}
+
 export function isJunkEat(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string } | string): boolean {
-  return isNamelessFoodStall(e) || isBusStationFood(e) || isCinemaOrCityTheatre(e) || isSportsBar(e) || isParkOrPlazaDinner(e);
+  return isNamelessFoodStall(e) || isBusStationFood(e) || isCinemaOrCityTheatre(e) || isSportsBar(e) || isParkOrPlazaDinner(e) || isBarVenue(e);
+}
+
+const INDUSTRIAL_BEACH = /ke[ʻ']?ehi|keehi lagoon|kalaeloa|sand island|reef runway|airport (?:beach|lagoon)|industrial (?:beach|lagoon)/i;
+const FAMOUS_FAMILY_BEACH = /waik[iī]k[iī]|kailua beach|hanauma|ko olina|ala moana|lanikai|playa langosta|playa tortugas|playa delfines/i;
+
+export function isIndustrialOrAirportBeach(h: { name?: string; type?: string; description?: string } | string): boolean {
+  const blob = typeof h === "string" ? h : `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
+  return INDUSTRIAL_BEACH.test(blob);
+}
+
+export function isFamousFamilyBeach(h: { name?: string } | string): boolean {
+  const name = typeof h === "string" ? h : (h.name || "");
+  return FAMOUS_FAMILY_BEACH.test(name);
 }
 
 const RELIGIOUS_THEME = /holy land experience|holy land|creation museum|ark encounter|passion play|bible(?:\s+land)?(?:\s+park)?|christ(?:ian)? theme|church of|temple of the latter/i;
@@ -101,7 +134,7 @@ export function filterDinnerList<T extends { name?: string; tag?: string; kind?:
   opts: { kids?: boolean; infant?: boolean; senior?: boolean; abroad?: boolean } = {},
 ): T[] {
   if (!list?.length) return [];
-  const dropJunk = list.filter(e => !isJunkEat(e));
+  const dropJunk = list.filter(e => !isJunkEat(e) && !isBakeryOrTreat(e));
   const sitDown = preferSitDownDinner(opts);
   if (!sitDown) return dropJunk;
   const tables = dropJunk.filter(e => !isStreetFoodStall(e));
@@ -114,12 +147,15 @@ export function filterHighlightList<T extends { name?: string; type?: string; de
 }
 
 /** Boost beaches, parks, aquariums, museums and tagged attractions when ranking. */
-export function familySightScore(h: { name?: string; type?: string; description?: string; source?: string; qid?: string; wikidata?: string; activity?: string }): number {
+export function familySightScore(h: { name?: string; type?: string; description?: string; source?: string; qid?: string; wikidata?: string; activity?: string; views30d?: number; url?: string }): number {
   const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""} ${h.source || ""} ${h.activity || ""}`;
   if (isJunkSight(h)) return -20;
+  if (isIndustrialOrAirportBeach(h)) return -12;
   let n = 0;
   if (/\b(beach|playa|park|aquarium|museum|gallery|zoo|planetarium|ruins?|pyramid|snorkel|reef)\b/i.test(blob)) n += 6;
-  if (/tourism=attraction|wikidata|qid/i.test(blob) || h.qid || h.wikidata || /wikidata/i.test(h.source || "")) n += 4;
+  if (isFamousFamilyBeach(h)) n += 10;
+  if (/tourism=attraction|wikidata|qid/i.test(blob) || h.qid || h.wikidata || /wikidata/i.test(h.source || "") || h.url) n += 4;
+  if ((h.views30d || 0) > 0) n += Math.min(8, Math.log10((h.views30d || 0) + 10));
   return n;
 }
 

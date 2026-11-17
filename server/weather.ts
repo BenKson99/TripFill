@@ -1,26 +1,54 @@
 import { validDate } from "../shared/portable.js";
-import { isRainy, isWet, precipKind, typicalPrecipSummary, adjustForecastSummary } from "../shared/precip.js";
+import { isRainy, isWet, precipKind, typicalPrecipSummary, adjustForecastSummary, isBriefTropicalShower } from "../shared/precip.js";
 export { isRainy, isWet, precipKind } from "../shared/precip.js";
 import { getJSON, responseReceivedAt } from "./fetchy.js";
-import { placeQueryFallbacks } from "../shared/placeQuery.js";
+import { placeQueryFallbacks, rankPlaceMatches, isSettlementPlace } from "../shared/placeQuery.js";
 
 export interface Place { id: number; name: string; country: string; countryCode: string; admin1?: string; lat: number; lon: number; timezone?: string; population?: number; featureCode?: string }
-export interface DayWeather { date: string; tmax: number; tmin: number; precipMm: number; precipProb: number | null; code: number | null; summary: string; typical?: boolean; receivedAt?: string; snowCm?: number | null }
+export interface DayWeather { date: string; tmax: number; tmin: number; precipMm: number; precipHours?: number | null; precipProb: number | null; code: number | null; summary: string; typical?: boolean; passingShowers?: boolean; receivedAt?: string; snowCm?: number | null }
 export interface WeatherResult { source: "forecast" | "typical" | "mixed"; note: string; days: DayWeather[]; stats: { avgHigh: number; avgLow: number; minLow: number; maxHigh: number; rainyDays: number; snowDays?: number }; elevationM?: number }
+
+async function nominatimSettlements(q: string): Promise<Place[]> {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=jsonv2&addressdetails=1&limit=6&featuretype=settlement`;
+  try {
+    const rows = await getJSON<any[]>(url, 8000);
+    if (!Array.isArray(rows)) return [];
+    const settle = /^(city|town|village|municipality|hamlet|suburb|neighbourhood|administrative)$/i;
+    return rows.filter(r => settle.test(r.addresstype || r.type || "") || r.class === "place" || r.class === "boundary").map(r => {
+      const addr = r.address || {};
+      const name = r.name || addr.city || addr.town || addr.village || String(r.display_name || "").split(",")[0];
+      const cc = String(addr.country_code || "").toUpperCase();
+      const typ = String(r.addresstype || r.type || "");
+      const featureCode = typ === "city" ? "PPLA" : typ === "town" ? "PPL" : typ === "village" ? "PPL" : "PPL";
+      return { id: -Math.abs(Number(r.osm_id) || Number(r.place_id) || 0), name, country: addr.country || "", countryCode: cc, admin1: addr.state || addr.county, lat: Number(r.lat), lon: Number(r.lon), featureCode, population: undefined as number | undefined };
+    }).filter(p => p.name && Number.isFinite(p.lat) && Number.isFinite(p.lon) && p.id);
+  } catch { return []; }
+}
 
 export async function geocode(q: string): Promise<Place[]> {
   const seen = new Set<number>();
   const all: Place[] = [];
+  const add = (p: Place) => {
+    if (!p?.name || seen.has(p.id)) return;
+    // Also skip near-duplicate coords + names from mixed sources.
+    if (all.some(x => x.name.toLowerCase() === p.name.toLowerCase() && Math.abs(x.lat - p.lat) < 0.05 && Math.abs(x.lon - p.lon) < 0.05)) return;
+    seen.add(p.id);
+    all.push(p);
+  };
   for (const name of placeQueryFallbacks(q)) {
-    const d = await getJSON<any>(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=8&language=en&format=json`);
+    const d = await getJSON<any>(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=15&language=en&format=json`);
     for (const r of d.results || []) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      all.push({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population, featureCode: r.feature_code });
+      add({ id: r.id, name: r.name, country: r.country, countryCode: r.country_code, admin1: r.admin1, lat: r.latitude, lon: r.longitude, timezone: r.timezone, population: r.population, featureCode: r.feature_code });
     }
     if (all.length) break;
   }
-  return sortPlaces(all);
+  const canon = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const q0 = canon((q || "").split(",")[0] || "");
+  const hasCity = all.some(p => isSettlementPlace(p) && (canon(p.name) === q0 || (p.population || 0) >= 10000));
+  if (!hasCity) {
+    for (const p of await nominatimSettlements(placeQueryFallbacks(q)[0] || q)) add(p);
+  }
+  return rankPlaceMatches(sortPlaces(all), all.length, q);
 }
 /** Populated places (GeoNames PPL*) first, by population; islands, glaciers, peaks etc. after (v1.5.2). */
 export const isPopulated = (p: Place) => /^PPL/.test(p.featureCode || "") || (!p.featureCode && (p.population ?? 0) > 0);
@@ -67,7 +95,7 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
     return { source: "mixed", note: `Live forecast through ${lastFcIso}; later days are typical for this season (averages of prior years, not a forecast).`, days, stats: stats(days), elevationM: a.elevationM ?? b.elevationM };
   }
   if (!forceTypical && daysOut <= 14 && startD >= today) {
-    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,snowfall_sum&timezone=auto&start_date=${start}&end_date=${end}`;
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours,precipitation_probability_max,weather_code,snowfall_sum&timezone=auto&start_date=${start}&end_date=${end}`;
     const d = await getJSON<any>(forecastUrl);
     const days: DayWeather[] = forecastDays(d.daily, dateRange(start, end)).map(d => ({ ...d, receivedAt: responseReceivedAt(forecastUrl) }));
     // Open-Meteo's last horizon day(s) can come back null — fill those from typical instead of showing 0°
@@ -87,20 +115,27 @@ export async function getWeather(p: Place, start: string, end: string, forceTypi
   const thisYear = today.getUTCFullYear();
   const years = [1, 2, 3].map(k => Math.min(Number(start.slice(0, 4)), thisYear) - k);
   const shift = (iso: string, y: number) => { const yy = Number(iso.slice(0, 4)); const md = iso.slice(5); const ny = y + (yy - Number(start.slice(0, 4))); return `${ny}-${md === "02-29" ? "02-28" : md}`; };
-  const runs = await Promise.all(years.map(y => getJSON<any>(`https://archive-api.open-meteo.com/v1/archive?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,snowfall_sum&timezone=auto&start_date=${shift(dates[0], y)}&end_date=${shift(dates[dates.length - 1], y)}`).catch(() => null)));
+  const runs = await Promise.all(years.map(y => getJSON<any>(`https://archive-api.open-meteo.com/v1/archive?latitude=${p.lat}&longitude=${p.lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_hours,snowfall_sum&timezone=auto&start_date=${shift(dates[0], y)}&end_date=${shift(dates[dates.length - 1], y)}`).catch(() => null)));
   const ok = runs.filter(Boolean) as any[];
   if (!ok.length) throw new Error("No historical weather available");
   const days: DayWeather[] = dates.map((date, i) => {
-    const vals = ok.map(r => ({ mx: r.daily.temperature_2m_max[i], mn: r.daily.temperature_2m_min[i], p: r.daily.precipitation_sum[i], s: r.daily.snowfall_sum?.[i] })).filter(v => Number.isFinite(v.mx) && Number.isFinite(v.mn));
+    const vals = ok.map(r => ({ mx: r.daily.temperature_2m_max[i], mn: r.daily.temperature_2m_min[i], p: r.daily.precipitation_sum[i], h: r.daily.precipitation_hours?.[i], s: r.daily.snowfall_sum?.[i] })).filter(v => Number.isFinite(v.mx) && Number.isFinite(v.mn));
     if (!vals.length) throw new Error(`Historical temperatures unavailable for ${date}. Try again later.`);
     const n = vals.length;
-    const wet = vals.filter(v => (v.p ?? 0) >= 1).length;
-    const prob = Math.round((wet / n) * 100);
     const precip = r1(vals.reduce((s, v) => s + (v.p ?? 0), 0) / n);
+    const hourVals = vals.filter(v => Number.isFinite(v.h));
+    const precipHours = hourVals.length ? r1(hourVals.reduce((s, v) => s + (v.h ?? 0), 0) / hourVals.length) : null;
     const snowVals = vals.filter(v => Number.isFinite(v.s));
     const snowCm = snowVals.length ? r1(snowVals.reduce((s, v) => s + (v.s ?? 0), 0) / snowVals.length) : null;
-    const day = { date, tmax: r1(vals.reduce((s, v) => s + v.mx, 0) / n), tmin: r1(vals.reduce((s, v) => s + v.mn, 0) / n), precipMm: precip, precipProb: prob, code: null, snowCm, typical: true as const, summary: "" };
-    day.summary = typicalPrecipSummary(prob, precipKind(day));
+    const tmax = r1(vals.reduce((s, v) => s + v.mx, 0) / n);
+    const tmin = r1(vals.reduce((s, v) => s + v.mn, 0) / n);
+    const warm = tmax >= 24 && tmin >= 16;
+    const meaningful = vals.filter(v => (v.p ?? 0) >= (warm ? 5 : 1) || (v.h ?? 0) >= 4).length;
+    const trace = vals.filter(v => (v.p ?? 0) >= 1).length;
+    const prob = Math.round(((warm ? meaningful : trace) / n) * 100);
+    const day: DayWeather = { date, tmax, tmin, precipMm: precip, precipHours, precipProb: prob, code: null, snowCm, typical: true, summary: "" };
+    if (warm && trace > meaningful) day.passingShowers = true;
+    day.summary = typicalPrecipSummary(prob, precipKind(day), day);
     return day;
   });
   const elevationM = ok.map(r => r.elevation).find((n: any) => Number.isFinite(n));
@@ -113,8 +148,9 @@ export function forecastDays(daily: any, dates: string[]): DayWeather[] {
     const i = (daily?.time || []).indexOf(date);
     const n = (key: string) => i >= 0 && Number.isFinite(daily?.[key]?.[i]) ? daily[key][i] : NaN;
     const code = n("weather_code"), prob = n("precipitation_probability_max"), snow = n("snowfall_sum");
-    const day = { date, typical: false, tmax: r1(n("temperature_2m_max")), tmin: r1(n("temperature_2m_min")), precipMm: n("precipitation_sum"), precipProb: Number.isFinite(prob) ? prob : null, code: Number.isFinite(code) ? code : null, snowCm: Number.isFinite(snow) ? r1(snow) : null, summary: CODES[code] || "Conditions unavailable" };
-    day.summary = adjustForecastSummary(day.summary, precipKind(day));
+    const hours = n("precipitation_hours");
+    const day: DayWeather = { date, typical: false, tmax: r1(n("temperature_2m_max")), tmin: r1(n("temperature_2m_min")), precipMm: n("precipitation_sum"), precipHours: Number.isFinite(hours) ? hours : null, precipProb: Number.isFinite(prob) ? prob : null, code: Number.isFinite(code) ? code : null, snowCm: Number.isFinite(snow) ? r1(snow) : null, summary: CODES[code] || "Conditions unavailable" };
+    day.summary = adjustForecastSummary(isBriefTropicalShower(day) ? "Usually sunny" : day.summary, precipKind(day));
     return day;
   });
 }

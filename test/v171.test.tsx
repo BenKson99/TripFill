@@ -83,7 +83,7 @@ test("v1.17.1: family dinners drop fine dining from any source and never serve o
 });
 
 test("v1.17.1: eats and places cache keys were bumped so stale pre-1.17.1 rankings are not reused", () => {
-  assert.match(eatsKey({ name: "London", lat: 51.507, lon: -0.128 }), /^eats\|v9\|/);
+  assert.match(eatsKey({ name: "London", lat: 51.507, lon: -0.128 }), /^eats\|v10\|/);
 });
 
 test("v1.17.1: a US driving plan keeps one Driver's license row, not a UK-spelled duplicate", () => {

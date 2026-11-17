@@ -79,6 +79,8 @@ export function highlightReason(h: { name?: string; type?: string; description?:
   else if (/children'?s?\s*museum|family\s*museum|science (centre|center)/i.test(t)) reason = "Good for kids: museum";
   else if (/theme park|amusement park|water park/i.test(t)) reason = "A full park day — go early and rest after";
   else if (isBarStyleVenue(h)) reason = kids ? "Evening spot — better for grown-ups" : "Nightlife";
+  else if (/uss missouri|battleship/i.test(t)) reason = "Battleship you can walk through";
+  else if (/uss bowfin|submarine/i.test(t)) reason = "Submarine you can walk through";
   else if (isOutdoorFamilyPlace(h)) reason = "Outdoor — check the weather";
   else if (h.indoor || h.setting === "indoor" || h.setting === "mixed") reason = "Indoor — good if it rains";
   else if (h.setting === "outdoor" || /outdoor|park|garden|trail|beach/i.test(t)) reason = "Outdoor — check the weather";

@@ -442,7 +442,8 @@ const OPTIONAL_NOTE = /^Optional(?: big day trip)?:/i;
 
 /** At most 3 notes per day: safety first, then the optional trip, then one more. */
 export function capDayNotes(notes?: string, max = 3): string {
-  const parts = (notes || "").split(/\s+·\s+/).map(s => s.trim()).filter(Boolean);
+  const bareToken = /^(beach|beaches|surfing|surf|snorkeling|snorkel|hiking|hike|museums?|tasting|nightlife|boats?|fishing|cycling|camping|dive|food|family|sightseeing)$/i;
+  const parts = (notes || "").split(/\s*·\s*/).map(s => s.trim()).filter(s => s && !bareToken.test(s));
   if (!parts.length) return "";
   const seen = new Set<string>();
   const uniq: string[] = [];

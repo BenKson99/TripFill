@@ -44,7 +44,7 @@ export const ACTIVITIES: ActivityDef[] = [
       { task: "Check if the resort is car-free and how you get there from the station or parking", why: "places like Zermatt are reached by train or taxi, not a private car in town", daysBefore: 10 },
     ] },
   { id: "hiking", label: "Hiking", emoji: "🥾", popular: true,
-    aliases: /\b(hik(?:e|ing)|trek(?:king)?|trail(?:s)?|day hike|backpacking)\b/i,
+    aliases: /\b(hik(?:e|ing)|trek(?:king)?|trail(?:s)?|day hike|backpacking|volcano(?:es)?|volcanic|crater)\b/i,
     legacyPresets: ["hiking"], legacyKits: ["hiking"], slot: "morning", weather: "not-rain", osm: "trail",
     packing: [
       { group: "Activities", item: "Hiking shoes / trail layers", reason: "Hiking activity — choose gear for the actual route and check conditions" },

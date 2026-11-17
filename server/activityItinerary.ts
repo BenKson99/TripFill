@@ -261,7 +261,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
     else if (/Skiing until/.test(a.day.afternoon)) {
       a.day.afternoon = a.day.afternoon.replace(/\s*;\s*or a rest day:.*$/, "") + `; or a rest day: ${text}`;
     } else a.day.afternoon = text;
-    if (h) a.day.notes = [a.day.notes, ACTIVITY_BY_ID[a.id].label].filter((x, i, arr) => x && arr.indexOf(x) === i).join(" · ");
+    // Do not append bare activity labels ("beach", "Surfing") as day notes.
   }
 }
 
@@ -374,11 +374,9 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
     }
   }
   if (isOceanBeachDestination(placeName || inp.destination || "")) {
-    for (const d of days) {
-      if (isTravelOrLeaveDay(d)) continue;
-      if (/🏖|playa |beach\b|snorkel/i.test(`${d.morning} ${d.afternoon}`)) {
-        if (!d.notes?.includes(BEACH_SAFETY_NOTE)) d.notes = [d.notes, BEACH_SAFETY_NOTE].filter(Boolean).join(" · ");
-      }
+    const firstBeach = days.find(d => !isTravelOrLeaveDay(d) && /🏖|playa |beach\b|snorkel|hanauma|waik[iī]k[iī]|kailua|ko olina|ala moana/i.test(`${d.morning} ${d.afternoon}`));
+    if (firstBeach && !days.some(d => d.notes?.includes(BEACH_SAFETY_NOTE))) {
+      firstBeach.notes = [firstBeach.notes, BEACH_SAFETY_NOTE].filter(Boolean).join(" · ");
     }
   }
   if (hasInfantTraveler(inp)) {

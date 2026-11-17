@@ -155,7 +155,7 @@ test("v1.18.1: wet-day labels, notes and rain-jacket wear share the 50% threshol
   assert.equal(isWet(dry), false);
   assert.equal(isRainy(wet), true);
   assert.equal(typicalPrecipSummary(33, "none"), "Usually dry");
-  assert.equal(typicalPrecipSummary(67, "rain"), "Often wet");
+  assert.equal(typicalPrecipSummary(67, "rain"), "Some rain likely");
   assert.match(precipProbLabel(dry, precipKind(dry)), /usually dry/i);
   assert.match(precipProbLabel(wet, precipKind(wet)), /wet in sampled years/i);
   assert.equal(wetDaysSummary([dry, dry, wet, dry, dry, dry, dry, wet]).label, "Wet days ~2");
