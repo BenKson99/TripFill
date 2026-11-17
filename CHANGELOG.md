@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.19.1 — Volcano notes, dinner brands, Pearl Harbor, and London leftovers
+
+- Honolulu: when Diamond Head is already scheduled as a hike, the volcano dictionary note still appears: “Diamond Head is an old volcano crater. The active volcano park (Hawaiʻi Volcanoes) is on the Big Island, a short flight away.” Any matched interest with a dictionary note now shows that note (it is kept through the 3-note cap).
+- Kid dinner slots drop venue names containing the word “Bar” (Tiki’s Grill & Bar), with a word-boundary check so Barbecue and Barcelona still pass.
+- Dinner uniqueness is by brand (first possessive token, or a Wikidata/OSM brand tag), so Zippy’s / Zippy’s Nimitz / Zippy’s Makiki count as one chain per trip.
+- “Hike continues — back by late afternoon” only stays when that morning is an actual long hike, not a surf lesson or beach.
+- USS Arizona Memorial is worded “boat ride to the memorial — free timed tickets, book ahead,” not “indoor exhibits.” Pearl Harbor sites (Arizona, Missouri, Bowfin, Aviation Museum, National Memorial) cluster as 1–2 visits on one day; the others become optional stops.
+- The London double-decker is a short add-on: “Ride the top deck of a red double-decker bus past Big Ben (any London bus, use a contactless card).” It is no longer wiped by a park-day rest or left only in “We couldn’t fit.”
+- Family dinner fallback prefers a named nearby place when one exists (including cafes) and says “a family-friendly pub,” not “a pub.”
+- Cool or non-resort cities (London) use “Quiet rest at the hotel or a nearby park/playground” instead of a hotel pool. Warm or resort places (Orlando, Cancún, Honolulu) keep the pool rest.
+- Budget is unchanged. Cache keys stay `places|v22` and `eats|v10`.
+
 ## 1.19.0 — Honolulu geocoding, Hawaiʻi interests, and family venue quality
 
 - Geocoding ranks real cities and towns ahead of parks, stadiums, venues and other POIs that merely contain the name (so “Honolulu” is the city, not Honolulu Stadium State Park). Nominatim settlement results are a fallback when Open-Meteo has none. If the top result still is not a settlement, alternatives are shown up front.

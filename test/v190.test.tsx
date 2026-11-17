@@ -118,7 +118,9 @@ test("v1.19.0: Hawaiʻi interest dictionary covers luau, turtles, surf lessons a
   assert.match(names, /Beginner surf lesson at Waik[iī]k[iī]/);
   assert.match(names, /Diamond Head/);
   const volc = slots.find(s => /Diamond Head/i.test(s.name));
-  assert.match(volc?.note || "", /Hawai[iʻ]i Volcanoes National Park is on the Big Island, a short flight away/);
+  assert.match(volc?.note || "", /Diamond Head is an old volcano crater/);
+  assert.match(volc?.note || "", /Hawai[iʻ]i Volcanoes/);
+  assert.match(volc?.note || "", /short flight away/);
 });
 
 test("v1.19.0: unplaced interests are listed plainly instead of disappearing", () => {

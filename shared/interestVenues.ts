@@ -1,5 +1,5 @@
 import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
-import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, KIDS_POOL_REST } from "./family.js";
+import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, kidsRestAfternoon, registerDictionaryNotes } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
@@ -22,7 +22,7 @@ const ENTRIES: Entry[] = [
     { name: "Warner Bros. Studio Tour Tokyo – The Making of Harry Potter (book ahead)", kind: "major" },
   ]},
   { interest: /double-?decker|hop-?on hop-?off|red bus/i, place: /london|united kingdom|^GB$/i, slots: [
-    { name: "Ride a red double-decker bus (route 11 or 15 passes the big sights)", kind: "light" },
+    { name: "Ride the top deck of a red double-decker bus past Big Ben (any London bus, use a contactless card)", kind: "light" },
   ]},
   { interest: /castles?/i, place: /london|windsor|united kingdom|^GB$/i, slots: [
     { name: "Tower of London", kind: "major" },
@@ -110,7 +110,7 @@ const ENTRIES: Entry[] = [
     { name: "Beginner surf lesson at Waikīkī (book a family lesson)", kind: "major" },
   ]},
   { interest: /volcano(?:es)?|volcanic|caldera|crater/i, place: /honolulu|oahu|oʻahu|waikiki/i, slots: [
-    { name: "Diamond Head hike / crater (book ahead)", kind: "major", note: "Hawaiʻi Volcanoes National Park is on the Big Island, a short flight away" },
+    { name: "Diamond Head hike / crater (book ahead)", kind: "major", note: "Diamond Head is an old volcano crater. The active volcano park (Hawaiʻi Volcanoes) is on the Big Island, a short flight away" },
   ]},
   { interest: /snorkel/i, place: /\bmaui\b/i, slots: [
     { name: "Snorkel at Molokini or Turtle Town (book a calm-water trip)", kind: "major" },
@@ -322,7 +322,7 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
       if (preferGeneric && !generic) continue;
       const next = majors.shift()!;
       d.morning = next.name;
-      if (isMajorAttraction(next.name)) d.afternoon = KIDS_POOL_REST;
+      if (isMajorAttraction(next.name)) d.afternoon = kidsRestAfternoon(typeof dest === "string" ? dest : dest?.name);
       appendNote(d, next.note);
     }
   }
@@ -348,6 +348,7 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
       else d.afternoon = `${camp}; then ${aft}`;
     }
   }
+  attachCuratedInterestNotes(days, interests, dest);
   return days;
 }
 
@@ -369,14 +370,15 @@ export function applyInterestAddOns<T extends { morning: string; afternoon: stri
   const heavyMorning = (text?: string) => /warner\s*bros|studio tour|wizarding world|legoland|windsor castle|theme park|amusement park|water park|day hike|hike continues/i.test(text || "");
   for (const s of lights) {
     if (alreadyUsed(days, s.name)) continue;
-    const free = (d: typeof mid[number]) => isBareCategorySlot(d.afternoon) || isGenericSlot(d.afternoon) || !d.afternoon || /^Explore a market/i.test(d.afternoon || "");
+    const isRest = (text?: string) => /hotel pool|quiet rest at the hotel/i.test(text || "");
+    const free = (d: typeof mid[number]) => isBareCategorySlot(d.afternoon) || isGenericSlot(d.afternoon) || !d.afternoon || /^Explore a market/i.test(d.afternoon || "") || isRest(d.afternoon);
     const host = mid.find(d => !heavyMorning(d.morning) && free(d) && !/Hike continues|Day hike/i.test(d.afternoon || ""))
       || mid.find(d => {
-        if (heavyMorning(d.morning)) return false;
         if (/Hike continues|Day hike/i.test(d.afternoon || "")) return false;
+        if (heavyMorning(d.morning) && !isRest(d.afternoon)) return false;
         return addOnCount(d.afternoon) < maxAddOns;
       })
-      || mid.find(d => !heavyMorning(d.morning) && addOnCount(d.afternoon) < maxAddOns);
+      || mid.find(d => addOnCount(d.afternoon) < maxAddOns && (isRest(d.afternoon) || !heavyMorning(d.morning)));
     if (!host) continue;
     if (!host.afternoon || isGenericSlot(host.afternoon) || /^Explore a market/i.test(host.afternoon)) host.afternoon = s.name;
     else host.afternoon = `${host.afternoon}; then ${s.name}`;
@@ -472,6 +474,7 @@ export function assignUniqueRainBackups<T extends { morning?: string; afternoon?
 
 
 const KID_HINTS: { re: RegExp; hint: string }[] = [
+  { re: /uss arizona/i, hint: "boat ride to the memorial — free timed tickets, book ahead" },
   { re: /uss missouri|battleship/i, hint: "battleship you can walk through" },
   { re: /uss bowfin|submarine/i, hint: "submarine you can walk through" },
   { re: /aquarium/i, hint: "see sea animals indoors" },
@@ -608,6 +611,102 @@ export function itineraryHasWaterPark(days: { morning?: string; afternoon?: stri
 
 
 const INTEREST_STOP = /^(and|the|with|kids?|family|fun|beach|beaches|swimming|lessons?)$/i;
+
+
+/** Attach dictionary notes to the day that already holds the matching venue (e.g. Diamond Head placed as a hike). */
+export function attachCuratedInterestNotes<T extends { morning?: string; afternoon?: string; evening?: string; notes?: string }>(
+  days: T[],
+  interests: string,
+  dest?: DestRef | string,
+): T[] {
+  const slots = curatedInterestVenues(interests, dest).filter(s => s.note && s.name);
+  registerDictionaryNotes(slots.map(s => s.note!).concat([
+    "Diamond Head is an old volcano crater. The active volcano park (Hawaiʻi Volcanoes) is on the Big Island, a short flight away",
+  ]));
+  const appendNote = (d: T, note: string) => {
+    const cur = d.notes || "";
+    if (cur.includes(note)) return;
+    d.notes = cur ? `${cur} · ${note}` : note;
+  };
+  for (const s of slots) {
+    const host = days.find(d => alreadyUsed([d], s.name) || `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`.toLowerCase().includes(s.name.toLowerCase().replace(/\s*\([^)]*\)\s*$/, "").slice(0, 24)));
+    if (host) appendNote(host, s.note!);
+  }
+  return days;
+}
+
+const PEARL_HARBOR = /uss arizona|uss missouri|uss bowfin|pacific aviation museum|pearl harbor national memorial|pearl harbor/i;
+
+function pearlPiece(text?: string): string | undefined {
+  const t = (text || "").trim();
+  if (!t) return undefined;
+  // A slot or add-on that is a Pearl Harbor site.
+  for (const part of t.split(/\s*;\s*then\s+/i)) {
+    if (PEARL_HARBOR.test(part)) return part.trim();
+  }
+  return undefined;
+}
+
+/** Keep 1–2 Pearl Harbor visits on one day; the rest become optional suggestions. */
+export function clusterPearlHarbor<T extends { morning?: string; afternoon?: string; evening?: string; notes?: string; rainyBackup?: string; label?: string }>(
+  days: T[],
+  isTravel?: (d: T) => boolean,
+  dest?: string,
+): T[] {
+  const mid = days.filter(d => !isTravel?.(d));
+  type Hit = { day: T; slot: "morning" | "afternoon"; text: string };
+  const hits: Hit[] = [];
+  const stem = (s: string) => s.toLowerCase().replace(/\s*\([^)]*\)/g, "").replace(/^[^a-z0-9]+/, "").trim();
+  for (const d of mid) {
+    for (const slot of ["morning", "afternoon"] as const) {
+      const piece = pearlPiece(d[slot]);
+      if (piece) hits.push({ day: d, slot, text: piece });
+    }
+  }
+  const uniq: Hit[] = [];
+  const seen = new Set<string>();
+  for (const h of hits) {
+    const k = stem(h.text);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    uniq.push(h);
+  }
+  if (uniq.length <= 1) return days;
+  if (uniq.length <= 2 && new Set(uniq.map(h => h.day)).size <= 1) return days;
+  const host = uniq[0].day;
+  const onHost = uniq.filter(h => h.day === host);
+  const others = uniq.filter(h => h.day !== host);
+  const keep: string[] = onHost.map(h => h.text).slice(0, 2);
+  const afternoonFree = !host.afternoon || !!pearlPiece(host.afternoon) || /hotel pool|quiet rest|explore a market/i.test(host.afternoon);
+  if (keep.length < 2 && others.length && afternoonFree) keep.push(others[0].text);
+  const keptStems = new Set(keep.map(stem));
+  if (pearlPiece(host.morning) || !host.morning) host.morning = keep[0];
+  else if (!pearlPiece(host.morning) && keep[0] && !stem(host.morning || "").includes(stem(keep[0]).slice(0, 16))) {
+    // Morning is a different outing — put Pearl Harbor in the afternoon only.
+    if (!keep[1]) keep.unshift(keep[0] || "");
+  }
+  if (keep.length > 1 && (afternoonFree || pearlPiece(host.afternoon))) {
+    host.afternoon = keep[keep[0] && pearlPiece(host.morning) && stem(host.morning || "") === stem(keep[0]) ? 1 : 0] || keep[1];
+    if (pearlPiece(host.morning) && host.afternoon && stem(host.morning || "") === stem(host.afternoon)) {
+      host.afternoon = keep.find(k => stem(k) !== stem(host.morning || "")) || kidsRestAfternoon(dest);
+    }
+  }
+  for (const d of mid) {
+    for (const slot of ["morning", "afternoon"] as const) {
+      const piece = pearlPiece(d[slot]);
+      if (!piece) continue;
+      if (d === host && keptStems.has(stem(d[slot] || ""))) continue;
+      d[slot] = slot === "afternoon" ? kidsRestAfternoon(dest) : "Free morning — wander a new neighbourhood";
+    }
+  }
+  const extraNames = uniq.map(h => h.text.replace(/\s*\([^)]*\)\s*$/, "").replace(/^[^A-Za-z0-9]+/, "").trim())
+    .filter((n, i, arr) => arr.findIndex(x => stem(x) === stem(n)) === i && !keptStems.has(stem(n)));
+  if (extraNames.length) {
+    const note = `Optional Pearl Harbor stops: ${extraNames.join(", ")} — a grown-up decides`;
+    if (!host.notes?.includes("Optional Pearl Harbor")) host.notes = host.notes ? `${host.notes} · ${note}` : note;
+  }
+  return days;
+}
 
 /** Interests from the form that never landed in a slot or note, with a short try-this hint. */
 export function unplacedInterestNotes(interests: string, days: { morning?: string; afternoon?: string; evening?: string; notes?: string; rainyBackup?: string }[] = [], dest?: DestRef | string): string[] {

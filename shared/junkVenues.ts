@@ -80,6 +80,7 @@ export function isParkOrPlazaDinner(e: { name?: string; tag?: string; kind?: str
 const BAR_NAME = /^(bar)\s|\b(cocktail bar|wine bar|sports\s*bar|dive bar|tiki bar|karaoke bar)\b/i;
 const BAKERY_TREAT = /\b(bakery|bakeries|boulangerie|patisserie|pâtisserie|doughnut|donut|malasada|ice cream shop|gelateria|helader)/i;
 const NOT_BAR_RESTAURANT = /\b(grill|restaurant|kitchen|brasserie|tavern|bistro|cafe|café)\b/i;
+const FOOD_COUNTER_BAR = /\b(juice|sushi|salad|coffee|snack|oyster|raw|taco|noodle|cereal|pasta)\s+bar\b/i;
 
 /** Cocktail / sports / name-starts-with-Bar venues — not family dinner. */
 export function isBarVenue(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string; amenity?: string } | string): boolean {
@@ -89,6 +90,14 @@ export function isBarVenue(e: { name?: string; tag?: string; kind?: string; type
   if (/\bbar\b/i.test(rest) && !NOT_BAR_RESTAURANT.test(name)) return true;
   if (BAR_NAME.test(name) && !NOT_BAR_RESTAURANT.test(name)) return true;
   return false;
+}
+
+/** A venue name containing the word "Bar" (Tiki's Grill & Bar), not Barbecue or Barcelona. */
+export function isBarWordName(name?: string): boolean {
+  const n = name || "";
+  if (!/\bbar\b/i.test(n)) return false;
+  if (FOOD_COUNTER_BAR.test(n)) return false;
+  return true;
 }
 
 /** Bakeries and sweet shops are breakfast or a treat, not dinner. */
@@ -134,7 +143,7 @@ export function filterDinnerList<T extends { name?: string; tag?: string; kind?:
   opts: { kids?: boolean; infant?: boolean; senior?: boolean; abroad?: boolean } = {},
 ): T[] {
   if (!list?.length) return [];
-  const dropJunk = list.filter(e => !isJunkEat(e) && !isBakeryOrTreat(e));
+  const dropJunk = list.filter(e => !isJunkEat(e) && !isBakeryOrTreat(e) && !(opts.kids && isBarWordName(typeof e === "string" ? e : e.name)));
   const sitDown = preferSitDownDinner(opts);
   if (!sitDown) return dropJunk;
   const tables = dropJunk.filter(e => !isStreetFoodStall(e));

@@ -150,7 +150,7 @@ app.post("/api/generate", async (req, res) => {
     const nearCafes = (places.eats.cafes || []).filter((e: any) => isNearBase(e, { smallChild: youngDrive }) && !isOffParkBase(e?.name, place));
     if (nearCafes.length) places.eats.cafes = nearCafes;
     const ps = presetsOf(inp).filter(p => inp.walkingTolerance !== "low" || !["hiking", "ski", "city"].includes(p));
-    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name, places.eats); walkingNotes(it, inp);
+    const it = itinerary(inp, weather, places.highlights, places.eats.restaurants, places.indoorExtra, { domestic, travelMode, driveMin: facts?.driveMin, overnightStop: facts?.overnightStop, countryCode: place.countryCode, flightHours: facts?.flightHours, tzDiffHours: facts?.tzDiffHours, destName: place.name, elevationM: weather.elevationM, cafes: places.eats.cafes }); runActivitySchedule(it, inp, weather, preferredHighlights(places.highlights, inp), ps, place.name, places.eats); walkingNotes(it, inp);
     capItineraryNotes(it, 3);
     const pk = dropUnusedWaterParkSwimwear(packing(inp, weather, place, nights, domestic, home || facts?.home), it);
     const tl = mergeActivityTimeline(timeline(inp.start, !domestic, todayIso, travelMode), { input: inp }, todayIso);

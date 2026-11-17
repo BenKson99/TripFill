@@ -32,6 +32,20 @@ export function preferFamilyEats<T extends { name?: string; tag?: string; kind?:
 }
 
 /** Family itinerary dinners: drop fine dining when any casual option exists; otherwise use a generic line. */
+/** Brand key for dinner uniqueness: OSM/Wikidata brand, or the possessive / stem before a location suffix. */
+export function eatBrandKey(e: { name?: string; brand?: string } | string): string {
+  const name = typeof e === "string" ? e : (e.name || "");
+  const brand = typeof e === "string" ? "" : (e.brand || "");
+  const norm = (s: string) => s.toLowerCase().replace(/['’]/g, "'").replace(/[^a-z0-9'&+]+/g, " ").trim();
+  if (brand) return norm(brand);
+  const poss = name.match(/^(.+?['’]s)/i);
+  if (poss) return norm(poss[1]);
+  const stem = name.split(/\s+[-–—]\s+|\s+\(/)[0] || name;
+  const tokens = stem.split(/\s+/).filter(Boolean);
+  if (tokens.length >= 2 && /^(at|in|on)$/i.test(tokens[1])) return norm(tokens[0]);
+  return norm(tokens[0] || name);
+}
+
 export function familyDinnerList<T extends { name?: string; tag?: string; kind?: string; description?: string }>(list: T[] | undefined, kids: boolean): T[] {
   if (!list?.length) return [];
   if (!kids) return list;
@@ -40,4 +54,4 @@ export function familyDinnerList<T extends { name?: string; tag?: string; kind?:
   return casual.length ? casual : [];
 }
 
-export const CASUAL_DINNER_FALLBACK = "Casual family dinner near your stay (pizza, a pub or a cafe)";
+export const CASUAL_DINNER_FALLBACK = "Casual family dinner near your stay (pizza, a family-friendly pub or a cafe)";

@@ -8,7 +8,7 @@ import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
-import { familyDinnerList, CASUAL_DINNER_FALLBACK } from "../shared/familyEats.js";
+import { familyDinnerList, CASUAL_DINNER_FALLBACK, eatBrandKey } from "../shared/familyEats.js";
 import { filterDinnerList, filterHighlightList, preferFamilySights, isUnsolicitedReligiousAttraction } from "../shared/junkVenues.js";
 import { hasInfantTraveler, hasSeniorTraveler, preferredFamilyBeaches } from "../shared/travelAdvice.js";
 import { isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups } from "../shared/interestVenues.js";
@@ -41,7 +41,7 @@ export const driveLabel = (h: { driveMin?: number; driveSrc?: string; distanceKm
   const how = h.driveSrc === "osrm" ? "traffic not included" : "rough estimate, traffic not included";
   return `~${short} drive, ${how}`;
 };
-export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string; flightHours?: number | null; tzDiffHours?: number | null; destName?: string; elevationM?: number };
+export type ItineraryOpts = { domestic?: boolean; travelMode?: "flying" | "driving"; driveMin?: number; overnightStop?: string | null; countryCode?: string; flightHours?: number | null; tzDiffHours?: number | null; destName?: string; elevationM?: number; cafes?: Eat[] };
 const tidyPlaceName = (name: string) => (name || "").split("|")[0].trim();
 export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], food: Eat[], extraIndoor: Highlight[] = [], opts: ItineraryOpts = {}): ItinDay[] {
   const tidy = (h: Highlight) => h.name && h.name.includes("|") ? { ...h, name: tidyPlaceName(h.name) } : h;
@@ -76,10 +76,22 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   food = casualDinner || dinnerOpts.senior || abroad
     ? filterDinnerList(familyDinnerList(nearFood.length ? nearFood : food, casualDinner), dinnerOpts)
     : filterDinnerList(nearFood.length ? nearFood : food, dinnerOpts);
+  if ((casualDinner || kids) && opts.cafes?.length) {
+    const extra = filterDinnerList(opts.cafes, dinnerOpts).filter(c => c.name && !food.some(f => eatBrandKey(f) === eatBrandKey(c)));
+    food = food.concat(extra);
+  }
   const dinnerUsed = new Set<string>();
   const dinnerPick = () => {
-    const next = food.find(e => e.name && !dinnerUsed.has(e.name.toLowerCase()));
-    if (next?.name) { dinnerUsed.add(next.name.toLowerCase()); return next; }
+    const next = food.find(e => {
+      if (!e.name) return false;
+      const key = eatBrandKey(e);
+      return !dinnerUsed.has(e.name.toLowerCase()) && !dinnerUsed.has(key);
+    });
+    if (next?.name) {
+      dinnerUsed.add(next.name.toLowerCase());
+      dinnerUsed.add(eatBrandKey(next));
+      return next;
+    }
     return undefined;
   };
   const dinnerLine = (prefix: string, fallback: string) => {

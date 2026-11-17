@@ -270,6 +270,41 @@ export const OVERNIGHT_FLY_DAY2 = "Get outside in daylight, early bedtime";
 
 
 export const KIDS_POOL_REST = "🏊 Hotel pool or a quiet rest at the hotel";
+export const KIDS_CITY_REST = "Quiet rest at the hotel or a nearby park/playground";
+
+const WARM_RESORT_DEST = /orlando|canc[uú]n|riviera maya|playa del carmen|\btulum\b|honolulu|waikiki|oahu|oʻahu|maui|kauai|kauaʻi|hawaii|hawai[iʻ]i|miami|fort lauderdale|tampa|clearwater|key west|florida|caribbean|punta cana|cabo(?:\s+san\s+lucas)?|puerto vallarta|jamaica|bahamas|nassau|aruba|phuket|bali|ko olina|san juan|puerto rico|costa rica|guam/i;
+
+/** Warm beach or resort destinations where a hotel pool is a natural afternoon rest. */
+export function isWarmResortDestination(dest?: string): boolean {
+  return WARM_RESORT_DEST.test(dest || "");
+}
+
+/** Pool rest in warm/resort places; a park or hotel sit-down in cool or city destinations. Callers that omit a destination keep the historic pool rest. */
+export function kidsRestAfternoon(dest?: string): string {
+  if (!(dest || "").trim()) return KIDS_POOL_REST;
+  return isWarmResortDestination(dest) ? KIDS_POOL_REST : KIDS_CITY_REST;
+}
+
+/** A full or long hike morning — not a short crater walk, beach, or surf lesson that merely mentions "hike". */
+export function isLongHikeMorning(text?: string): boolean {
+  const t = text || "";
+  if (!t) return false;
+  if (/surf lesson|luau|beach|museum|memorial|snorkel/i.test(t) && !/day hike|long hike|hike continues/i.test(t)) return false;
+  if (/short rim|easy walk|short hike/i.test(t) && !/day hike|long hike/i.test(t)) return false;
+  return /🥾\s*Day hike|Day hike \(start early|Hike continues|full-?day hike|long hike|\btrekking\b|\bbackpacking\b/i.test(t);
+}
+
+/** Drop "Hike continues" afternoons when the morning is not actually a long hike. */
+export function stripOrphanHikeContinues<T extends { morning?: string; afternoon?: string }>(days: T[], dest?: string): T[] {
+  const cont = /^(?:🥾\s*)?Hike continues — back by late afternoon(?:\s*;\s*then\s+)?/i;
+  for (const d of days) {
+    if (!/Hike continues/i.test(d.afternoon || "")) continue;
+    if (isLongHikeMorning(d.morning)) continue;
+    const rest = (d.afternoon || "").replace(cont, "").replace(/^;\s*then\s+/i, "").trim();
+    d.afternoon = rest || kidsRestAfternoon(dest);
+  }
+  return days;
+}
 
 function stripAlsoNearbyMajor(text: string): string {
   return (text || "").replace(/\s*Also nearby: [\s\S]*$/i, "").trim();
@@ -309,6 +344,7 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
   if (!tripHasKids(input) || !days?.length) return days;
   const young = hasChildUnder(8, input);
   const maxAddOns = young ? 1 : 2;
+  const rest = kidsRestAfternoon(input?.destination || input?.destName || "");
   const leftover: string[] = [];
   const used = new Set<string>();
   const remember = (text?: string) => {
@@ -326,18 +362,20 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
     if (heavyMorning) {
       const filler = (p: string) => /Explore a market|Long lunch|Free morning|Easy walk around|local street/i.test(p);
       if (isMajorAttraction(d.morning)) {
-        leftover.push(...parts.filter(p => !isRestSlot(p) && !filler(p)));
-        d.afternoon = KIDS_POOL_REST;
+        const lights = parts.filter(p => isLightActivity(p) && !isBigSight(p) && !filler(p));
+        const keep = lights.slice(0, 1);
+        leftover.push(...parts.filter(p => !isRestSlot(p) && !keep.includes(p) && !filler(p)));
+        d.afternoon = joinAddOns([rest, ...keep]);
       } else {
         const lights = parts.filter(p => isLightActivity(p) && !isBigSight(p) && !filler(p));
         const keep = lights.slice(0, 1);
         leftover.push(...lights.slice(1), ...parts.filter(p => !keep.includes(p) && !isRestSlot(p) && !isLightActivity(p) && !filler(p)));
-        d.afternoon = keep[0] || KIDS_POOL_REST;
+        d.afternoon = keep[0] || rest;
       }
     } else if (young && isBigSight(d.morning) && (isBigSight(d.afternoon) || parts.some(p => isBigSight(p)))) {
       leftover.push(...parts.filter(p => isBigSight(p) || isFullOrHalfDayAttraction(p)));
       const light = parts.find(p => isLightActivity(p) && !isBigSight(p)) || outdoorLightFrom(highlights, used);
-      d.afternoon = light || KIDS_POOL_REST;
+      d.afternoon = light || rest;
     } else if (parts.length > maxAddOns) {
       d.afternoon = joinAddOns(parts.slice(0, maxAddOns));
       leftover.push(...parts.slice(maxAddOns));
@@ -351,15 +389,18 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
   for (const item of uniqueLeft) {
     const host = days.find(d => {
       if (isTravelOrLeaveDay(d)) return false;
-      if (isFullOrHalfDayAttraction(d.morning)) return false;
       const parts = splitAddOns(d.afternoon);
       const extras = Math.max(0, parts.length - (d.afternoon ? 1 : 0));
       if (extras >= maxAddOns) return false;
+      if (isFullOrHalfDayAttraction(d.morning)) {
+        return isLightActivity(item) && (isRestSlot(d.afternoon) || !d.afternoon);
+      }
       if (isBigSight(d.afternoon) && young) return false;
       return isRestSlot(d.afternoon) || isLightActivity(d.afternoon) || !d.afternoon || /Explore a market|Long lunch|Free morning|Easy walk/i.test(d.afternoon);
     });
     if (!host) break;
-    if (!host.afternoon || isRestSlot(host.afternoon) || /Explore a market|Long lunch|Free morning|Easy walk/i.test(host.afternoon)) host.afternoon = item;
+    if (!host.afternoon || /Explore a market|Long lunch|Free morning|Easy walk/i.test(host.afternoon || "")) host.afternoon = item;
+    else if (isRestSlot(host.afternoon)) host.afternoon = joinAddOns([host.afternoon, item]);
     else host.afternoon = joinAddOns([...splitAddOns(host.afternoon), item].slice(0, maxAddOns));
     used.add(slotText(item).toLowerCase());
   }
@@ -384,7 +425,7 @@ export function applyKidPaceNotes<T extends { morning: string; afternoon: string
   for (const d of days) {
     if (isTravelOrLeaveDay(d)) continue;
     if (young && isBigSight(d.morning) && isBigSight(d.afternoon) && !isLightActivity(d.afternoon)) {
-      d.afternoon = outdoorLightFrom(highlights, used) || KIDS_POOL_REST;
+      d.afternoon = outdoorLightFrom(highlights, used) || kidsRestAfternoon(input?.destination || input?.destName || "");
       used.add(slotText(d.afternoon).toLowerCase());
     }
     d.notes = replaceKidNote(d.notes, kidPaceNote(d));
@@ -406,7 +447,7 @@ export function applyHolidayNotes<T extends { date: string; notes?: string }>(da
 const MAIN_THEME_PARK = /magic kingdom|\bepcot\b|hollywood studios|animal kingdom|disneyland(?:\s+park)?|california adventure/i;
 const WATER_PARK_DAY = /typhoon lagoon|blizzard beach|discovery cove|aquatica|volcano bay|wet\s*['’]?n['’]?\s*wild/i;
 
-export function fillPreferredParks<T extends { morning: string; afternoon: string; label?: string }>(days: T[], highlights: { name: string }[] = [], interests = ""): T[] {
+export function fillPreferredParks<T extends { morning: string; afternoon: string; label?: string }>(days: T[], highlights: { name: string }[] = [], interests = "", dest = ""): T[] {
   const brands = interestBrands(interests);
   if (!brands.length || !days?.length) return days;
   const mentioned = (d: T) => `${d.morning || ""} ${d.afternoon || ""}`;
@@ -423,22 +464,46 @@ export function fillPreferredParks<T extends { morning: string; afternoon: strin
     used.add(next.name);
     const prefix = /^[^A-Za-z0-9"]+/.exec(d.morning || "");
     d.morning = prefix ? `${prefix[0].trimEnd()} ${next.name}` : next.name;
-    if (isMajorAttraction(next.name) || isMajorAttraction(d.morning)) d.afternoon = KIDS_POOL_REST;
+    if (isMajorAttraction(next.name) || isMajorAttraction(d.morning)) d.afternoon = kidsRestAfternoon(dest);
   }
   return days;
 }
 
 /** A major theme-park morning always pairs with a pool or rest afternoon. */
-export function ensureParkDayRest<T extends { morning: string; afternoon: string; label?: string }>(days: T[]): T[] {
+export function ensureParkDayRest<T extends { morning: string; afternoon: string; label?: string }>(days: T[], dest = ""): T[] {
+  const rest = kidsRestAfternoon(dest);
   for (const d of days) {
     if (isTravelOrLeaveDay(d)) continue;
-    if (isMajorAttraction(d.morning) && !isRestSlot(d.afternoon)) d.afternoon = KIDS_POOL_REST;
+    if (!isMajorAttraction(d.morning) && !isFullOrHalfDayAttraction(d.morning)) continue;
+    const lights = splitAddOns(d.afternoon).filter(p => isLightActivity(p) && !isRestSlot(p) && !isBigSight(p) && !/Explore a market|local street|Rest in the shade/i.test(p));
+    if (isRestSlot(d.afternoon) && lights.length) {
+      d.afternoon = joinAddOns([rest, ...lights.slice(0, 1)]);
+      continue;
+    }
+    if (isRestSlot(d.afternoon) && !lights.length) {
+      // Keep a city rest in cool destinations; in resort/unknown dests, use the standard pool line even if a shade rest was left behind.
+      if (isWarmResortDestination(dest) || !(dest || "").trim()) d.afternoon = rest;
+      continue;
+    }
+    d.afternoon = joinAddOns([rest, ...lights.slice(0, 1)]);
   }
   return days;
 }
 
 const SAFETY_NOTE = /lifeguard|beach flag|swim where|railings|hold little hands|altitude|drink extra water|^Hot!|height limits|waterproof|Wet departure|pack a rain layer|never approach or feed|check flags|stay behind/i;
 const OPTIONAL_NOTE = /^Optional(?: big day trip)?:/i;
+
+const dictionaryNotes = new Set<string>();
+/** Interest-dictionary notes register here so the 3-note cap keeps them above generic pacing lines. */
+export function registerDictionaryNotes(notes: string[]): void {
+  for (const n of notes) if (n) dictionaryNotes.add(n.trim());
+}
+export function isDictionaryInterestNote(text?: string): boolean {
+  const p = (text || "").trim();
+  if (!p) return false;
+  if (dictionaryNotes.has(p)) return true;
+  return /old volcano crater|Hawai[iʻ]i Volcanoes|short flight away/i.test(p);
+}
 
 /** At most 3 notes per day: safety first, then the optional trip, then one more. */
 export function capDayNotes(notes?: string, max = 3): string {
@@ -457,8 +522,9 @@ export function capDayNotes(notes?: string, max = 3): string {
   const rest = uniq.filter(p => !OPTIONAL_NOTE.test(p));
   const merged = optionals.length ? [optionals.find(p => /Optional big day trip:/.test(p)) || optionals[0]] : [];
   const safety = rest.filter(p => SAFETY_NOTE.test(p));
-  const other = rest.filter(p => !SAFETY_NOTE.test(p));
-  return [...safety, ...merged, ...other].filter(Boolean).slice(0, max).join(" · ");
+  const dict = rest.filter(p => !SAFETY_NOTE.test(p) && isDictionaryInterestNote(p));
+  const other = rest.filter(p => !SAFETY_NOTE.test(p) && !isDictionaryInterestNote(p));
+  return [...safety, ...dict, ...merged, ...other].filter(Boolean).slice(0, max).join(" · ");
 }
 
 export function capItineraryNotes<T extends { notes?: string }>(days: T[], max = 3): T[] {
