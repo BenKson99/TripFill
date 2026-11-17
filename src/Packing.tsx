@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
+import { setSimplePacking, useSimplePacking } from "./packingMode";
 import { createPortal } from "react-dom";
 import { TravelerFields, editTraveler, setAllTypes } from "./Travelers";
 import { TravelModeField } from "./TravelMode";
@@ -24,31 +25,33 @@ function LazySelect({ label, value, options, "aria-label": aria, onChange, disab
   return <label className="lazy-select">{label}<select autoFocus aria-label={aria} value={value} disabled={disabled} onChange={e => { onChange(e.target.value); setOpen(false); }} onBlur={() => setOpen(false)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></label>;
 }
 
-export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = null, openSettings, simple = false, onSimpleChange, onTravelMode, onActivities, onRefreshPlan }: { plan: any; readOnly: boolean; onTravelMode?: (m: TravelMode) => void; onActivities?: (ids: ActivityId[]) => void; onRefreshPlan?: () => void; simple?: boolean; onSimpleChange?: (on: boolean) => void; settingsSlot?: HTMLElement | null; openSettings?: () => void; onChange: (list: PackingList) => void; T: (s: string) => string }) {
+export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = null, openSettings, simple, onSimpleChange, onTravelMode, onActivities, onRefreshPlan }: { plan: any; readOnly: boolean; onTravelMode?: (m: TravelMode) => void; onActivities?: (ids: ActivityId[]) => void; onRefreshPlan?: () => void; simple?: boolean; onSimpleChange?: (on: boolean) => void; settingsSlot?: HTMLElement | null; openSettings?: () => void; onChange: (list: PackingList) => void; T: (s: string) => string }) {
   const p: PackingList = plan.packing;
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
   const travelMode: TravelMode = resolveTravelMode(plan.input, plan.trip?.distanceKm);
+  const storedSimple = useSimplePacking();
+  const isSimple = simple ?? storedSimple;
   const [message, setMessage] = useState("");
-  const [mountedSimple, setMountedSimple] = useState(simple);
-  const [mountedDetailed, setMountedDetailed] = useState(!simple);
+  const [mountedSimple, setMountedSimple] = useState(isSimple);
+  const [mountedDetailed, setMountedDetailed] = useState(!isSimple);
   // While the detailed list is on screen, pre-mount (and pre-layout) SimpleLists during idle
   // so the first toggle only flips visibility instead of grouping and creating hundreds of rows.
   useEffect(() => {
-    if (simple && !mountedSimple) {
+    if (isSimple && !mountedSimple) {
       const id = requestAnimationFrame(() => setMountedSimple(true));
       return () => cancelAnimationFrame(id);
     }
-    if (!simple && !mountedDetailed) {
+    if (!isSimple && !mountedDetailed) {
       const id = requestAnimationFrame(() => setMountedDetailed(true));
       return () => cancelAnimationFrame(id);
     }
-    if (!simple && !mountedSimple) {
+    if (!isSimple && !mountedSimple) {
       const ric = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: IdleRequestCallback) => window.setTimeout(cb, 50) as unknown as number;
       const cic = typeof cancelIdleCallback === "function" ? cancelIdleCallback : (id: number) => clearTimeout(id);
       const id = ric(() => setMountedSimple(true));
       return () => cic(id);
     }
-  }, [simple, mountedSimple, mountedDetailed]);
+  }, [isSimple, mountedSimple, mountedDetailed]);
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
   const TRef = useRef(T); TRef.current = T;
   const edit = useCallback((id: string, patch: Partial<PackingItem>) => { if (!readOnly) onChangeRef.current(updatePackingItem(p, id, patch)); }, [readOnly, p]);
@@ -56,12 +59,12 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const checkMany = useCallback((ids: string[], checked: boolean) => { if (!readOnly) onChangeRef.current(updatePackingItems(p, ids, { checked })); }, [readOnly, p]);
   const onCheckItem = useCallback((id: string, checked: boolean) => edit(id, { checked }), [edit]);
   const tFn = useCallback((s: string) => TRef.current(s), []);
-  const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={simple} data-testid="simple-toggle" className={simple ? "on" : "ghost"} onClick={() => onSimpleChange?.(!simple)}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{simple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
-  return <div className={`packing-workspace${simple ? " packing-simple" : ""}`} data-testid="packing-workspace">
+  const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={isSimple} data-testid="simple-toggle" className={isSimple ? "on" : "ghost"} onClick={() => { const next = !isSimple; if (simple === undefined) setSimplePacking(next); onSimpleChange?.(next); }}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{isSimple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
+  return <div className={`packing-workspace${isSimple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
-    {mountedSimple && <div hidden={simple ? false : undefined} className={simple ? undefined : "noprint packing-simple-preload"} aria-hidden={!simple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
-    {mountedDetailed && <div hidden={simple} className={simple ? "noprint" : undefined} data-testid="packing-detailed-pane">
+    {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
+    {mountedDetailed && <div hidden={isSimple} className={isSimple ? "noprint" : undefined} data-testid="packing-detailed-pane">
       <DetailedPane plan={plan} p={p} readOnly={readOnly} travelMode={travelMode} members={members} T={tFn} openSettings={openSettings} message={message} setMessage={setMessage} change={change} edit={edit} />
     </div>}
   </div>;
@@ -238,8 +241,4 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
   </li>;
 });
 
-/** Browser-local view preference only ("simple" | "detailed"); never part of the trip or shared links. */
-export const PACK_MODE_KEY = "tripfill:packingMode";
-type Store = Pick<Storage, "getItem" | "setItem"> | undefined;
-export function readPackMode(store: Store) { try { return store?.getItem(PACK_MODE_KEY) === "simple"; } catch { return false; } }
-export function writePackMode(store: Store, simple: boolean) { try { store?.setItem(PACK_MODE_KEY, simple ? "simple" : "detailed"); } catch { /* storage unavailable */ } }
+export { PACK_MODE_KEY, readPackMode, writePackMode } from "./packingMode";

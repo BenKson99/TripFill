@@ -4,6 +4,7 @@ import { isRainy } from "./weather.js";
 import { driveLabel } from "./plan.js";
 import { isBroadRegion } from "../shared/region.js";
 import { cleanVenueName, isAdminOrReligiousOrg, isRestDayFriendly, isSeriousPeak, isSkiSector } from "../shared/activities.js";
+import { placesUsedInDays } from "./itineraryPlaces.js";
 
 export const PRESETS = ["beach", "hiking", "ski", "city", "business", "kids", "roadtrip"] as const;
 export type Preset = typeof PRESETS[number];
@@ -54,7 +55,7 @@ export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult,
     const s2 = pool.find(h => !skip(h) && !h.ski && !isSkiSector(h));
     if (s2) { spareUsed.add(s2.name); return labelRest(s2 as any); }
   };
-  const spareUsed = new Set<string>();
+  const spareUsed = placesUsedInDays(days, hl.map(h => ({ name: cleanVenueName(h.name) || h.name })));
   const skiMorning = (name: string | undefined, j: number, lone: boolean) => {
     if (!name) return "⛷ On the slopes (first lifts are quietest)";
     const drive = "";

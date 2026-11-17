@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.14.4 — Faster first Simple toggle and no repeated sights
+
+- The first Simple mode switch no longer re-renders the whole App (itinerary, map, budget, and the other tab panes). Simple mode is a local store, so only the packing lists, the Before you leave disclosure, and the pre-trip timeline update. The idle preload of those lists is kept.
+- A named sight is scheduled on at most one day, including hike follow-ups (“then Lion’s Head”), rest-day options and rain backups. Generic wording, the user’s base area, and ski-sector rotation can still repeat when nothing else is available.
+
 ## 1.14.3 — Named nightlife and a snappier first Simple toggle
 
 - Nightlife slots name a real bar, pub, nightclub or cocktail bar when one is found (Overpass `amenity=bar|pub|nightclub`, with a Wikidata fallback). Restaurants and “bar & grill” places are skipped, and the same venue is not reused that day. Generic “Nightlife & bars” is only used when nothing is found.

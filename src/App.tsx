@@ -11,7 +11,7 @@ import { applyTravelMode } from "../shared/applyTravel";
 import { resolveActivities, syncActivityInput, type ActivityId } from "../shared/activities";
 import { applyActivities } from "../shared/applyActivities";
 import { ActivityPicker, formatActivities } from "./Activities";
-import { readPackMode, writePackMode } from "./Packing";
+import { PackTab } from "./packingMode";
 import { LayoutBar, SectionList, useLayout } from "./Sections";
 import { InstallButton, useOnline } from "./Pwa";
 import { downloadIcs } from "./ics";
@@ -96,8 +96,6 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(saved && "error" in saved ? saved.error || "" : "");
 
-  const [simplePacking, setSimplePacking] = useState(() => readPackMode(globalThis.localStorage));
-  const changeSimple = (on: boolean) => { setSimplePacking(on); writePackMode(globalThis.localStorage, on); };
   const [settingsOpen, setSettingsOpen] = useState(false), [settingsSlot, setSettingsSlot] = useState<HTMLDivElement | null>(null);
   const [readOnly, setReadOnly] = useState<string | null>(null); // "link" | "server" when viewing a shared plan
   // Settings → Packing edits to the active (own) plan's travelers flow back into the questionnaire; extra rows are kept.
@@ -206,7 +204,7 @@ export default function App() {
             return <><p className="warn small">These are source listings, not ratings or guaranteed recommendations. Local-cuisine ordering uses incomplete metadata; it is not a verified authenticity ranking. Confirm menus, availability, hours and allergy/cross-contact handling directly.</p>{(E.restaurants.length < 5 || E.cafes.length < 3) && <p className="warn" data-testid="limited-eats">Limited source coverage: {E.restaurants.length} restaurant(s), {E.cafes.length} coffee shop(s). No results added to pad the lists. {safeUrl(plan.guideUrl) ? <a href={safeUrl(plan.guideUrl)} target="_blank" rel="noopener noreferrer">Check the city guide</a> : "Check the destination tourist information office"} and venue websites.</p>}<h3>🍽 Restaurants</h3>{list("restaurants")}<h3>☕ Coffee shops</h3>{list("cafes")}</>; })()}
           <p className="muted small">Sources: {plan.sources.join(" · ")}{plan.aiPolished ? " · descriptions lightly reworded by AI" : ""}</p>
     </>,
-    packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} settingsSlot={activeTab === "pack" ? settingsSlot : null} openSettings={() => setSettingsOpen(true)} simple={simplePacking} onSimpleChange={changeSimple} onTravelMode={changeTravelMode} onActivities={ids => { setForm((f: Any) => syncActivityInput({ ...f }, ids)); setPlan((p: Any) => { const c = structuredClone(p); c.input = syncActivityInput(c.input || {}, ids); return c; }); }} onRefreshPlan={() => setPlan((p: Any) => applyActivities(p, resolveActivities(p.input)))} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
+    packing: <PackingWorkspace key={`${plan.generatedAt}:${plan.place.name}:${plan.input.start}:${readOnly || "own"}`} plan={plan} readOnly={!!readOnly} settingsSlot={activeTab === "pack" ? settingsSlot : null} openSettings={() => setSettingsOpen(true)} onTravelMode={changeTravelMode} onActivities={ids => { setForm((f: Any) => syncActivityInput({ ...f }, ids)); setPlan((p: Any) => { const c = structuredClone(p); c.input = syncActivityInput(c.input || {}, ids); return c; }); }} onRefreshPlan={() => setPlan((p: Any) => applyActivities(p, resolveActivities(p.input)))} onChange={packing => upd(p => { p.packing = packing; })} T={T} />,
     itinerary: <>
           {plan.itinerary.map((d: Any, i: number) => <div key={d.date} className="day"><h3>{d.label}{plan.legs?.length > 1 && d.leg && <span className="legtag"> 📍 {d.leg}</span>} <small className="muted">{T(d.weather)}{!/(forecast|seasonal estimate)/i.test(d.weather) && ` · ${weatherLabel(plan.weather.days.find((w: Any) => w.date === d.date), plan.weather.source)}`}</small></h3>
             {(["morning", "afternoon", "evening"] as const).map(k => <div key={k} className="slot"><span>{k}</span><Editable value={d[k]} onChange={v => upd(p => { p.itinerary[i][k] = v; })} /></div>)}
@@ -234,9 +232,7 @@ export default function App() {
   } : {};
 
   const roBodies = readOnly ? Object.fromEntries(Object.entries(bodies).map(([k, v]) => [k, k === "packing" ? v : <fieldset key={k} className="ro" disabled>{v}</fieldset>])) : bodies;
-  // Simple packing mode: hide the pre-trip timeline and tuck Before you leave into a discreet disclosure (view only).
-  const viewBodies: Record<string, any> = simplePacking ? { ...roBodies, timeline: null, prep: roBodies.prep && <details className="simple-prep" data-testid="simple-prep"><summary>Before you leave checklist</summary>{roBodies.prep}</details> } : roBodies;
-  const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => viewBodies[k]).map(k => [k, viewBodies[k]]));
+  const tabBodies = (t: TabId) => Object.fromEntries((TABS.find(x => x.id === t)!.secs as readonly string[]).filter(k => roBodies[k]).map(k => [k, roBodies[k]]));
   return (
     <div className={"wrap" + (plan ? " compact" : "")}>
       <div className="topbar noprint"><div className="brand"><span className="logo"><Plane size={18} /></span>TripFill</div><SettingsMenu open={settingsOpen} setOpen={setSettingsOpen} unit={unit} setUnit={setUnit} slotRef={setSettingsSlot} /></div>
@@ -308,7 +304,7 @@ export default function App() {
       </div>
       {plan && <>
         <div role="tabpanel" id="panel-pack" aria-labelledby="tab-pack" hidden={activeTab !== "pack"}>
-          <SectionList layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} bodies={tabBodies("pack")} />
+          <PackTab layout={layout} setLayout={setLayout} titles={TITLES} summaries={summaries} packing={roBodies.packing} prep={roBodies.prep} timeline={roBodies.timeline} />
         </div>
         <div role="tabpanel" id="panel-money" aria-labelledby="tab-money" hidden={activeTab !== "money"}>
           <section className="card">

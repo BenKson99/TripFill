@@ -111,6 +111,12 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
 
+## Faster first Simple toggle and unique sights (1.14.4)
+
+Confirm `/healthz` says **1.14.4**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. Lion’s Head (or any other named sight) must not appear on two different days, including a “Hike continues … then …” follow-up or a rain backup. Nightlife should still name a real bar. A Zermatt ski plan should still rotate sectors, keep unique rest-day options, and stay free of dioceses.
+
+On Packing & Prep, the first Simple mode toggle should feel as snappy as later ones (a local store, not a full App re-render). Timeline hides and Before you leave becomes a disclosure, as before.
+
 ## Named nightlife and first Simple toggle (1.14.3)
 
 Confirm `/healthz` says **1.14.3**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. The nightlife evening should name a real bar or pub (for example Foresters Arms), not “Nightlife & bars”, and should not reuse that day’s restaurant. A ski town such as Zermatt should still generate cleanly if Nightlife is off, or use a real bar / the generic line if no venue is found.

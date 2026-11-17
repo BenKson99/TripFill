@@ -8,6 +8,7 @@ import {
   weatherAllows, type ActivityId, type FitCtx,
 } from "../shared/activities.js";
 import { driveLabel } from "./plan.js";
+import { dedupeItineraryPlaces } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
@@ -111,15 +112,17 @@ export function stripUnsuitableActivities(days: ItinDay[], unfit: ActivityId[]) 
 
 function dayMentionsPlace(d: ItinDay | undefined, name: string) {
   if (!d || !name) return false;
-  const blob = `${d.morning} ${d.afternoon} ${d.evening}`.toLowerCase();
+  const blob = `${d.morning} ${d.afternoon} ${d.evening} ${d.rainyBackup || ""}`.toLowerCase();
   return blob.includes(name.toLowerCase());
 }
 
-function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay) {
+function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: TripInput, placeName?: string, day?: ItinDay, days: ItinDay[] = []) {
   const list = (id === "beach" || id === "surf") ? hlFor(id, hl).filter(isRealBeach) : hlFor(id, hl);
+  const onOtherDay = (name: string) => days.some(d => d !== day && dayMentionsPlace(d, name));
   const ok = (x: Highlight) => isRealisticDayTrip(x, inp, { name: placeName }) && !dayMentionsPlace(day, x.name);
-  const h = list.find(x => !used.has(x.name) && ok(x))
-    || list.find(x => ok(x));
+  const h = list.find(x => !used.has(x.name) && !onOtherDay(x.name) && ok(x))
+    || list.find(x => !onOtherDay(x.name) && ok(x))
+    || list.find(x => ok(x)); // last resort: nothing else is available
   if (h) used.add(h.name);
   return h;
 }
@@ -149,7 +152,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
       bump(d);
       if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
         const id: ActivityId = /Surf time/.test(d.afternoon) && fit.includes("surf") ? "surf" : "beach";
-        const h = pickPlace(id, hl, usedHl, inp, placeName, d);
+        const h = pickPlace(id, hl, usedHl, inp, placeName, d, days);
         if (h) d.afternoon = activityLabel(id, h);
       }
     } else if (/Beach time at a nearby beach|Surf time at a nearby beach/.test(d.afternoon)) {
@@ -196,7 +199,7 @@ export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherRe
   }
 
   for (const a of assignments) {
-    const h = pickPlace(a.id, hl, usedHl, inp, placeName, a.day);
+    const h = pickPlace(a.id, hl, usedHl, inp, placeName, a.day, days);
     const text = activityLabel(a.id, h);
     if (a.slot === "evening") a.day.evening = `${text}; ${a.day.evening}`;
     else if (a.slot === "morning") a.day.morning = text;
@@ -225,4 +228,5 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
   presetItinerary(days, psFit, w, usable);
   scheduleActivities(days, inp, w, usable, placeName);
   stripUnsuitableActivities(days, resolveActivities(inp).filter(id => !activityFit(id, ctx).ok));
+  dedupeItineraryPlaces(days, usable, placeName);
 }

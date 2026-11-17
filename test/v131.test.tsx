@@ -117,7 +117,7 @@ test("v1.13.1: Simple mode for 16 travelers renders quickly and does not build t
   const detailed = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} onChange={() => {}} T={s => s} />);
   assert.ok(detailed.includes('data-testid="packing-detailed-pane"') && !detailed.includes('data-testid="packing-simple-pane"'));
   const src = readFileSync(new URL("../src/Packing.tsx", import.meta.url), "utf8");
-  assert.ok(src.includes("mountedSimple") && src.includes("mountedDetailed") && src.includes("hidden={!simple}"), "toggle hides the other pane instead of unmounting it");
+  assert.ok(src.includes("mountedSimple") && src.includes("mountedDetailed") && (src.includes("hidden={!simple}") || src.includes("hidden={isSimple}")), "toggle hides the other pane instead of unmounting it");
   const { adults } = simpleLists(p.packing);
   const grouped = groupSimpleRows(adults);
   assert.ok(grouped.groups.some(g => g.rows.length === 16));
