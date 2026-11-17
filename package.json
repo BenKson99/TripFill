@@ -1,6 +1,6 @@
 {
   "name": "tripfill",
-  "version": "1.19.1",
+  "version": "1.19.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -8,8 +8,9 @@
   },
   "scripts": {
     "dev": "concurrently -k -n api,web \"tsx watch server/index.ts\" \"vite\"",
-    "build": "tsc --noEmit && vite build",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "build": "tsc --noEmit && vite build && node scripts/build-server.mjs",
+    "build:server": "node scripts/build-server.mjs",
+    "start": "NODE_ENV=production node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test test/*.test.ts test/*.test.tsx"
   },

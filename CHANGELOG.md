@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.19.2 — Precompiled production start for Render's 512 MB cap
+
+- Production `npm start` runs a precompiled `dist/server.js` (esbuild at `npm run build`) instead of JIT-compiling TypeScript with `tsx` on boot. A Render-style production install of both 1.19.0 and 1.19.1 listened in about 0.5 s at ~243 MB RSS under `tsx`; two overlapping instances approach the 512 MB free-tier cap and can be killed before “TripFill listening.” The precompiled server listens in about 0.1 s at ~69 MB.
+- A startup test builds the server and asserts `npm start` prints “TripFill listening” within 5 seconds on an empty cache.
+- Budget is unchanged. Cache keys stay `places|v22` and `eats|v10`.
+
+
 ## 1.19.1 — Volcano notes, dinner brands, Pearl Harbor, and London leftovers
 
 - Honolulu: when Diamond Head is already scheduled as a hike, the volcano dictionary note still appears: “Diamond Head is an old volcano crater. The active volcano park (Hawaiʻi Volcanoes) is on the Big Island, a short flight away.” Any matched interest with a dictionary note now shows that note (it is kept through the 3-note cap).

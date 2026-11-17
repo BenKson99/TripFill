@@ -112,6 +112,10 @@ Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are re
 
 
 
+## Production start (1.19.2)
+
+Confirm `/healthz` says **1.19.2**. `npm run build` now also writes `dist/server.js`, and `npm start` is `node dist/server.js` (not `tsx`). The server should print “TripFill listening” within a few seconds, well under Render's 512 MB cap. Budget is unchanged.
+
 ## Honolulu and London leftovers (1.19.1)
 
 Confirm `/healthz` says **1.19.1**. On a **cold cache**, generate Seattle → Honolulu, Flying, 1–8 Jul 2027, Mom, Dad, Girl 10, Boy 8, Grandparent, interests “volcano, turtles, surfing lessons, luau, beach”. Diamond Head should carry the note that it is an old volcano crater and Hawaiʻi Volcanoes National Park is on the Big Island (not a silent drop, and not only a “We couldn’t fit” line). Dinners should not use Tiki’s Grill & Bar, and at most one Zippy’s branch. “Hike continues” must not appear on a surf-lesson or beach morning. USS Arizona Memorial should mention the boat ride and timed tickets, not indoor exhibits; Pearl Harbor stops should sit on one day (1–2 visits) with the rest optional. Then Chicago → London, Flying, 10–17 Jul 2027, boy 10 and twin 7-year-olds, interests Harry Potter / castles / double-decker / museums. A red double-decker should be a short add-on past Big Ben (no unused route numbers), dinners should name a real family place when one exists and say “family-friendly pub,” and afternoons should be a quiet hotel or park rest — not a hotel pool. Budget is unchanged.
