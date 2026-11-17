@@ -2,12 +2,12 @@
 // Primary: OpenStreetMap via Overpass (free, no key). Curated boost/fallback: Wikivoyage "Eat"/"Drink" listings.
 import { UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
-import { isJunkEat, isNamelessFoodStall } from "../shared/junkVenues.js";
+import { isJunkEat, isNamelessFoodStall, isDefunctOrHistoricVenue } from "../shared/junkVenues.js";
 
-export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string; sourceUrl?: string; retrievedAt?: string; cuisineEvidence?: string; dietary?: Record<string, string>; dietaryStatus?: string }
+export interface Eat { name: string; kind: "restaurant" | "cafe"; tag?: string; km?: number; area?: string; description?: string; source: string; url?: string; lat?: number; lon?: number; leg?: string; sourceUrl?: string; retrievedAt?: string; cuisineEvidence?: string; dietary?: Record<string, string>; dietaryStatus?: string; dissolved?: string; former?: boolean }
 export interface Eats { restaurants: Eat[]; cafes: Eat[] }
 
-export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v10|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+export const eatsKey = (p: { name: string; lat: number; lon: number }) => `eats|v11|${p.name.toLowerCase()}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
 
 const R = 6371, rad = (x: number) => x * Math.PI / 180;
 export const km = (a: { lat: number; lon: number }, b: { lat: number; lon: number }) => 2 * R * Math.asin(Math.sqrt(Math.sin(rad(b.lat - a.lat) / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(rad(b.lon - a.lon) / 2) ** 2));
@@ -85,7 +85,7 @@ export function wvListings(list: Record<string, string>[], p: Place, clean: (s: 
 
 /** Wikidata (free SPARQL): notable cafés/coffeehouses, bakeries and restaurants within 4 km, ranked by sitelinks. */
 async function wikidata(p: Place, radiusKm = 4): Promise<Eat[]> {
-  const q = `SELECT ?i ?l ?c ?sl ?k ?t WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "${radiusKm}"; wikibase:distance ?k. } ?i wdt:P31 ?t. VALUES ?t { wd:Q30022 wd:Q11707 wd:Q274393 wd:Q1415899 wd:Q5307737 }. ?i wikibase:sitelinks ?sl. ?i rdfs:label ?l. FILTER(lang(?l)="en" || lang(?l)="${(p.countryCode || "en").toLowerCase()}") } LIMIT 150`;
+  const q = `SELECT ?i ?l ?c ?sl ?k ?t ?dissolved ?desc WHERE { SERVICE wikibase:around { ?i wdt:P625 ?c. bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral; wikibase:radius "${radiusKm}"; wikibase:distance ?k. } ?i wdt:P31 ?t. VALUES ?t { wd:Q30022 wd:Q11707 wd:Q274393 wd:Q1415899 wd:Q5307737 }. ?i wikibase:sitelinks ?sl. ?i rdfs:label ?l. FILTER(lang(?l)="en" || lang(?l)="${(p.countryCode || "en").toLowerCase()}") OPTIONAL { ?i wdt:P576 ?dissolved. } OPTIONAL { ?i schema:description ?desc. FILTER(lang(?desc)="en") } FILTER NOT EXISTS { ?i wdt:P576 ?closed. } FILTER NOT EXISTS { ?i wdt:P3999 ?officialClose. } } LIMIT 150`;
   try {
     const r = await fetch("https://query.wikidata.org/sparql?query=" + encodeURIComponent(q), { headers: { "User-Agent": UA, Accept: "application/sparql-results+json" }, signal: AbortSignal.timeout(6000) });
     if (!r.ok) return [];
@@ -93,15 +93,18 @@ async function wikidata(p: Place, radiusKm = 4): Promise<Eat[]> {
     return d.results.bindings.filter((b: any) => !seen.has(b.i.value) && seen.add(b.i.value)).map((b: any) => {
       const t = b.t.value.split("/").pop(); const [lon, lat] = b.c.value.replace(/Point\(|\)/g, "").split(" ").map(Number); const k = Number(b.k.value); const sl = Number(b.sl.value);
       const name = b.l.value as string; if (CHAIN.test(name) || /club|discot|pavil|armaz|hotel|\b(store|supermarket|grocery|minimarket)\b/i.test(name)) return null;
+      const desc = String(b.desc?.value || "");
+      const dissolved = b.dissolved?.value as string | undefined;
+      if (dissolved || isDefunctOrHistoricVenue({ name, description: desc, dissolved })) return null;
       const cafe = t === "Q30022" || t === "Q274393" || t === "Q1415899" || /caf[eé](?![a-z])|coffee/i.test(name);
-      return { name, kind: cafe ? "cafe" : "restaurant", tag: t === "Q274393" ? "bakery" : cafe ? (sl >= 3 ? "historic café" : "café") : (guessTag(name) || "restaurant"), km: Math.round(k * 10) / 10, source: "Wikidata", sourceUrl: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, retrievedAt: new Date().toISOString(), cuisineEvidence: "inferred", url: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, lat, lon, _s: 3 + Math.log2(sl + 1) * 1.5 - k * 0.5 } as any;
+      return { name, kind: cafe ? "cafe" : "restaurant", tag: t === "Q274393" ? "bakery" : cafe ? "café" : (guessTag(name) || "restaurant"), description: desc || undefined, dissolved, km: Math.round(k * 10) / 10, source: "Wikidata", sourceUrl: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, retrievedAt: new Date().toISOString(), cuisineEvidence: "inferred", url: `https://www.wikidata.org/wiki/${b.i.value.split("/").pop()}`, lat, lon, _s: 3 + Math.log2(sl + 1) * 1.5 - k * 0.5 } as any;
     }).filter(Boolean);
   } catch { return []; }
 }
 
 /** Merge, de-dupe (same name, or same normalised name within 150 m), rank and cap. */
 export function rankEats(all: Eat[], caps = { restaurants: 8, cafes: 6 }, cc?: string, maxForeign = 2): Eats {
-  all = (all || []).filter(e => !isJunkEat(e) && !isNamelessFoodStall(e));
+  all = (all || []).filter(e => !isJunkEat(e) && !isNamelessFoodStall(e) && !isDefunctOrHistoricVenue(e));
   all = all.filter(e => !/\b(store|supermarket|grocery|minimarket|mercearia)\b/i.test(e.name) && !(e.kind === "cafe" && NOT_CAFE.test(`${e.name} ${e.tag || ""}`)));
   if (cc) all = all.map((e: any) => e.kind !== "restaurant" ? e : { ...e, _s: (e._s ?? 0) + ({ local: 2.5, neutral: 0, foreign: -2 } as const)[cuisineClass(e.tag, cc)] });
   const sorted = [...all].sort((a: any, b: any) => (b._s ?? 0) - (a._s ?? 0));

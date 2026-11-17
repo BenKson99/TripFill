@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.20.0 — Kid-friendly generate, packing, wording, and Honolulu leftovers
+
+- After Generate, the questionnaire collapses to a one-line “Your trip: Honolulu · Jul 1–8 · 5 people — Edit” bar, and the page scrolls to the plan summary. While the plan is building, timed steps read “Checking the weather”, “Finding fun places”, then “Packing your bags,” instead of a bare “Building your plan…”.
+- Simple mode shows My stuff with big checkboxes, grouped by category, essentials first, and a “Show everything (N)” link after about 25 must-pack items. “Whose bag?”, Shared, and “Show people” sit behind a More options link. The helper text now matches what is on screen.
+- Kid wording (via T(), so US/UK spelling stays right): “Weather guess from past years (real forecast shows ~2 weeks before)”, “How much walking?” with A little / Some / Lots, “Not the right place? Pick another”, and age “ (optional)” without the 65+ pacing aside. Other questionnaire and summary jargon is softened (people instead of traveler(s)).
+- When Pearl Harbor sites exist, one morning is “Pearl Harbor — USS Arizona Memorial boat ride (free timed tickets, book ahead)” with an optional “also: USS Missouri or Bowfin.” Sites are not scattered across days, even if only USS Missouri had been scheduled.
+- Coffee houses and coffee stores are not dinner when (and even if) restaurants exist. Defunct or historic-only venues (Wikidata dissolved, “was a coffee house”) are dropped. Cache key `eats|v11`.
+- Highlights drop industrial beaches such as Kalaeloa. Scheduled sights are tagged “Day N”; the rest sit under “More ideas (not in your days).” Cache key `places|v23`.
+- Beach and rest afternoons keep a single rest line, so the hotel-pool line is not paired with a second quiet-rest phrase.
+- Budget is unchanged.
+
+
 ## 1.19.2 — Precompiled production start for Render's 512 MB cap
 
 - Production `npm start` runs a precompiled `dist/server.js` (esbuild at `npm run build`) instead of JIT-compiling TypeScript with `tsx` on boot. A Render-style production install of both 1.19.0 and 1.19.1 listened in about 0.5 s at ~243 MB RSS under `tsx`; two overlapping instances approach the 512 MB free-tier cap and can be killed before “TripFill listening.” The precompiled server listens in about 0.1 s at ~69 MB.

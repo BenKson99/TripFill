@@ -705,3 +705,36 @@ export function dropUnusedWaterParkSwimwear<T extends { groups?: { items: { item
   if (!list?.groups || itineraryHasWaterPark(days || [])) return list;
   return { ...list, groups: list.groups.map(g => ({ ...g, items: g.items.filter(i => !/swimwear \(if a water park\)/i.test(i.item)) })).filter(g => g.items.length) };
 }
+
+export const SIMPLE_MUST_PACK_LIMIT = 25;
+
+export function itemCategory(list: PackingList, id: string): string {
+  return list.groups.find(g => g.items.some(i => i.id === id))?.group || "Other";
+}
+
+/** Simple-mode My stuff: essentials first, grouped by category. */
+export function simpleMustPackGroups(list: PackingList): { group: string; entries: SimpleEntry[]; rows: SimpleRow[] }[] {
+  const { adults, kids } = simpleLists(list);
+  const rows = [...adults, ...(kids || [])].filter(r => !r.item.skipped);
+  const ordered = [...rows.filter(r => r.item.essential), ...rows.filter(r => !r.item.essential)];
+  const catOrder = list.groups.map(g => g.group);
+  const byCat = new Map<string, SimpleRow[]>();
+  for (const r of ordered) {
+    const c = itemCategory(list, r.item.id);
+    const arr = byCat.get(c) || [];
+    arr.push(r);
+    byCat.set(c, arr);
+  }
+  const cats = [...byCat.keys()].sort((a, b) => {
+    const ae = (byCat.get(a) || []).some(r => r.item.essential) ? 0 : 1;
+    const be = (byCat.get(b) || []).some(r => r.item.essential) ? 0 : 1;
+    if (ae !== be) return ae - be;
+    const ia = catOrder.indexOf(a), ib = catOrder.indexOf(b);
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+  });
+  return cats.map(group => {
+    const grouped = groupSimpleRows(byCat.get(group) || []);
+    return { group, entries: grouped.entries, rows: byCat.get(group) || [] };
+  });
+}
+

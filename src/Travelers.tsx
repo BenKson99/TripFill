@@ -49,7 +49,7 @@ export function TravelerFields({ members, onEdit, onEditAll, disabled, idPrefix 
     <label>Traveler {i + 1} name<NameInput index={i} name={m.name} disabled={disabled} onCommit={name => onEdit(m.id, { name })} /></label>
     <label>Traveler type<select aria-label={`Traveler type for traveler ${i + 1}`} value={val} disabled={disabled} onChange={e => onEdit(m.id, { type: e.target.value })}>
       <option value="">Not set (general)</option>{PROFILES.map(k => <option key={k} value={k}>{PROFILE_LABELS[k]}</option>)}{val === "child" && <option value="child">Child (unspecified)</option>}</select></label>
-    <label>Age <small className="muted">(optional{val === "girl" || val === "boy" || val === "infant" || val === "child" ? "" : ", for 65+ pacing"})</small><input data-testid={`${idPrefix}-${m.id}-age`} aria-label={`Age for traveler ${i + 1}`} type="number" min={0} max={MAX_TRAVELER_AGE} inputMode="numeric" value={m.age ?? ""} disabled={disabled} onChange={e => { const raw = e.target.value; onEdit(m.id, { age: raw === "" ? null : Math.max(0, Math.min(MAX_TRAVELER_AGE, Math.round(Number(raw)))) }); }} /></label>
+    <label>Age <small className="muted">(optional)</small><input data-testid={`${idPrefix}-${m.id}-age`} aria-label={`Age for traveler ${i + 1}`} type="number" min={0} max={MAX_TRAVELER_AGE} inputMode="numeric" value={m.age ?? ""} disabled={disabled} onChange={e => { const raw = e.target.value; onEdit(m.id, { age: raw === "" ? null : Math.max(0, Math.min(MAX_TRAVELER_AGE, Math.round(Number(raw)))) }); }} /></label>
   </div>; })}</div>;
 }
 

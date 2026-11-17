@@ -76,10 +76,6 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   food = casualDinner || dinnerOpts.senior || abroad
     ? filterDinnerList(familyDinnerList(nearFood.length ? nearFood : food, casualDinner), dinnerOpts)
     : filterDinnerList(nearFood.length ? nearFood : food, dinnerOpts);
-  if ((casualDinner || kids) && opts.cafes?.length) {
-    const extra = filterDinnerList(opts.cafes, dinnerOpts).filter(c => c.name && !food.some(f => eatBrandKey(f) === eatBrandKey(c)));
-    food = food.concat(extra);
-  }
   const dinnerUsed = new Set<string>();
   const dinnerPick = () => {
     const next = food.find(e => {
@@ -141,7 +137,7 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   const row = (day: any) => { rememberPlaces(`${day.morning || ""} ${day.afternoon || ""} ${day.evening || ""}`); built.push(day); return day; };
   return days.map((d, i) => {
     const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
-    const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${formatDayWeather(d)}`.trim();
+    const wx = `${d.typical ? "Weather guess from past years (real forecast shows ~2 weeks before)" : "Open-Meteo forecast"} · ${formatDayWeather(d)}`.trim();
     const driveMin = opts.driveMin ?? 0;
     const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
     const overnight = drivingLong && driveMin >= 10 * 60;

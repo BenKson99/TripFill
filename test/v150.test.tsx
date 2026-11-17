@@ -216,10 +216,10 @@ test("v1.15: optional traveler ages persist, share, and lightly change packing",
   assert.equal(old[0].age, undefined);
 });
 
-test("v1.15: Wrong place? alternatives stay hidden until the link is opened", () => {
+test("v1.15: Not the right place? alternatives stay hidden until the link is opened", () => {
   const alts = [{ id: 9, name: "Orlando", country: "South Africa", countryCode: "ZA", lat: 0, lon: 0 }];
   const html = renderToStaticMarkup(<WrongPlace alts={alts} onPick={() => {}} resolved />);
-  assert.match(html, /Wrong place\?/);
+  assert.match(html, /Not the right place\? Pick another/);
   assert.ok(!html.includes("South Africa"), html);
 });
 

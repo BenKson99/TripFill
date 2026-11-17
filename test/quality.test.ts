@@ -84,7 +84,7 @@ test("dates, Detroit late-night, missing temperatures and estimate method labels
   const days = forecastDays({ time: ["2026-11-10"], temperature_2m_max: [null], temperature_2m_min: [null] }, ["2026-11-10", "2026-11-11"]);
   assert.ok(days.every(d => Number.isNaN(d.tmax))); assert.throws(() => stats(days), /No usable/);
   assert.equal(stats([weather.days[0], ...days]).avgHigh, 20);
-  assert.match(weatherLabel({}, "mixed"), /unknown/); assert.match(weatherLabel({}, "typical"), /not forecast/);
+  assert.match(weatherLabel({}, "mixed"), /unknown/); assert.match(weatherLabel({}, "typical"), /Weather guess from past years/);
   const legacy = fixture(); legacy.weather.source = "typical"; assert.equal(parsePlan(JSON.stringify(legacy)).weather.days[0].typical, true);
   assert.match(driveLabel({ driveMin: 80, driveSrc: "osrm" }), /~1h 20m drive, traffic not included/);
   assert.ok(!/OSRM|great-circle/i.test(driveLabel({ driveMin: 80, driveSrc: "osrm" })));
@@ -93,5 +93,5 @@ test("dates, Detroit late-night, missing temperatures and estimate method labels
   assert.ok(timeline("2026-11-06", false, "2026-11-06").every(t => t.due === "2026-11-06"));
   assert.match(itinerary(fixture().input, weather, highlights, [])[1].weather, /Open-Meteo forecast/);
   const seasonal = structuredClone(weather); (seasonal.days[1] as any).typical = true;
-  assert.match(itinerary(fixture().input, seasonal, highlights, [])[1].weather, /not forecast/);
+  assert.match(itinerary(fixture().input, seasonal, highlights, [])[1].weather, /Weather guess from past years/);
 });

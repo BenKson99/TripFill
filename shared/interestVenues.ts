@@ -1,5 +1,5 @@
 import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
-import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, kidsRestAfternoon, registerDictionaryNotes } from "./family.js";
+import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, kidsRestAfternoon, isRestSlot, splitAddOns, joinAddOns, registerDictionaryNotes } from "./family.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
@@ -635,7 +635,10 @@ export function attachCuratedInterestNotes<T extends { morning?: string; afterno
   return days;
 }
 
-const PEARL_HARBOR = /uss arizona|uss missouri|uss bowfin|pacific aviation museum|pearl harbor national memorial|pearl harbor/i;
+const PEARL_HARBOR = /uss arizona|uss missouri|uss bowfin|pacific aviation museum|pearl harbor national memorial|ford island|pearl harbor/i;
+
+export const PEARL_HARBOR_MORNING = "Pearl Harbor — USS Arizona Memorial boat ride (free timed tickets, book ahead)";
+export const PEARL_HARBOR_ALSO = "also: USS Missouri or Bowfin";
 
 function pearlPiece(text?: string): string | undefined {
   const t = (text || "").trim();
@@ -647,64 +650,41 @@ function pearlPiece(text?: string): string | undefined {
   return undefined;
 }
 
-/** Keep 1–2 Pearl Harbor visits on one day; the rest become optional suggestions. */
+/** Schedule one Pearl Harbor morning when any of the sites exist in the days or highlights. */
 export function clusterPearlHarbor<T extends { morning?: string; afternoon?: string; evening?: string; notes?: string; rainyBackup?: string; label?: string }>(
   days: T[],
   isTravel?: (d: T) => boolean,
   dest?: string,
+  highlights: { name?: string }[] = [],
 ): T[] {
   const mid = days.filter(d => !isTravel?.(d));
-  type Hit = { day: T; slot: "morning" | "afternoon"; text: string };
-  const hits: Hit[] = [];
-  const stem = (s: string) => s.toLowerCase().replace(/\s*\([^)]*\)/g, "").replace(/^[^a-z0-9]+/, "").trim();
+  if (!mid.length) return days;
+  const blob = mid.map(d => `${d.morning || ""} ${d.afternoon || ""} ${d.evening || ""}`).join(" \n ");
+  const hlNames = highlights.map(h => h.name || "").filter(Boolean);
+  const hasSites = PEARL_HARBOR.test(blob) || hlNames.some(n => PEARL_HARBOR.test(n));
+  if (!hasSites) return days;
+
+  const host = mid.find(d => PEARL_HARBOR.test(d.morning || ""))
+    || mid.find(d => !PEARL_HARBOR.test(d.morning || "") && !isMajorAttraction(d.morning || "") && !isFullOrHalfDayAttraction(d.morning || "") && !/beach|playa|surf/i.test(d.morning || ""))
+    || mid.find(d => PEARL_HARBOR.test(`${d.morning || ""} ${d.afternoon || ""}`))
+    || mid.find(d => !isMajorAttraction(d.morning || "") && !isFullOrHalfDayAttraction(d.morning || ""))
+    || mid[0];
+
+  const pool = `${blob} ${hlNames.join(" ")}`;
+  const offerAlso = /uss missouri|uss bowfin/i.test(pool) || /pearl harbor/i.test(pool);
+
   for (const d of mid) {
     for (const slot of ["morning", "afternoon"] as const) {
-      const piece = pearlPiece(d[slot]);
-      if (piece) hits.push({ day: d, slot, text: piece });
-    }
-  }
-  const uniq: Hit[] = [];
-  const seen = new Set<string>();
-  for (const h of hits) {
-    const k = stem(h.text);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
-    uniq.push(h);
-  }
-  if (uniq.length <= 1) return days;
-  if (uniq.length <= 2 && new Set(uniq.map(h => h.day)).size <= 1) return days;
-  const host = uniq[0].day;
-  const onHost = uniq.filter(h => h.day === host);
-  const others = uniq.filter(h => h.day !== host);
-  const keep: string[] = onHost.map(h => h.text).slice(0, 2);
-  const afternoonFree = !host.afternoon || !!pearlPiece(host.afternoon) || /hotel pool|quiet rest|explore a market/i.test(host.afternoon);
-  if (keep.length < 2 && others.length && afternoonFree) keep.push(others[0].text);
-  const keptStems = new Set(keep.map(stem));
-  if (pearlPiece(host.morning) || !host.morning) host.morning = keep[0];
-  else if (!pearlPiece(host.morning) && keep[0] && !stem(host.morning || "").includes(stem(keep[0]).slice(0, 16))) {
-    // Morning is a different outing — put Pearl Harbor in the afternoon only.
-    if (!keep[1]) keep.unshift(keep[0] || "");
-  }
-  if (keep.length > 1 && (afternoonFree || pearlPiece(host.afternoon))) {
-    host.afternoon = keep[keep[0] && pearlPiece(host.morning) && stem(host.morning || "") === stem(keep[0]) ? 1 : 0] || keep[1];
-    if (pearlPiece(host.morning) && host.afternoon && stem(host.morning || "") === stem(host.afternoon)) {
-      host.afternoon = keep.find(k => stem(k) !== stem(host.morning || "")) || kidsRestAfternoon(dest);
-    }
-  }
-  for (const d of mid) {
-    for (const slot of ["morning", "afternoon"] as const) {
-      const piece = pearlPiece(d[slot]);
-      if (!piece) continue;
-      if (d === host && keptStems.has(stem(d[slot] || ""))) continue;
+      if (d === host) continue;
+      if (!PEARL_HARBOR.test(d[slot] || "")) continue;
       d[slot] = slot === "afternoon" ? kidsRestAfternoon(dest) : "Free morning — wander a new neighbourhood";
     }
   }
-  const extraNames = uniq.map(h => h.text.replace(/\s*\([^)]*\)\s*$/, "").replace(/^[^A-Za-z0-9]+/, "").trim())
-    .filter((n, i, arr) => arr.findIndex(x => stem(x) === stem(n)) === i && !keptStems.has(stem(n)));
-  if (extraNames.length) {
-    const note = `Optional Pearl Harbor stops: ${extraNames.join(", ")} — a grown-up decides`;
-    if (!host.notes?.includes("Optional Pearl Harbor")) host.notes = host.notes ? `${host.notes} · ${note}` : note;
-  }
+
+  host.morning = PEARL_HARBOR_MORNING;
+  const leftovers = splitAddOns(host.afternoon).filter(p => !PEARL_HARBOR.test(p) && !isRestSlot(p));
+  const rest = kidsRestAfternoon(dest);
+  host.afternoon = joinAddOns(offerAlso ? [rest, PEARL_HARBOR_ALSO, ...leftovers.slice(0, 1)] : [rest, ...leftovers.slice(0, 1)]);
   return days;
 }
 

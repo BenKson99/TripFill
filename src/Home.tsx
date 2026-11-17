@@ -35,7 +35,7 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
   }
   const msg = error || state;
   return (
-    <label className="wide">Home city <small className="muted">(optional — for travel time, time difference, domestic/intl.)</small>
+    <label className="wide">Home city <small className="muted">(optional — so we can estimate travel time)</small>
       <input data-testid="home-city" placeholder="e.g. Detroit" value={text} onChange={e => onText(e.target.value)} onBlur={resolve}
         onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); resolve(); } }} aria-invalid={!!error || (!!state && !state.startsWith("…")) || undefined} />
       {msg && <small className={error || (state && !state.startsWith("…")) ? "warn" : "muted"} data-testid="home-city-status" role={error || (state && !state.startsWith("…")) ? "alert" : undefined}>{msg}</small>}
@@ -46,7 +46,7 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
 
 
 /** Hide long alternative lists behind a small link once a city has resolved. */
-export function WrongPlace({ alts, onPick, resolved = true, label = "Wrong place?" }: { alts: Any[]; onPick: (p: Any) => void; resolved?: boolean; label?: string }) {
+export function WrongPlace({ alts, onPick, resolved = true, label = "Not the right place? Pick another" }: { alts: Any[]; onPick: (p: Any) => void; resolved?: boolean; label?: string }) {
   const [open, setOpen] = useState(false);
   if (!alts?.length) return null;
   const links = alts.slice(0, 4).map((o: Any, i: number) => <a key={o.id || o.name || i} href="#" onMouseDown={e => { e.preventDefault(); onPick(o); setOpen(false); }} onClick={e => { e.preventDefault(); onPick(o); setOpen(false); }}>{i ? " · " : ""}{placeLabel(o)} ({placeKindLabel(o)})</a>);

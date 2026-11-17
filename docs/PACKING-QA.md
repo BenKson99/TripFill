@@ -112,6 +112,10 @@ Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are re
 
 
 
+## Kid-friendly generate and leftovers (1.20.0)
+
+Confirm `/healthz` says **1.20.0**. After Generate, the form should collapse to a “Your trip: … — Edit” bar and the page should scroll to the summary. Building should show weather / fun places / packing steps. Simple mode should open on My stuff (categories, essentials first, More options for whose bag). Honolulu: one Pearl Harbor morning (Arizona boat ride, optional Missouri or Bowfin), no coffee-house dinners, no Kalaeloa in highlights, unscheduled highlights under “More ideas (not in your days),” and only one rest line on an afternoon. Budget is unchanged.
+
 ## Production start (1.19.2)
 
 Confirm `/healthz` says **1.19.2**. `npm run build` now also writes `dist/server.js`, and `npm start` is `node dist/server.js` (not `tsx`). The server should print “TripFill listening” within a few seconds, well under Render's 512 MB cap. Budget is unchanged.

@@ -125,7 +125,7 @@ export function savePlan(storage: Pick<Storage, "setItem">, form: any, plan: any
 
 /** Legacy mixed plans lacking per-day evidence do not acquire an invented forecast label. */
 export function weatherLabel(day: { typical?: boolean } | undefined, source: string): string {
-  if (day?.typical === true || source === "typical") return "Seasonal estimate (not forecast)";
+  if (day?.typical === true || source === "typical") return "Weather guess from past years (real forecast shows ~2 weeks before)";
   if (day?.typical === false || source === "forecast") return "Open-Meteo forecast";
   return "Weather basis unknown — regenerate for source labels";
 }

@@ -138,21 +138,45 @@ export function preferSitDownDinner(opts: { kids?: boolean; infant?: boolean; se
   return !!(opts.infant || opts.senior || (opts.kids && opts.abroad) || opts.abroad);
 }
 
+
+/** Coffee houses, coffee stores and cafes — breakfast or a drink, not dinner. */
+export function isCoffeeVenue(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string; amenity?: string } | string): boolean {
+  if (typeof e !== "string" && (e.kind === "cafe" || /caf[eé]/i.test(e.amenity || ""))) return true;
+  const name = typeof e === "string" ? e : (e.name || "");
+  const rest = typeof e === "string" ? "" : `${e.tag || ""} ${e.kind || ""} ${e.type || ""} ${e.description || ""}`;
+  const blob = `${name} ${rest}`;
+  if (/\b(coffee house|coffeehouse|coffee shop|coffee store|coffeeshop)\b/i.test(blob)) return true;
+  if (/historic caf[eé]|\bcaf[eé]\b/i.test(typeof e === "string" ? "" : (e.tag || ""))) return true;
+  if (/\b(caf[eé]|coffee)\b/i.test(name) && !/\b(restaurant|grill|kitchen|bistro|trattoria|diner)\b/i.test(name)) return true;
+  return false;
+}
+
+/** Closed or historic-only venues (Wikidata dissolved / "was a coffee house"), not still-open cafes. */
+export function isDefunctOrHistoricVenue(e: { name?: string; tag?: string; kind?: string; type?: string; description?: string; dissolved?: string | boolean; former?: boolean } | string): boolean {
+  if (typeof e !== "string" && (e.dissolved || e.former)) return true;
+  const blob = typeof e === "string" ? e : `${e.name || ""} ${e.tag || ""} ${e.kind || ""} ${e.type || ""} ${e.description || ""}`;
+  if (/\b(defunct|no longer (?:open|exists|operating)|closed in \d{4}|demolished|now closed)\b/i.test(blob)) return true;
+  if (/\bwas a (?:coffee house|coffeehouse|caf[eé]|cafe|restaurant|bakery|pub|tavern)\b/i.test(blob)) return true;
+  if (/\bformer (?:coffee house|coffeehouse|caf[eé]|cafe|restaurant|bakery|pub)\b/i.test(blob)) return true;
+  return false;
+}
+
 export function filterDinnerList<T extends { name?: string; tag?: string; kind?: string; description?: string }>(
   list: T[] | undefined,
   opts: { kids?: boolean; infant?: boolean; senior?: boolean; abroad?: boolean } = {},
 ): T[] {
   if (!list?.length) return [];
-  const dropJunk = list.filter(e => !isJunkEat(e) && !isBakeryOrTreat(e) && !(opts.kids && isBarWordName(typeof e === "string" ? e : e.name)));
+  const dropJunk = list.filter(e => !isJunkEat(e) && !isBakeryOrTreat(e) && !isDefunctOrHistoricVenue(e) && !(opts.kids && isBarWordName(typeof e === "string" ? e : e.name)));
   const sitDown = preferSitDownDinner(opts);
-  if (!sitDown) return dropJunk;
-  const tables = dropJunk.filter(e => !isStreetFoodStall(e));
-  return tables.length ? tables : dropJunk;
+  const tables = sitDown ? (dropJunk.filter(e => !isStreetFoodStall(e))) : dropJunk;
+  const pool = tables.length ? tables : dropJunk;
+  const dinners = pool.filter(e => !isCoffeeVenue(e));
+  return dinners;
 }
 
 export function filterHighlightList<T extends { name?: string; type?: string; description?: string; source?: string }>(list: T[] | undefined): T[] {
   if (!list?.length) return [];
-  return list.filter(h => !isJunkSight(h));
+  return list.filter(h => !isJunkSight(h) && !isIndustrialOrAirportBeach(h));
 }
 
 /** Boost beaches, parks, aquariums, museums and tagged attractions when ranking. */

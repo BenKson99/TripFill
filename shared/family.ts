@@ -470,6 +470,20 @@ export function fillPreferredParks<T extends { morning: string; afternoon: strin
 }
 
 /** A major theme-park morning always pairs with a pool or rest afternoon. */
+
+/** Keep a single rest line per afternoon; drop a second hotel-pool / quiet-rest phrase. */
+export function dedupeRestAfternoon<T extends { afternoon?: string }>(days: T[], dest = ""): T[] {
+  for (const d of days) {
+    const parts = splitAddOns(d.afternoon);
+    if (parts.length < 2) continue;
+    const rests = parts.filter(p => isRestSlot(p));
+    const other = parts.filter(p => !isRestSlot(p));
+    if (rests.length <= 1) continue;
+    d.afternoon = joinAddOns([kidsRestAfternoon(dest), ...other]);
+  }
+  return days;
+}
+
 export function ensureParkDayRest<T extends { morning: string; afternoon: string; label?: string }>(days: T[], dest = ""): T[] {
   const rest = kidsRestAfternoon(dest);
   for (const d of days) {

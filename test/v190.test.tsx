@@ -19,7 +19,7 @@ import { defaultPrep } from "../src/Prep.js";
 import { groupPrepTasks } from "../shared/prepTiming.js";
 import { startHereItems } from "../shared/packing.js";
 import { highlightReason } from "../shared/familyPlaces.js";
-import { resolveActivities } from "../shared/activities.js";
+import { honoluluLiveInput } from "./liveInputs.js";
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -32,33 +32,6 @@ async function freePort() {
 }
 
 const T = (s: string) => localizeEn(s || "", "us");
-
-const honoluluMembers = [
-  { id: "traveler-1", name: "Mom", profile: "woman" as const },
-  { id: "traveler-2", name: "Dad", profile: "man" as const },
-  { id: "traveler-3", name: "Girl", profile: "girl" as const, child: true, age: 10 },
-  { id: "traveler-4", name: "Boy", profile: "boy" as const, child: true, age: 8 },
-  { id: "traveler-5", name: "Grandparent", profile: "grandparent" as const },
-];
-
-export function honoluluLiveInput() {
-  const interests = "volcano, turtles, surfing lessons, luau, beach";
-  return {
-    destination: "Honolulu",
-    homeCity: "Seattle",
-    start: "2027-07-01",
-    end: "2027-07-08",
-    travelers: 5,
-    purpose: "Family",
-    style: "Mix" as const,
-    travelMode: "flying" as const,
-    interests,
-    activities: resolveActivities({ interests, purpose: "Family" }),
-    members: honoluluMembers,
-    today: "2026-11-17",
-    tz: "America/Detroit",
-  };
-}
 
 const cancunInfantMembers = [
   { id: "traveler-1", name: "Mom", profile: "woman" as const },

@@ -10,7 +10,7 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, ensureParkDayRest, capItineraryNotes, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns, stripOrphanHikeContinues } from "../shared/family.js";
+import { farDayTrip, paceItineraryForKids, applyKidPaceNotes, fillPreferredParks, ensureParkDayRest, capItineraryNotes, isTravelOrLeaveDay, tripHasKids, hasChildUnder, softenHikesForKidsAndHeat, EASY_RIM_WALK, EASY_RIM_AFTERNOON, splitAddOns, joinAddOns, stripOrphanHikeContinues, dedupeRestAfternoon } from "../shared/family.js";
 import { isDestinationItself, isLodgingOrStay, isVagueSight, isNearBase, curatedParkSights, visitorCenterName, isHikeInOrInnerCanyon, isOffParkBase } from "../shared/nationalParks.js";
 import { applyInterestVenues, applyInterestAddOns, fillNamedAfternoons, replaceVagueNearbySlots, reassignUsedRainBackups, assignUniqueRainBackups, isIndoorishBackup, curatedInterestVenues, curatedIndoorBackups, applyKidPlaceHints, attachCuratedInterestNotes, clusterPearlHarbor } from "../shared/interestVenues.js";
 import { filterHighlightList, isJunkSight, isUnsolicitedReligiousAttraction, namedIceCream } from "../shared/junkVenues.js";
@@ -408,9 +408,10 @@ export function runActivitySchedule(days: ItinDay[], inp: TripInput, w: WeatherR
     iceCreamName: namedIceCream(eats) || namedIceCream(usable),
   });
   attachCuratedInterestNotes(days, inp.interests || "", placeName);
-  clusterPearlHarbor(days, isTravelOrLeaveDay, placeName);
+  clusterPearlHarbor(days, isTravelOrLeaveDay, placeName, usable);
   stripOrphanHikeContinues(days, placeName);
   if (kids) applyKidPlaceHints(days, usable);
+  dedupeRestAfternoon(days, placeName);
   capItineraryNotes(days, 3);
 }
 

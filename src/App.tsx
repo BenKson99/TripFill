@@ -21,6 +21,8 @@ import { formatDayWeather, renderTempTokens, precipKind, backupSlotLabel, wetDay
 import { defaultDistanceUnit, isDistanceUnit, type DistanceUnit } from "../shared/distance";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel, WrongPlace } from "./Home";
+import { GenerateProgress, useGenerateProgress } from "./GenerateProgress";
+import { scheduledHighlightDay } from "../shared/highlightSchedule";
 import { homeGenerateFields } from "../shared/homeCity";
 import { isSettlementPlace } from "../shared/placeQuery";
 import { englishVariant, localizeEn } from "../shared/enLocale";
@@ -32,7 +34,7 @@ import { GrownUpBadge, GrownUpNote, showGrownUpNote } from "./GrownUp";
 import { MoreInfo } from "./MoreInfo";
 import { whatToWear } from "../shared/wear";
 import { highlightReason, sortForFamily } from "../shared/familyPlaces";
-import { isJunkEat, isSportsBar, isParkOrPlazaDinner, isUnsolicitedReligiousAttraction, isInfrastructureSight } from "../shared/junkVenues";
+import { isJunkEat, isSportsBar, isParkOrPlazaDinner, isUnsolicitedReligiousAttraction, isInfrastructureSight, isIndustrialOrAirportBeach } from "../shared/junkVenues";
 import { hasChildUnder, tripHasKids, jetLagNote } from "../shared/family";
 import { groupPrepTasks, prepOwnerHint } from "../shared/prepTiming";
 import { dedupePrepAgainstTimeline } from "../shared/activityPrep";
@@ -68,6 +70,21 @@ const KEY = "tripfill:v1";
 // Local calendar date (not UTC) so late evening in Detroit is still "today"
 const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const plus = (k: number) => { const d = new Date(); d.setDate(d.getDate() + k); return iso(d); };
+const WALKING_LABEL: Record<string, string> = { low: "A little", standard: "Some", high: "Lots" };
+function compactTripRange(start: string, end: string) {
+  const a = new Date(start + "T12:00"), b = new Date(end + "T12:00");
+  const mon = (d: Date) => d.toLocaleDateString("en-US", { month: "short" });
+  return a.getMonth() === b.getMonth() && a.getFullYear() === b.getFullYear()
+    ? `${mon(a)} ${a.getDate()}–${b.getDate()}`
+    : `${mon(a)} ${a.getDate()}–${mon(b)} ${b.getDate()}`;
+}
+function tripEditBar(plan: Any) {
+  const dest = plan.legs?.length > 1 ? plan.title || placeLabel(plan.place) : placeLabel(plan.place);
+  const n = Number(plan.input?.travelers) || 0;
+  const people = n === 1 ? "1 person" : `${n} people`;
+  return `Your trip: ${dest} · ${compactTripRange(plan.input.start, plan.input.end)} · ${people}`;
+}
+
 
 function Editable({ value, onChange, multiline, wrap }: { value: string; onChange: (v: string) => void; multiline?: boolean; wrap?: boolean }) {
   if (multiline || wrap) {
@@ -130,6 +147,9 @@ export default function App() {
     return () => window.removeEventListener("beforeprint", all);
   }, []);
   const [loading, setLoading] = useState(false);
+  const generateStep = useGenerateProgress(loading);
+  const [editTrip, setEditTrip] = useState(() => !saved?.plan);
+  const scrollPlan = useRef(false);
   const [err, setErr] = useState(saved && "error" in saved ? saved.error || "" : "");
 
   const [settingsOpen, setSettingsOpen] = useState(false), [settingsSlot, setSettingsSlot] = useState<HTMLDivElement | null>(null);
@@ -171,9 +191,15 @@ export default function App() {
       }
       setHomeErr("");
       if (j.trip?.home) { setHomeCity(j.trip.home); setHomeText(placeLabel(j.trip.home)); }
-      if (j.needsChoice) setMatches(j.matches); else { recoveryPending.current = false; setPlan(j); setShareMsg(""); setShareUrl(""); }
+      if (j.needsChoice) setMatches(j.matches); else { recoveryPending.current = false; setPlan(j); setShareMsg(""); setShareUrl(""); setEditTrip(false); scrollPlan.current = true; }
     } catch (e: Any) { setErr(friendlyError(e)); } finally { setLoading(false); }
   }
+  useEffect(() => {
+    if (!scrollPlan.current || !plan) return;
+    scrollPlan.current = false;
+    const go = () => document.getElementById("trip-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    requestAnimationFrame(() => requestAnimationFrame(go));
+  }, [plan?.generatedAt]);
   const activeTab: TabId = plan ? tab : "plan";
   const upd = (fn: (p: Any) => void) => readOnly ? undefined : setPlan((p: Any) => { const c = structuredClone(p); fn(c); return c; });
   const changeTravelMode = (m: TravelMode) => {
@@ -229,11 +255,14 @@ export default function App() {
           <div className="wx">{plan.weather.days.map((d: Any, i: number) => <div key={d.date} className={"wxd" + (d.typical ? " typical" : "")}>{plan.legs?.length > 1 && <small className="legtag">{d.leg}</small>}{d.typical && <small className="wx-typical">Typical weather (not a forecast yet)</small>}<b>{new Date(d.date + "T12:00").toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</b><WxIcon s={d.summary} muted={!!d.typical} /><span className="temp">{deg(d.tmax)} <small>/ {deg(d.tmin)}</small></span><small>{weatherLabel(d, plan.weather.source)} · {T(formatDayWeather(d))}</small>{d.receivedAt && <small className="muted">Data received {new Date(d.receivedAt).toLocaleString()}</small>}{(() => { const line = T(whatToWear(d)); return line ? <small className="wx-wear" data-testid="what-to-wear">What to wear: {line}</small> : null; })()}</div>)}</div>
     </>,
     highlights: <>
-          {(() => { const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const raw = (plan.highlights || []).filter((h: Any) => !isInfrastructureSight(h) && !(kids && isUnsolicitedReligiousAttraction(h, plan.input?.interests || ""))); const list = sortForFamily(raw, kids); return <ol className="hl">{list.map((h: Any, idx: number) => { const i = plan.highlights.indexOf(h); const prev = list[idx - 1] as Any | undefined; const reason = highlightReason(h, kids, { smallChild: hasChildUnder(8, plan.input, plan.packing?.settings?.members) }); return <li key={i}>{plan.legs?.length > 1 && h.leg !== prev?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
-            <Editable value={h.name} onChange={v => upd(p => { p.highlights[i].name = v; })} /><span className={"tag " + (h.setting || (h.indoor ? "indoor" : "outdoor"))}>{h.setting || (h.indoor ? "indoor" : "outdoor")}</span>{reason && <small className="muted hl-reason"> {reason}</small>}
+          {(() => { const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const raw = (plan.highlights || []).filter((h: Any) => !isInfrastructureSight(h) && !isIndustrialOrAirportBeach(h) && !(kids && isUnsolicitedReligiousAttraction(h, plan.input?.interests || ""))); const list = sortForFamily(raw, kids); const row = (h: Any, idx: number, group: Any[]) => { const i = plan.highlights.indexOf(h); const prev = group[idx - 1] as Any | undefined; const reason = highlightReason(h, kids, { smallChild: hasChildUnder(8, plan.input, plan.packing?.settings?.members) }); const day = scheduledHighlightDay(h.name, plan.itinerary || []); return <li key={i}>{plan.legs?.length > 1 && h.leg !== prev?.leg && <h3 className="leghead">📍 {h.leg}</h3>}
+            <Editable value={h.name} onChange={v => upd(p => { p.highlights[i].name = v; })} />{day && <span className="tag hl-day" data-testid="hl-day">{day.dayN}</span>}<span className={"tag " + (h.setting || (h.indoor ? "indoor" : "outdoor"))}>{h.setting || (h.indoor ? "indoor" : "outdoor")}</span>{reason && <small className="muted hl-reason"> {reason}</small>}
             <Editable multiline value={h.description} onChange={v => upd(p => { p.highlights[i].description = v; })} />
             <small className="muted">Source: {h.url ? <a href={safeUrl(h.url)} target="_blank" rel="noopener noreferrer">{h.source}</a> : h.source} · check official site for hours & prices</small>
-          </li>; })}</ol>; })()}
+          </li>; }; const scheduled = list.filter((h: Any) => scheduledHighlightDay(h.name, plan.itinerary || [])); const more = list.filter((h: Any) => !scheduledHighlightDay(h.name, plan.itinerary || [])); return <>
+            {scheduled.length > 0 && <><h3 className="hl-sub" data-testid="hl-in-days">In your days</h3><ol className="hl">{scheduled.map((h: Any, idx: number) => row(h, idx, scheduled))}</ol></>}
+            {more.length > 0 && <><h3 className="hl-sub" data-testid="hl-more-ideas">More ideas (not in your days)</h3><ol className="hl">{more.map((h: Any, idx: number) => row(h, idx, more))}</ol></>}
+          </>; })()}
     </>,
     food: <>
           {(() => { const E0 = eatsOf(plan); const kids = tripHasKids(plan.input, plan.packing?.settings?.members); const drop = (list: Any[]) => (list || []).filter((e: Any) => !isJunkEat(e) && !isSportsBar(e) && !isParkOrPlazaDinner(e)); const E = { restaurants: sortForFamily(kids ? drop(E0.restaurants) : E0.restaurants, kids), cafes: sortForFamily(kids ? drop(E0.cafes) : E0.cafes, kids) }; const list = (k: "restaurants" | "cafes") => E[k].length ? <ul className="hl eats">{E[k].map((f: Any, i: number) => { const orig = E0[k].indexOf(f); const prev = E[k][i - 1] as Any | undefined; return <li key={orig >= 0 ? orig : i}>{plan.legs?.length > 1 && f.leg && f.leg !== prev?.leg && <h3 className="leghead">📍 {f.leg}</h3>}<Editable value={f.name} onChange={v => upd(p => { if (orig >= 0) p.eats[k][orig].name = v; })} />{f.tag && <span className="tag eat">{f.tag}</span>}{(f.km != null || f.area) && <small className="muted"> {[f.area, f.km != null ? `${f.km < 1 ? Math.round(f.km * 1000) + " m" : f.km + " km"} from the ${T("centre")}` : ""].filter(Boolean).join(" · ")}</small>}{f.description && <div className="gloss">{f.description}</div>}<p className="muted small">Check hours &amp; menus before you go.</p><small className="muted"> {safeUrl(f.sourceUrl) ? <a href={safeUrl(f.sourceUrl)} target="_blank" rel="noopener noreferrer">{f.source || "Source listing"}</a> : <span>{f.source || "Unknown source"} — provenance unavailable in this saved plan</span>}{safeUrl(f.url) && f.url !== f.sourceUrl && <> · <a href={safeUrl(f.url)} target="_blank" rel="noopener noreferrer">Website / details</a></>}{f.lat != null && <> · <a href={`https://www.openstreetmap.org/?mlat=${f.lat}&mlon=${f.lon}#map=18/${f.lat}/${f.lon}`} target="_blank" rel="noopener noreferrer">map</a></>}</small></li>; })}</ul> : <p className="muted small">{plan.eats ? `No ${k === "cafes" ? "coffee shops" : "restaurants"} found nearby right now — try regenerating in a minute.` : "This plan was saved before TripFill 1.4 — regenerate it to see local restaurants and coffee shops."}</p>;
@@ -294,7 +323,8 @@ export default function App() {
       <div role="tabpanel" id="panel-plan" aria-labelledby="tab-plan" hidden={activeTab !== "plan"}>
       {seenTabs.plan && (<>
       {!online && <div className="card warn noprint" data-testid="offline">📴 You're offline — showing your last saved plan. Editing works and is saved in this browser; generating a new plan, the map tiles and live rates need a connection.</div>}
-      {!readOnly && <form className="card form noprint" onSubmit={e => { e.preventDefault(); if (dates.order) return; if (dates.past && !window.confirm("That day is in the past. Plan it anyway? Weather will be typical for the season, not a forecast.")) return; generate(); }}>
+      {!readOnly && plan && !editTrip && !loading && <div className="card trip-edit-bar noprint" data-testid="trip-edit-bar">{tripEditBar(plan)} — <button type="button" className="linkish" data-testid="edit-trip" onClick={() => setEditTrip(true)}>Edit</button></div>}
+      {!readOnly && (editTrip || !plan || loading) && <form className="card form noprint" onSubmit={e => { e.preventDefault(); if (dates.order) return; if (dates.past && !window.confirm("That day is in the past. Plan it anyway? Weather will be typical for the season, not a forecast.")) return; generate(); }}>
         <fieldset className="form-step" data-testid="step-where"><legend>1 Where</legend>
           <p className="step-help muted small">Type the city you're visiting, and home if you know it.</p>
           <label className="wide">Destination<input required placeholder="e.g. Lisbon" value={form.destination} onChange={e => setForm({ ...form, destination: e.target.value })} /></label>
@@ -331,31 +361,32 @@ export default function App() {
           <p className="step-help muted small">Tell us the kind of trip you want, and anything you really hope to do.</p>
           <label>Purpose<select value={form.purpose} onChange={e => setForm({ ...form, purpose: e.target.value })}>{["Leisure", "Business", "Family", "Celebration", "Adventure", "Other"].map(x => <option key={x}>{x}</option>)}</select></label>
           <label>Pace<select value={form.style} onChange={e => setForm({ ...form, style: e.target.value })}>{["Slow", "Mix", "Packed"].map(x => <option key={x}>{x}</option>)}</select></label>
-          <label>Walking tolerance<select value={form.walkingTolerance || "standard"} onChange={e => setForm({ ...form, walkingTolerance: e.target.value })}><option value="low">Limited — short outings & rest</option><option value="standard">Standard</option><option value="high">High — longer outings welcome</option></select></label>
+          <label>How much walking?<select value={form.walkingTolerance || "standard"} onChange={e => setForm({ ...form, walkingTolerance: e.target.value })} aria-label="How much walking?"><option value="low">A little</option><option value="standard">Some</option><option value="high">Lots</option></select></label>
           <label>Dietary preference<select value={form.dietaryNeeds || "none"} onChange={e => setForm({ ...form, dietaryNeeds: e.target.value })}>{[["none", "No preference"], ["vegetarian", "Vegetarian"], ["vegan", "Vegan"], ["gluten_free", "Gluten-free"], ["halal", "Halal"]].map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select></label>
-          <p className="muted small wide">Limited walking means shorter outings; we have not checked step-free access. Always check allergies with the restaurant — ask a grown-up.</p>
-          <MoreInfo><p className="muted small">Limited walking takes priority over hiking, skiing and walking-tour presets. Dietary tags are incomplete: source-tagged matches are preferred, name hints stay unverified, unknown venues stay visible and known conflicts are left out. Confirm ingredients and cross-contact directly — this is not an allergy-safety guarantee.</p></MoreInfo>
+          <p className="muted small wide">A little walking means shorter outings; we have not checked step-free access. Always check allergies with the restaurant — ask a grown-up.</p>
+          <MoreInfo><p className="muted small">A little walking takes priority over hiking, skiing and walking-tour presets. Dietary tags are incomplete: source-tagged matches are preferred, name hints stay unverified, unknown venues stay visible and known conflicts are left out. Confirm ingredients and cross-contact directly — this is not an allergy-safety guarantee.</p></MoreInfo>
           <ActivityPicker value={resolveActivities(form)} interests={form.interests} destination={form.destination} disabled={!!readOnly} onChange={(ids: ActivityId[]) => setForm((f: Any) => syncActivityInput({ ...f }, ids))} onInterests={text => setForm((f: Any) => ({ ...f, interests: text }))} />
         </fieldset>
         <GrownUpNote show={showGrownUpNote(form)} />
-        <button className="generate-btn" disabled={loading || !online || !!dates.order}>{!online ? "Offline — connect to generate" : loading ? "Building your plan… (~10s)" : "Make my trip plan ✨"}</button>
+        <button className="generate-btn" disabled={loading || !online || !!dates.order}>{!online ? "Offline — connect to generate" : loading ? `${generateStep}…` : "Make my trip plan ✨"}</button>
+        <GenerateProgress loading={loading} />
       </form>}
       {matches && !readOnly && <div className="card noprint"><b>Which one did you mean?</b><p className="muted small">We&apos;ll use the first one unless you pick another.</p><div className="chips">{matches.slice(0, 4).map((m: Any, i: number) => <button key={m.id} className={i === 0 ? "on" : ""} onClick={() => generate(m)}>{placeLabel(m)}<small className="muted"> — {placeKindLabel(m)}</small></button>)}</div></div>}
 
       {plan && <>
-        <section className="card trip-head">
+        <section className="card trip-head" id="trip-summary">
           <div className="kicker"><MapPin size={14} />{plan.legs?.length > 1 ? `${plan.legs.length}-city trip` : plan.trip?.domestic === false ? "International trip" : plan.trip?.domestic ? "Domestic trip" : "Your trip"}</div>
           <h2>{plan.legs?.length > 1 ? plan.title : placeLabel(plan.place)}</h2>
           <p className="dates">{fmtRange(plan.input.start, plan.input.end)}</p>
-          <p className="muted">{plan.input.travelers} traveler(s) · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {plan.input.walkingTolerance || "standard"} walking · {(plan.input.dietaryNeeds || "none").replace(/_/g, " ")} dietary preference{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
+          <p className="muted">{plan.input.travelers} {Number(plan.input.travelers) === 1 ? "person" : "people"} · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {WALKING_LABEL[plan.input.walkingTolerance || "standard"] || "Some"} walking · {(plan.input.dietaryNeeds || "none").replace(/_/g, " ")} food{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
           {plan.matches?.length > 1 && <WrongPlace alts={plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4)} onPick={m => generate(m)} resolved={isSettlementPlace(plan.place)} />}
           <div className="stats" data-testid="stats">
             <div className="stat"><CalendarDays size={18} /><div><b>{plan.itinerary.length} days</b><small>{plan.input.start} → {plan.input.end}</small></div></div>
-            <div className="stat"><Users size={18} /><div><b>{plan.input.travelers}</b><small>traveler(s)</small></div></div>
+            <div className="stat"><Users size={18} /><div><b>{plan.input.travelers}</b><small>{Number(plan.input.travelers) === 1 ? "person" : "people"}</small></div></div>
             <div className="stat"><WxIcon s={plan.weather.days[0]?.summary || ""} /><div><b>{deg(plan.weather.stats.avgHigh)} / {deg(plan.weather.stats.avgLow)}</b><small>avg high / low · {plan.weather.stats.snowDays ? `${plan.weather.stats.snowDays} snow` : ""}{plan.weather.stats.snowDays ? " · " : ""}{wetDaysSummary(plan.weather.days).label}</small></div></div>
             <div className="stat"><Wallet size={18} /><div><b>{(summaries.budget || "").replace(/ estimate$/, "").split(" ≈ ").pop()}</b><small>budget estimate</small></div></div>
           </div>
-          {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <WrongPlace label="Wrong place?" alts={lg.alternatives.slice(0, 3)} onPick={a => { const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }} resolved />}</span>)}</div>}
+          {plan.legs?.length > 1 && <div className="route" data-testid="route">{plan.legs.map((lg: Any, k: number) => <span key={k}>{k > 0 && <span className="hop">→ {lg.fromPrev?.flightLabel || "travel"} →</span>}<b>📍 {lg.place.name}</b> <small className="muted">{lg.place.country} · {lg.start.slice(5)}–{lg.end.slice(5)} · {lg.nights} night(s)</small>{lg.alternatives?.length > 0 && !readOnly && <WrongPlace label="Not the right place? Pick another" alts={lg.alternatives.slice(0, 3)} onPick={a => { const L = plan.input.legs.map((x: Any, j: number) => j === k - 1 ? { ...x, place: a } : x); setForm({ ...form, legs: L.map(({ destination, start }: Any) => ({ destination, start })) }); generate(plan.place, L); }} resolved />}</span>)}</div>}
           <Snapshot trip={plan.trip} dest={plan.place} mode={resolveTravelMode(plan.input, plan.trip?.distanceKm)} onMode={changeTravelMode} readOnly={!!readOnly} distanceUnit={distanceUnit} />
           {jetLagNote(plan.place?.name, plan.trip?.tzDiffHours) && <p className="muted" data-testid="jet-lag">{jetLagNote(plan.place?.name, plan.trip?.tzDiffHours)}</p>}
           <GrownUpNote show={showGrownUpNote(form, plan)} />

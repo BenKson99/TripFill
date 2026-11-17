@@ -100,11 +100,18 @@ test("v1.13.0: Simple mode collapses identical items for 16 travelers, marks all
   assert.ok(html.includes(`${g.name} ×16`) || html.includes(`${g.name.replace(/&/g, "&amp;")} ×16`));
   assert.ok(html.includes("0/16 packed"));
   assert.ok(html.includes("Mark all packed"));
-  assert.equal((html.match(/data-shared="true"/g) || []).length, grouped.shared.length * 2); // screen + print
-  const screen = html.slice(0, html.indexOf("simple-print"));
-  const adultsStart = screen.indexOf('data-testid="simple-adults"');
-  const adultsHtml = adultsStart >= 0 ? screen.slice(adultsStart) : screen;
-  assert.equal((screen.match(/class="simple-name">Passport \/ accepted travel ID[^<]*<\/span>/g) || []).length, 1, "collapsed to one visible Passport row");
+  const printAt = html.indexOf("simple-print");
+  const stuff = html.slice(html.indexOf('data-testid="my-stuff-list"'), html.indexOf('data-testid="simple-more"'));
+  const more = html.slice(html.indexOf('data-testid="simple-more"'), printAt >= 0 ? printAt : html.length);
+  const print = printAt >= 0 ? html.slice(printAt) : "";
+  assert.equal((more.match(/data-shared="true"/g) || []).length, grouped.shared.length);
+  assert.equal((print.match(/data-shared="true"/g) || []).length, grouped.shared.length);
+  assert.ok((stuff.match(/data-shared="true"/g) || []).length <= grouped.shared.length);
+  const passportRe = /class="simple-name">Passport \/ accepted travel ID[^<]*<\/span>/g;
+  assert.equal((stuff.match(passportRe) || []).length, 1, "My stuff collapses Passport to one row");
+  assert.equal((more.match(passportRe) || []).length, 1, "More options Adults list collapses Passport to one row");
+  const adultsStart = more.indexOf('data-testid="simple-adults"');
+  const adultsHtml = adultsStart >= 0 ? more.slice(adultsStart) : more;
   assert.ok(!adultsHtml.includes("Sister 2") && !adultsHtml.includes("Sister 16"), "people stay collapsed until expanded");
   const packed = updatePackingItems(p.packing, g.rows.map(r => r.item.id), { checked: true });
   const after = packingItems(packed).filter(i => /Passport/.test(i.item) && i.checked);

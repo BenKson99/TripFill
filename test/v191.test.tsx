@@ -8,12 +8,11 @@ import { join } from "node:path";
 import { itinerary } from "../server/plan.js";
 import { runActivitySchedule } from "../server/activityItinerary.js";
 import { isTravelOrLeaveDay, capDayNotes, kidsRestAfternoon, KIDS_POOL_REST, KIDS_CITY_REST, isWarmResortDestination, isLongHikeMorning, stripOrphanHikeContinues, ensureParkDayRest, isLightActivity } from "../shared/family.js";
-import { curatedInterestVenues, applyInterestVenues, attachCuratedInterestNotes, clusterPearlHarbor, withKidHint, applyInterestAddOns } from "../shared/interestVenues.js";
+import { curatedInterestVenues, applyInterestVenues, attachCuratedInterestNotes, clusterPearlHarbor, withKidHint, applyInterestAddOns, PEARL_HARBOR_MORNING, PEARL_HARBOR_ALSO } from "../shared/interestVenues.js";
 import { isBarWordName, isBarVenue, filterDinnerList } from "../shared/junkVenues.js";
 import { eatBrandKey, CASUAL_DINNER_FALLBACK } from "../shared/familyEats.js";
 import { highlightReason } from "../shared/familyPlaces.js";
-import { resolveActivities } from "../shared/activities.js";
-import { honoluluLiveInput } from "./v190.test.js";
+import { honoluluLiveInput, londonLiveInput } from "./liveInputs.js";
 
 function delay(ms: number) { return new Promise(r => setTimeout(r, ms)); }
 async function freePort() {
@@ -25,41 +24,6 @@ async function freePort() {
 }
 
 const DIAMOND_NOTE = "Diamond Head is an old volcano crater. The active volcano park (Hawaiʻi Volcanoes) is on the Big Island, a short flight away";
-
-const honoluluMembers = [
-  { id: "traveler-1", name: "Mom", profile: "woman" as const },
-  { id: "traveler-2", name: "Dad", profile: "man" as const },
-  { id: "traveler-3", name: "Girl", profile: "girl" as const, child: true, age: 10 },
-  { id: "traveler-4", name: "Boy", profile: "boy" as const, child: true, age: 8 },
-  { id: "traveler-5", name: "Grandparent", profile: "grandparent" as const },
-];
-
-const londonMembers = [
-  { id: "traveler-1", name: "Mom", profile: "woman" as const },
-  { id: "traveler-2", name: "Dad", profile: "man" as const },
-  { id: "traveler-3", name: "Boy", profile: "boy" as const, child: true, age: 10 },
-  { id: "traveler-4", name: "Girl A", profile: "girl" as const, child: true, age: 7 },
-  { id: "traveler-5", name: "Girl B", profile: "girl" as const, child: true, age: 7 },
-];
-
-export function londonLiveInput() {
-  const interests = "Harry Potter, castles, double-decker bus, museums";
-  return {
-    destination: "London",
-    homeCity: "Chicago",
-    start: "2027-07-10",
-    end: "2027-07-17",
-    travelers: 5,
-    purpose: "Family",
-    style: "Mix" as const,
-    travelMode: "flying" as const,
-    interests,
-    activities: resolveActivities({ interests, purpose: "Family" }),
-    members: londonMembers,
-    today: "2026-11-17",
-    tz: "America/Detroit",
-  };
-}
 
 test("v1.19.1: a pre-placed Diamond Head still gets the Big Island volcano note", () => {
   const dest = { name: "Honolulu", admin1: "Hawaii", country: "United States", countryCode: "US" };
@@ -144,12 +108,11 @@ test("v1.19.1: USS Arizona uses a boat-ticket hint, and Pearl Harbor sites clust
     { label: "Day 5", morning: "Pearl Harbor National Memorial", afternoon: "rest", evening: "Dinner", notes: "" },
   ];
   clusterPearlHarbor(days, d => false, "Honolulu");
-  const pearlDays = days.filter(d => /uss arizona|uss missouri|uss bowfin|pearl harbor national/i.test(`${d.morning} ${d.afternoon}`));
-  assert.ok(pearlDays.length <= 1, days.map(d => `${d.morning} / ${d.afternoon}`).join(" | "));
+  const pearlDays = days.filter(d => /pearl harbor —|uss arizona|uss missouri|uss bowfin|pearl harbor national/i.test(`${d.morning} ${d.afternoon}`));
+  assert.equal(pearlDays.length, 1, days.map(d => `${d.morning} / ${d.afternoon}`).join(" | "));
   const host = pearlDays[0];
-  const count = [/uss arizona/i, /uss missouri/i, /uss bowfin/i, /pearl harbor national/i].filter(re => re.test(`${host.morning} ${host.afternoon}`)).length;
-  assert.ok(count >= 1 && count <= 2, `${host.morning} / ${host.afternoon}`);
-  assert.match(host.notes || days.map(d => d.notes).join(" "), /Optional Pearl Harbor stops:/);
+  assert.equal(host.morning, PEARL_HARBOR_MORNING);
+  assert.match(host.afternoon || "", /also: USS Missouri or Bowfin/);
 });
 
 test("v1.19.1: a double-decker is a short add-on and is not wiped by a park-day rest", () => {
@@ -182,12 +145,16 @@ test("v1.19.1: family dinner fallback prefers a named place and says family-frie
     days: Array.from({ length: 8 }, (_, i) => ({ date: `2027-07-${String(10 + i).padStart(2, "0")}`, tmax: 22, tmin: 14, precipProb: 30, precipMm: 1, typical: true, summary: "Some rain likely" })),
     source: "typical", stats: { avgHigh: 22, avgLow: 14, rainyDays: 0, snowDays: 0 },
   } as any;
-  const days = itinerary(inp as any, wx, [], [{ name: "Pizza Pilgrims", tag: "pizza" }] as any, [], {
+  const days = itinerary(inp as any, wx, [], [
+    { name: "Pizza Pilgrims", tag: "pizza" },
+    { name: "Wagamama", tag: "japanese" },
+  ] as any, [], {
     domestic: false, travelMode: "flying", destName: "London", countryCode: "GB",
     cafes: [{ name: "The Breakfast Club", kind: "cafe", tag: "cafe", source: "OpenStreetMap" } as any],
   });
   const evenings = days.filter(d => !/Arrive|Depart/i.test(d.label || "")).map(d => d.evening);
-  assert.ok(evenings.some(e => /Pizza Pilgrims|The Breakfast Club/i.test(e || "")), evenings.join(" | "));
+  assert.ok(evenings.some(e => /Pizza Pilgrims|Wagamama/i.test(e || "")), evenings.join(" | "));
+  assert.ok(!evenings.some(e => /Breakfast Club|Coffee House/i.test(e || "")), evenings.join(" | "));
 });
 
 test("v1.19.1: cool city destinations use a park rest, not a hotel pool", () => {
@@ -264,7 +231,7 @@ test("v1.19.1: cold-cache Honolulu generate keeps the volcano note, unique brand
     }
   }
   assert.ok(!/USS Arizona Memorial \(indoor exhibits\)/i.test(text), text);
-  if (/USS Arizona/i.test(text)) assert.match(text, /boat ride to the memorial — free timed tickets, book ahead/i);
+  if (/USS Arizona|Pearl Harbor —/i.test(text)) assert.match(text, /boat ride/i);
   const pearlDays = mid.filter((d: any) => /uss arizona|uss missouri|uss bowfin|pacific aviation museum|pearl harbor national memorial/i.test(`${d.morning} ${d.afternoon}`));
   assert.ok(pearlDays.length <= 1, text);
   const beachDays = mid.filter((d: any) => /🏖|Waikiki Beach|Kailua|Ala Moana|Hanauma|Ko Olina/i.test(`${d.morning} ${d.afternoon}`));
