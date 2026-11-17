@@ -111,6 +111,12 @@ Synthetic samples: `/workspace/tripfill-v1.10.0-qa/legacy-only-traveler1-SYNTHET
 Confirm `/healthz` says **1.14.1**. On the Plan form, the trip-type chips are replaced by **What do you want to do?** (popular 8 + Show all 25) and the Interests field remains. Typing “beginner ski lessons” should tick Skiing; “wine” should tick tasting. Generate once for a warm coastal city with several activities (beach, food, snorkeling, hiking, museums). Check packing kits, prep tasks (reservations, tickets, no-fly-after-diving if snorkeling/scuba is on), itinerary spread, and any suitability notes. Change activities in ⚙ Settings → Packing and Refresh suggestions without a new Generate; ticks and edits should stay. A second Generate can exercise a ski trip or a Zermatt flying plan to confirm long drive day trips are gone and legacy Ski still works.
 
 
+## Named nightlife and first Simple toggle (1.14.3)
+
+Confirm `/healthz` says **1.14.3**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. The nightlife evening should name a real bar or pub (for example Foresters Arms), not “Nightlife & bars”, and should not reuse that day’s restaurant. A ski town such as Zermatt should still generate cleanly if Nightlife is off, or use a real bar / the generic line if no venue is found.
+
+On Packing & Prep, the first Simple mode toggle should feel as snappy as later ones (lists are warmed during idle; print copy is deferred).
+
 ## Place quality and slot balance (1.14.2)
 
 Confirm `/healthz` says **1.14.2**. Generate Cape Town, Flying, 20–25 Nov 2026, with Beach, Food, Hiking, Snorkeling, Museums, Tasting, Nightlife and Sightseeing. Mid-trip days should name real beaches (Camps Bay, Clifton or Muizenberg), a real museum (Zeitz MOCAA or Iziko) rather than V&A Waterfront, a named bar for nightlife, tasting in the afternoon, and snorkeling as a dive operator or snorkel beach — not Two Oceans Aquarium. The same place should not appear twice on one day. Food prep should be a single “tickets and reserve popular restaurants” timeline task.

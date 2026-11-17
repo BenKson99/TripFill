@@ -2,7 +2,7 @@ import { UA, cached } from "./fetchy.js";
 import type { Place } from "./weather.js";
 import type { Highlight } from "./places.js";
 import type { ActivityId } from "../shared/activities.js";
-import { cleanVenueName, isAdminOrReligiousOrg } from "../shared/activities.js";
+import { cleanVenueName, isAdminOrReligiousOrg, isNightlifeVenue, isRestaurantLike } from "../shared/activities.js";
 
 /** One combined Overpass query for activity venues. Cached; never more than one new call per place. */
 const KIND_TO_ACTIVITY: Record<string, ActivityId> = {
@@ -30,28 +30,35 @@ export function beachPreferRank(name: string) {
   return 0;
 }
 
-export function osmActivities(p: Place, ids: ActivityId[]): Promise<Highlight[]> {
-  if (!ids.length) return Promise.resolve([]);
-  return cached(`activityVenues|v4|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, async () => {
+export async function osmActivities(p: Place, ids: ActivityId[]): Promise<Highlight[]> {
+  if (!ids.length) return [];
+  const want = new Set(ids);
+  const keep = (h: Highlight) => {
+    if (!h.name || /^Q\d+$/i.test(h.name)) return false;
+    const act = (h as any).activity as ActivityId | undefined;
+    if (act && want.has(act)) return true;
+    if (want.has("nightlife") && isNightlifeVenue(h)) return true;
+    const mapped = KIND_TO_ACTIVITY[(h.type || "").replace(/ /g, "_")] as ActivityId | undefined;
+    return !h.type || (mapped ? want.has(mapped) : false);
+  };
+  try {
+    // Merge uncached: beaches and venues are cached separately so a failed bar query cannot freeze a beach-only set for 24h.
     const [osm, wd] = await Promise.all([osmActivities0(p), wikidataActivities(p)]);
-    return mergeActivityPlaces(osm, wd, 80);
-  }).then(all => {
-    const want = new Set(ids);
-    return all.filter(h => {
-      if (!h.name || /^Q\d+$/i.test(h.name)) return false;
-      const act = (h as any).activity as ActivityId | undefined;
-      if (act && want.has(act)) return true;
-      const mapped = KIND_TO_ACTIVITY[(h.type || "").replace(/ /g, "_")] as ActivityId | undefined;
-      return !h.type || (mapped ? want.has(mapped) : false);
-    });
-  }).catch(() => []);
+    let all = mergeActivityPlaces(osm, wd, 80).filter(keep);
+    if (want.has("nightlife") && !all.some(isNightlifeVenue)) {
+      all = mergeActivityPlaces(all, await nightlifeVenues(p), 80).filter(keep);
+    }
+    return all;
+  } catch {
+    return [];
+  }
 }
 
 function asHighlight(name: string, kind: string, activity: ActivityId, source: string, lat?: number, lon?: number, url?: string): Highlight | null {
   const clean = cleanVenueName(name);
   if (!clean || clean.length < 3 || /^Q\d+$/i.test(clean)) return null;
   if (isAdminOrReligiousOrg({ name: clean, type: kind })) return null;
-  if (activity === "nightlife" && /coffee|caf[eé]/i.test(clean) && !/\b(bar|club|pub|tavern)\b/i.test(clean)) return null;
+  if (activity === "nightlife" && (isRestaurantLike({ name: clean, type: kind }) || (/coffee|caf[eé]/i.test(clean) && !/\b(bar|club|pub|tavern)\b/i.test(clean)))) return null;
   if (activity === "dive" && /aquarium|zoo|oceanarium/i.test(`${clean} ${kind}`)) return null;
   return {
     name: clean,
@@ -125,13 +132,25 @@ async function osmActivities0(p: Place): Promise<Highlight[]> {
 
 /** Wikidata SPARQL fallback (and complement) so beaches, museums, bars and wineries still arrive when Overpass times out. */
 export async function wikidataActivities(p: Place): Promise<Highlight[]> {
-  return cached(`wdActivities|v3|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, () => wikidataActivities0(p)).catch(() => []);
+  const key = (name: string) => `${name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`;
+  const [beaches, night, venues] = await Promise.all([
+    cached(key("wdBeaches|v1"), () => wdQuery(p, "beaches")).catch(() => [] as Highlight[]),
+    cached(key("wdNightlife|v1"), () => wdQuery(p, "nightlife")).catch(() => [] as Highlight[]),
+    cached(key("wdVenues|v1"), () => wdQuery(p, "venues")).catch(() => [] as Highlight[]),
+  ]);
+  return mergeActivityPlaces(mergeActivityPlaces(beaches, night, 80), venues, 80);
 }
 
-async function wikidataActivities0(p: Place): Promise<Highlight[]> {
+async function wdQuery(p: Place, kind: "beaches" | "venues" | "nightlife"): Promise<Highlight[]> {
   const header = `SERVICE wikibase:around { ?item wdt:P625 ?coord . bd:serviceParam wikibase:center "Point(${p.lon} ${p.lat})"^^geo:wktLiteral . bd:serviceParam wikibase:radius "RADIUS" . }`;
   const beachQ = `SELECT DISTINCT ?item ?itemLabel ?coord WHERE { ${header.replace("RADIUS", "40")} ?item wdt:P31/wdt:P279* wd:Q40080 . SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 50`;
-  const venueQ = `SELECT DISTINCT ?item ?itemLabel ?coord ?k WHERE { ${header.replace("RADIUS", "30")} ?item wdt:P31/wdt:P279? ?cls . VALUES (?cls ?k) { (wd:Q33506 "museum") (wd:Q207694 "museum") (wd:Q1007870 "gallery") (wd:Q187456 "bar") (wd:Q212198 "pub") (wd:Q30022 "pub") (wd:Q622425 "nightclub") (wd:Q156362 "winery") (wd:Q22715 "vineyard") (wd:Q131734 "brewery") } SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 80`;
+  const nightQ = `SELECT DISTINCT ?item ?itemLabel ?coord ?k WHERE { ${header.replace("RADIUS", "15")} ?item wdt:P31/wdt:P279? ?cls . VALUES (?cls ?k) { (wd:Q187456 "bar") (wd:Q212198 "pub") (wd:Q30022 "pub") (wd:Q622425 "nightclub") (wd:Q112122665 "cocktail_bar") } SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 40`;
+  const venueQ = `SELECT DISTINCT ?item ?itemLabel ?coord ?k WHERE { ${header.replace("RADIUS", "15")} ?item wdt:P31/wdt:P279? ?cls . VALUES (?cls ?k) { (wd:Q33506 "museum") (wd:Q207694 "museum") (wd:Q1007870 "gallery") (wd:Q156362 "winery") (wd:Q22715 "vineyard") (wd:Q131734 "brewery") } SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 80`;
+  const q = kind === "beaches" ? beachQ : kind === "nightlife" ? nightQ : venueQ;
+  return wikidataActivities0(p, q, kind);
+}
+
+async function wikidataActivities0(p: Place, query: string, kind: "beaches" | "venues" | "nightlife"): Promise<Highlight[]> {
   const run = async (query: string): Promise<any[]> => {
     try {
       const r = await fetch("https://query.wikidata.org/sparql", {
@@ -147,8 +166,9 @@ async function wikidataActivities0(p: Place): Promise<Highlight[]> {
       return [];
     }
   };
-  // Run after getPlaces (see index.ts) so these two can safely go in parallel.
-  const [beaches, venues] = await Promise.all([run(beachQ), run(venueQ)]);
+  const rows = await run(query);
+  const beaches = kind === "beaches" ? rows : [];
+  const venues = kind === "beaches" ? [] : rows;
   const seen = new Set<string>();
   const out: Highlight[] = [];
   const add = (name: string, kind: string, activity: ActivityId, coord?: string, url?: string) => {
@@ -165,7 +185,7 @@ async function wikidataActivities0(p: Place): Promise<Highlight[]> {
     .filter((b: any) => b.name)
     .sort((a: any, b: any) => beachPreferRank(b.name) - beachPreferRank(a.name));
   for (const b of beachRows) add(b.name, "beach", "beach", b.coord, b.url);
-  const kindToAct: Record<string, ActivityId> = { museum: "museums", gallery: "museums", bar: "nightlife", pub: "nightlife", nightclub: "nightlife", winery: "tasting", vineyard: "tasting", brewery: "tasting" };
+  const kindToAct: Record<string, ActivityId> = { museum: "museums", gallery: "museums", bar: "nightlife", pub: "nightlife", nightclub: "nightlife", cocktail_bar: "nightlife", winery: "tasting", vineyard: "tasting", brewery: "tasting" };
   for (const b of venues) {
     const name = b.itemLabel?.value;
     const k = b.k?.value;
@@ -173,6 +193,50 @@ async function wikidataActivities0(p: Place): Promise<Highlight[]> {
     if (name && act) add(name, k, act, b.coord?.value, b.item?.value);
   }
   return out;
+}
+
+
+/** Small Overpass + Wikidata lookup used when the combined venue set still has no bars. */
+export async function nightlifeVenues(p: Place): Promise<Highlight[]> {
+  return cached(`nightlifeVenues|v1|${p.lat.toFixed(3)},${p.lon.toFixed(3)}`, () => nightlifeVenues0(p)).catch(() => []);
+}
+
+async function nightlifeVenues0(p: Place): Promise<Highlight[]> {
+  const q = `[out:json][timeout:8];(nwr(around:15000,${p.lat},${p.lon})["amenity"~"^(bar|pub|nightclub)$"]["name"];);out center 20;`;
+  const one = async (host: string): Promise<Highlight[]> => {
+    try {
+      const r = await fetch(host, {
+        method: "POST",
+        headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
+        body: "data=" + encodeURIComponent(q),
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!r.ok) return [];
+      const d: any = await r.json();
+      const seen = new Set<string>();
+      const out: Highlight[] = [];
+      for (const e of d.elements || []) {
+        const tags = e.tags || {};
+        const kind = tags.amenity || "bar";
+        const name = tags["name:en"] || tags.name;
+        if (!name || seen.has(String(name).toLowerCase())) continue;
+        const h = asHighlight(name, kind, "nightlife", "OpenStreetMap", e.lat ?? e.center?.lat, e.lon ?? e.center?.lon);
+        if (!h || !isNightlifeVenue(h)) continue;
+        seen.add(String(name).toLowerCase());
+        out.push(h);
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  };
+  const wd = await wdQuery(p, "nightlife").then(list => list.filter(isNightlifeVenue)).catch(() => [] as Highlight[]);
+  if (wd.length) return wd;
+  return Promise.any(OVERPASS_HOSTS.map(async host => {
+    const r = await one(host);
+    if (!r.length) throw new Error("empty");
+    return r;
+  })).catch(() => [] as Highlight[]);
 }
 
 export function mergeActivityPlaces(highlights: Highlight[], extra: Highlight[], cap = 24): Highlight[] {

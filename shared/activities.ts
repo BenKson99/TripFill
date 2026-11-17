@@ -478,3 +478,21 @@ export function cleanVenueName(name: string) {
     .replace(/\s{2,}/g, " ")
     .trim();
 }
+
+/** A bar, pub, nightclub or cocktail bar — not a restaurant, cafe or "bar & grill". */
+export function isRestaurantLike(h: { name?: string; type?: string; description?: string }) {
+  const blob = `${h.name || ""} ${h.type || ""} ${h.description || ""}`;
+  if (/bar\s*[&+]\s*grill|bar and grill/i.test(blob)) return true;
+  return /\b(restaurant|steakhouse|bistro|brasserie|diner|eatery|grill house)\b/i.test(blob);
+}
+
+export function isNightlifeVenue(h: { name?: string; type?: string; activity?: string; description?: string }) {
+  if (isRestaurantLike(h)) return false;
+  if (/coffee|caf[eé]/i.test(h.name || "") && !/\b(bar|club|pub|tavern)\b/i.test(h.name || "")) return false;
+  if (h.activity === "nightlife") return true;
+  const typ = (h.type || "").toLowerCase().replace(/_/g, " ");
+  if (/^(bar|pub|nightclub|cocktail bar)$/.test(typ) || /\b(nightclub|cocktail bar)\b/.test(typ)) return true;
+  const blob = `${h.name || ""} ${typ} ${h.description || ""}`;
+  return /\b(nightclub|nightlife|cocktail bar|pubs?|taverns?|bars?)\b/i.test(blob)
+    && !/\b(sandbar|handlebar|barge|barrier|barn)\b/i.test(blob);
+}

@@ -4,7 +4,7 @@ import type { Highlight } from "./places.js";
 import { precipKind } from "../shared/precip.js";
 import {
   ACTIVITY_BY_ID, activityFit, fitContextFromWeather, isRealisticDayTrip, isRealBeach,
-  isRestDayFriendly, isSeriousPeak, isSkiSector, resolveActivities, suitableActivities,
+  isNightlifeVenue, isRestDayFriendly, isSeriousPeak, isSkiSector, resolveActivities, suitableActivities,
   weatherAllows, type ActivityId, type FitCtx,
 } from "../shared/activities.js";
 import { driveLabel } from "./plan.js";
@@ -44,11 +44,7 @@ function hlFor(id: ActivityId, hl: Highlight[]): Highlight[] {
     if (id === "spa") return /spa|hot spring|onsen|bath/.test(blob);
     if (id === "parks") return /theme park|water park|amusement/.test(blob);
     if (id === "shows") return /theatre|theater|concert|festival|opera/.test(blob);
-    if (id === "nightlife") {
-      if (/coffee|caf[eé]/i.test(h.name) && !/\b(bar|club|pub|tavern)\b/i.test(h.name)) return false;
-      if ((h as any).activity === "nightlife") return true;
-      return /\b(bar|bars|club|nightclub|nightlife|pub|tavern)\b/i.test(blob);
-    }
+    if (id === "nightlife") return isNightlifeVenue(h);
     if (id === "boat") return /marina|harbour|harbor|kayak|boat/.test(blob);
     if (id === "dive") {
       if (/aquarium|zoo|oceanarium/i.test(blob)) return false;

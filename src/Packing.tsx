@@ -31,7 +31,8 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const [message, setMessage] = useState("");
   const [mountedSimple, setMountedSimple] = useState(simple);
   const [mountedDetailed, setMountedDetailed] = useState(!simple);
-  // Defer the first mount of the other pane by a frame so the toggle paints before grouping/rendering hundreds of rows.
+  // While the detailed list is on screen, pre-mount (and pre-layout) SimpleLists during idle
+  // so the first toggle only flips visibility instead of grouping and creating hundreds of rows.
   useEffect(() => {
     if (simple && !mountedSimple) {
       const id = requestAnimationFrame(() => setMountedSimple(true));
@@ -40,6 +41,12 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
     if (!simple && !mountedDetailed) {
       const id = requestAnimationFrame(() => setMountedDetailed(true));
       return () => cancelAnimationFrame(id);
+    }
+    if (!simple && !mountedSimple) {
+      const ric = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: IdleRequestCallback) => window.setTimeout(cb, 50) as unknown as number;
+      const cic = typeof cancelIdleCallback === "function" ? cancelIdleCallback : (id: number) => clearTimeout(id);
+      const id = ric(() => setMountedSimple(true));
+      return () => cic(id);
     }
   }, [simple, mountedSimple, mountedDetailed]);
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
@@ -53,7 +60,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   return <div className={`packing-workspace${simple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
-    {mountedSimple && <div hidden={!simple} className={simple ? undefined : "noprint"} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
+    {mountedSimple && <div hidden={simple ? false : undefined} className={simple ? undefined : "noprint packing-simple-preload"} aria-hidden={!simple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
     {mountedDetailed && <div hidden={simple} className={simple ? "noprint" : undefined} data-testid="packing-detailed-pane">
       <DetailedPane plan={plan} p={p} readOnly={readOnly} travelMode={travelMode} members={members} T={tFn} openSettings={openSettings} message={message} setMessage={setMessage} change={change} edit={edit} />
     </div>}
@@ -164,6 +171,16 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
   const adultEntries = useMemo(() => groupSimpleRows(lists.adults), [lists.adults]);
   const kidEntries = useMemo(() => lists.kids ? groupSimpleRows(lists.kids) : null, [lists.kids]);
   const multi = (p.settings.members?.length || 1) > 1;
+  // SSR keeps the print copy for tests and print; in the browser wait until idle / beforeprint so the first paint is only the on-screen list.
+  const [forPrint, setForPrint] = useState(() => typeof window === "undefined");
+  useEffect(() => {
+    const add = () => setForPrint(true);
+    const ric = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: IdleRequestCallback) => window.setTimeout(cb, 200) as unknown as number;
+    const cic = typeof cancelIdleCallback === "function" ? cancelIdleCallback : (id: number) => clearTimeout(id);
+    const id = ric(add);
+    window.addEventListener("beforeprint", add);
+    return () => { cic(id); window.removeEventListener("beforeprint", add); };
+  }, []);
   const list = (title: string, grouped: ReturnType<typeof groupSimpleRows>, rows: SimpleRow[], print: boolean) => {
     const active = rows.filter(r => !r.item.skipped), done = active.filter(r => r.item.checked).length;
     return <section className="simple-list" aria-label={`${title} packing list`} data-testid={print ? undefined : `simple-${title.toLowerCase()}`}>
@@ -176,7 +193,7 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
   };
   return <>
     <div className="simple-screen noprint">{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</div>
-    <div className="packing-print simple-print">{list("Adults", adultEntries, lists.adults, true)}{kidEntries && list("Kids", kidEntries, lists.kids!, true)}</div>
+    {forPrint && <div className="packing-print simple-print">{list("Adults", adultEntries, lists.adults, true)}{kidEntries && list("Kids", kidEntries, lists.kids!, true)}</div>}
   </>;
 });
 

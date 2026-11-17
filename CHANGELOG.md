@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.14.3 — Named nightlife and a snappier first Simple toggle
+
+- Nightlife slots name a real bar, pub, nightclub or cocktail bar when one is found (Overpass `amenity=bar|pub|nightclub`, with a Wikidata fallback). Restaurants and “bar & grill” places are skipped, and the same venue is not reused that day. Generic “Nightlife & bars” is only used when nothing is found.
+- Beach and venue Wikidata results are cached separately, so a failed bar query can no longer freeze a beach-only set for 24 hours. If the combined lookup still has no bars, a small dedicated nightlife query runs.
+- The first Simple mode switch pre-mounts and pre-layouts the people lists during idle time, and the print copy waits until idle or print, so the first toggle no longer does that work on the click.
+
 ## 1.14.2 — Place quality and activity slot balance
 
 - Activity venues still use one Overpass request, but each kind now has its own result cap and a 35 km beach radius, so beaches are not dropped by a global 80-element limit. Timeouts are longer, and Wikidata SPARQL fills in beaches, museums, bars and wineries when Overpass is slow or empty (Camps Bay, Clifton, Muizenberg, Zeitz MOCAA, Iziko).
