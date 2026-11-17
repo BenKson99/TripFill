@@ -1,0 +1,60 @@
+import { isNightlifeVenue, isRestaurantLike } from "./activities.js";
+
+const KID_GOOD = /\b(playground|play\s*area|kids[_\s-]?area|children'?s?\s*(museum|zoo|garden|theatre|theater|park)|family|zoo|aquarium|theme park|amusement park|water park|splash|legoland|disney|science centre|science center|fairground|carnival|miniature|petting)\b/i;
+const KID_FOOD = /\b(pizza|ice\s*cream|gelato|burger|diner|pancake|waffle|family|kids?\s*menu|breakfast|cafe|café|bakery|sandwich|noodle|taco)\b/i;
+const NIGHTLIFE = /\b(nightclub|strip\s*club|cocktail\s*bar|wine\s*bar|speakeasy|late\s*night\s*bar|dance\s*club)\b/i;
+/** Activity-type only — never use identity, religion, culture or community as a negative signal. */
+const BARISH = /\b(nightclub|cocktail bar|wine bar|speakeasy)\b|\b(amenity|tourism)?\s*(nightclub|stripclub)\b/i;
+
+function blob(h: { name?: string; type?: string; description?: string; tag?: string; cuisine?: string; kind?: string }): string {
+  return `${h.name || ""} ${h.type || ""} ${h.description || ""} ${h.tag || ""} ${h.cuisine || ""} ${h.kind || ""}`;
+}
+
+export function isKidFriendlyPlace(h: { name?: string; type?: string; description?: string; tag?: string }): boolean {
+  return KID_GOOD.test(blob(h));
+}
+
+export function isKidFriendlyEat(e: { name?: string; tag?: string; description?: string; cuisine?: string; kind?: string }): boolean {
+  return KID_FOOD.test(blob(e)) || /family/i.test(e.tag || "");
+}
+
+export function isBarStyleVenue(h: { name?: string; type?: string; description?: string; tag?: string; kind?: string }): boolean {
+  if (isNightlifeVenue(h as any) && !isRestaurantLike(h as any)) return true;
+  const t = blob(h);
+  if (NIGHTLIFE.test(t) || BARISH.test(t)) return true;
+  // A plain "bar" tag, but not "chocolate bar", family restaurants, or "bar & grill".
+  if (/\b(nightclub|cocktail)\b/i.test(t)) return true;
+  if (/\bbar\b/i.test(`${h.type || ""} ${h.tag || ""} ${h.kind || ""}`) && !/grill|family|restaurant|pub food/i.test(t)) return true;
+  return false;
+}
+
+/** Higher is better for a family trip. 0 is neutral. */
+export function familyPlaceScore(h: { name?: string; type?: string; description?: string; tag?: string; setting?: string; indoor?: boolean; kind?: string }): number {
+  let s = 0;
+  if (isKidFriendlyPlace(h) || isKidFriendlyEat(h)) s += 5;
+  if (/playground|kids[_\s-]?area/i.test(blob(h))) s += 3;
+  if (/zoo|aquarium/i.test(blob(h))) s += 3;
+  if (/museum|gallery/i.test(blob(h)) && /child|kids|family/i.test(blob(h))) s += 2;
+  if (h.indoor || h.setting === "indoor") s += 1;
+  if (isBarStyleVenue(h)) s -= 6;
+  return s;
+}
+
+export function sortForFamily<T>(list: T[], kids: boolean): T[] {
+  if (!kids || !list?.length) return list;
+  return [...list].sort((a, b) => familyPlaceScore(b as any) - familyPlaceScore(a as any));
+}
+
+/** Plain reason for a highlight. Never returns raw OSM/Wikidata class lists. */
+export function highlightReason(h: { name?: string; type?: string; description?: string; setting?: string; indoor?: boolean }, kids = false): string {
+  const t = blob(h);
+  if (/playground|play\s*area|kids[_\s-]?area/i.test(t)) return "Good for kids: playground";
+  if (/\bzoo\b/i.test(t)) return "Good for kids: zoo";
+  if (/aquarium/i.test(t)) return "Good for kids: aquarium";
+  if (/children'?s?\s*museum|family\s*museum|science (centre|center)/i.test(t)) return "Good for kids: museum";
+  if (/theme park|amusement park|water park/i.test(t)) return "A full park day — go early and rest after";
+  if (isBarStyleVenue(h)) return kids ? "Evening spot — better for grown-ups" : "Nightlife";
+  if (h.indoor || h.setting === "indoor" || h.setting === "mixed") return "Indoor — good if it rains";
+  if (h.setting === "outdoor" || /outdoor|park|garden|trail|beach/i.test(t)) return "Outdoor — check the weather";
+  return "";
+}

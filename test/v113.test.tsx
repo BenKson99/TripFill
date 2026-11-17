@@ -102,8 +102,10 @@ test("v1.13.0: Simple mode collapses identical items for 16 travelers, marks all
   assert.ok(html.includes("Mark all packed"));
   assert.equal((html.match(/data-shared="true"/g) || []).length, grouped.shared.length * 2); // screen + print
   const screen = html.slice(0, html.indexOf("simple-print"));
+  const adultsStart = screen.indexOf('data-testid="simple-adults"');
+  const adultsHtml = adultsStart >= 0 ? screen.slice(adultsStart) : screen;
   assert.equal((screen.match(/class="simple-name">Passport \/ accepted travel ID[^<]*<\/span>/g) || []).length, 1, "collapsed to one visible Passport row");
-  assert.ok(!screen.includes("Sister 2") && !screen.includes("Sister 16"), "people stay collapsed until expanded");
+  assert.ok(!adultsHtml.includes("Sister 2") && !adultsHtml.includes("Sister 16"), "people stay collapsed until expanded");
   const packed = updatePackingItems(p.packing, g.rows.map(r => r.item.id), { checked: true });
   const after = packingItems(packed).filter(i => /Passport/.test(i.item) && i.checked);
   assert.equal(after.length, 16);
@@ -114,7 +116,7 @@ test("v1.13.0: Simple mode collapses identical items for 16 travelers, marks all
   assert.equal(packingItems(marked).find(i => i.id === g.rows[0].item.id)!.checked, false);
   assert.equal(packingItems(marked).filter(i => /Passport/.test(i.item) && i.checked).length, 15);
   const detailed = renderToStaticMarkup(<PackingWorkspace plan={p} readOnly={false} onChange={() => {}} T={s => s} />);
-  assert.ok(detailed.includes('data-testid="packing-show-only"') && detailed.includes("My list"));
+  assert.ok(detailed.includes('data-testid="packing-show-only"') && detailed.includes("My stuff"));
 });
 
 test("v1.13.0: Set everyone to a type; new rows inherit the most common / last-chosen type; names stay", () => {

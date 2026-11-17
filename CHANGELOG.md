@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.0 — Kid-friendliness batch 2
+
+- Packing opens with a short “Start here” must-have list (IDs, medicines, chargers, baby essentials, a jacket, comfortable shoes) and a friendly progress message, instead of “0 of 92 active items packed”.
+- Kids get a “My stuff” view: pick a traveler to see only their items, with bigger tick targets and simpler wording. Grouped rows name the people when there are four or fewer (“8 × Tops · Mom, Dad”). “Mark all packed” asks a light confirmation when it covers more than one person.
+- Before you leave groups tasks into “A week before”, “The day before” and “Morning you leave”, with grown-up tasks first and a short owner hint.
+- Settings is one consistent panel on every tab: Display, Travelers, and Packing details. Advanced controls sit behind “Advanced (for grown-ups)”. Laundry uses simple choices (No laundry / Once mid-trip / Every few days / Custom). Long help text is shortened (“Adds new suggestions and keeps everything you changed.”).
+- Long Plan warnings shrink to one plain sentence plus a “More info” disclosure. Allergy guidance stays: “Always check allergies with the restaurant — ask a grown-up.”
+- When kids are on the trip, kid-friendly places (playgrounds, zoos, aquariums, family restaurants) rank higher and bar/nightclub venues rank lower. Identity-related venues are not treated as unsafe. Highlights show a plain reason (“Good for kids: playground”, “Indoor — good if it rains”) instead of raw OSM types. Restaurant caveats collapse to “Check hours & menus before you go.”
+- Checkboxes and buttons are at least 40px tap targets on mobile. Each weather day has a “What to wear” line, e.g. “Shorts & t-shirt, light jacket at night”.
+- Budget is unchanged.
+
 ## 1.15.0 — Kid-friendliness batch 1
 
 - Drive times use an OSRM road route from home to the destination, with a plain-language card such as “About 17 hours of driving — plan stops (and maybe a night on the way)”. Borders are mentioned only on international trips. Miles are the default for US and UK trips, with a Distance unit setting.

@@ -437,3 +437,34 @@ button.linkish{background:none;border:none;padding:0;color:var(--accent, #8a5a3b
   .slot{align-items:flex-start}
   .slot .ed,.slot .ed.wrap{flex-basis:100%}
 }
+
+/* v1.16.0 kid-friendliness: start-here list, my stuff, 40px tap targets, prep groups */
+.start-here{margin:12px 0 18px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:color-mix(in srgb, var(--sun, #e8c87a) 12%, var(--surface, #fff))}
+.start-here h3{margin:0 0 6px;font-size:1.15rem}
+.start-here ul{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.start-here li,.my-stuff li{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:44px}
+.packing-encouragement{margin:0;font-size:.95rem}
+.my-stuff-picker{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 14px}
+.my-stuff-picker .chips{display:flex;flex-wrap:wrap;gap:6px}
+.my-stuff input[type=checkbox],.start-here input[type=checkbox]{width:44px;height:44px;min-width:44px;min-height:44px;flex:0 0 auto;accent-color:var(--teal)}
+.prep-group{margin:0 0 18px}
+.prep-group h3{font-size:1.05rem;margin:0 0 8px}
+.prep-owner{display:block;margin-left:calc(20px + 10px)}
+.more-info{margin:.35rem 0 1rem}
+.more-info summary{cursor:pointer;color:var(--accent, #8a5a3b);font-weight:600}
+.more-info-body{margin-top:.4rem}
+.settings-block{margin:0 0 1.2rem}
+.settings-advanced{margin-top:1rem;border-top:1px solid var(--line);padding-top:.8rem}
+.settings-advanced summary{cursor:pointer;font-weight:700}
+.laundry-choices{border:0;margin:0 0 1rem;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 1rem}
+.hl-reason{display:inline-block}
+.wx-wear{display:block;margin-top:4px;font-weight:600;color:var(--ink-2, #4a4038)}
+@media (max-width: 720px){
+  button,.ghost,input[type=checkbox],.checklist-input,.pk input[type=checkbox],.simple-list li input,.simple-mark-all,.simple-expand,.seg button,.chips button{
+    min-width:40px;min-height:40px;
+  }
+  .pk input[type=checkbox],.simple-list li input,.checklist-input,input[type=checkbox]{
+    width:40px;height:40px;min-width:40px;min-height:40px;
+  }
+  .prep-owner{margin-left:0}
+}

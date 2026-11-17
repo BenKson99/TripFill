@@ -89,6 +89,74 @@ function isDismissed(list: PackingList, next: PackingItem) {
 export const quantity = (n: number) => Math.max(1, Math.min(999, Math.round(Number(n) || 1)));
 export const packingItems = (p: PackingList) => p.groups.flatMap(g => g.items);
 export const packingProgress = (items: PackingItem[]) => { const eligible = items.filter(i => !i.skipped); const packed = eligible.filter(i => i.checked || i.stage === "packed").length; return { total: eligible.length, packed, percent: eligible.length ? Math.round(packed / eligible.length * 100) : 0 }; };
+
+/** Categories for the short "Start here" packing list (about 8–10 must-haves). */
+export const START_HERE_KEYS: { key: string; test: RegExp }[] = [
+  { key: "id", test: /passport|photo id|travel id|government photo id/i },
+  { key: "licence", test: /driving licence|vehicle documents/i },
+  { key: "meds", test: /usual medicines|personal health supplies|first-aid/i },
+  { key: "phone", test: /phone & charger/i },
+  { key: "diapers", test: /diapers \/ nappies|diapers\/nappies/i },
+  { key: "feeding", test: /feeding supplies/i },
+  { key: "wipes", test: /wipes, changing mat/i },
+  { key: "jacket", test: /\b(jacket|rain shell|warm (layer|coat)|waterproof shell|fleece|hoodie|coat)\b/i },
+  { key: "shoes", test: /comfortable walking shoes|hiking shoes|trail layers/i },
+  { key: "payment", test: /payment card/i },
+];
+
+export function startHereItems(list: PackingList, limit = 10): PackingItem[] {
+  const items = packingItems(list).filter(i => !i.skipped);
+  const picked: PackingItem[] = [];
+  const used = new Set<string>();
+  for (const { key, test } of START_HERE_KEYS) {
+    if (picked.length >= limit) break;
+    const matches = items.filter(i => test.test(i.item) && !used.has(i.id));
+    if (!matches.length) continue;
+    // One row per category: prefer a shared item, otherwise the first traveler.
+    const choice = matches.find(i => ownerOf(i) === SHARED) || matches[0];
+    picked.push(choice);
+    used.add(choice.id);
+    void key;
+  }
+  return picked.slice(0, limit);
+}
+
+export function packingEncouragement(list: PackingList, starter?: PackingItem[]): string {
+  const all = packingProgress(packingItems(list));
+  const start = packingProgress(starter ?? startHereItems(list));
+  if (!all.total) return "Your list is empty. Add an item or restore one you skipped.";
+  if (all.packed === all.total) return "You're all packed! Double-check Before you leave with a grown-up.";
+  if (!start.total) {
+    return all.packed === 0
+      ? `${all.total} items on the full list — start with IDs, chargers and the weather layer, and ask a grown-up about the rest.`
+      : `Nice work — ${all.packed} of ${all.total} items packed. Keep going, one bag at a time.`;
+  }
+  if (start.packed === 0 && all.packed === 0) {
+    return `Start with the ${start.total} must-haves below — you don't have to pack all ${all.total} items at once.`;
+  }
+  if (start.packed < start.total) {
+    return `Nice work — ${start.packed} of ${start.total} must-haves packed. ${all.total - all.packed} items left in the full list when you're ready.`;
+  }
+  return `Must-haves are packed. ${all.total - all.packed} more items in the full list if you want them.`;
+}
+
+export type LaundryChoice = "none" | "mid" | "few" | "custom";
+export function midTripLaundryDay(days: number) { return Math.max(1, Math.round(Math.max(1, days) / 2)); }
+export function laundryChoice(days: number, laundryEvery: number | null | undefined): LaundryChoice {
+  if (laundryEvery == null) return "none";
+  const mid = midTripLaundryDay(days);
+  if (laundryEvery === mid) return "mid";
+  if (laundryEvery === 3 || laundryEvery === 4) return "few";
+  return "custom";
+}
+export function laundryEveryFromChoice(choice: LaundryChoice, days: number, custom?: number | null): number | null {
+  if (choice === "none") return null;
+  if (choice === "mid") return midTripLaundryDay(days);
+  if (choice === "few") return 3;
+  const n = Number(custom);
+  return Number.isInteger(n) && n >= 1 && n <= 30 ? n : 7;
+}
+
 export function filterPacking(items: PackingItem[], search = "", status = "all", bag = "all", owner = "all") {
   const q = search.trim().toLocaleLowerCase();
   return items.filter(i => (!q || `${i.item} ${i.reason}`.toLocaleLowerCase().includes(q)) && (bag === "all" || i.bag === bag) && (owner === "all" || ownerOf(i) === owner) &&
@@ -522,10 +590,17 @@ export function groupSimpleRows(rows: SimpleRow[]): { entries: SimpleEntry[]; gr
 }
 export function simpleGroupLabel(g: SimpleGroup): string {
   const n = g.rows.length;
+  const names = g.rows.map(r => r.ownerName).filter(Boolean);
+  const who = n > 1 && n <= 4 && names.length ? ` · ${names.join(", ")}` : n > 1 ? ` · ${n} people` : "";
   if (n <= 1) return `${g.quantity ?? g.rows[0]?.item.quantity ?? 1} × ${g.name}`;
-  if ((g.quantity ?? 1) === 1) return `${g.name} ×${n}`;
-  return g.quantity != null ? `${g.quantity} × ${g.name} · ${n} people` : `${g.name} · ${n} people`;
+  if ((g.quantity ?? 1) === 1) return `${g.name} ×${n}${n <= 4 && names.length ? ` · ${names.join(", ")}` : ""}`;
+  return g.quantity != null ? `${g.quantity} × ${g.name}${who}` : `${g.name}${who}`;
 }
+export function shouldConfirmMarkAll(g: SimpleGroup): boolean {
+  const people = new Set(g.rows.filter(r => !r.item.skipped).map(r => r.item.owner || r.ownerName));
+  return people.size > 1;
+}
+
 
 /** Repair (v1.10.0): travelers who own no items at all — e.g. pre-1.8 lists whose rows all migrated to traveler-1,
  * or travelers added later — get their own personal suggestions. Shared items are never added here, nothing

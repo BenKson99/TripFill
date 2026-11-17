@@ -9,7 +9,7 @@ import { ActivityPicker } from "./Activities";
 
 import { Settings } from "lucide-react";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
-import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, groupSimpleRows, simpleGroupLabel, updatePackingItems, bagLabel, bagsFor, type SimpleRow, type SimpleGroup, packingProgress, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage } from "../shared/packing";
+import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, groupSimpleRows, simpleGroupLabel, updatePackingItems, bagLabel, bagsFor, type SimpleRow, type SimpleGroup, packingProgress, packingEncouragement, startHereItems, laundryChoice, laundryEveryFromChoice, midTripLaundryDay, shouldConfirmMarkAll, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage, type LaundryChoice } from "../shared/packing";
 import { GrownUpBadge } from "./GrownUp";
 
 const KIT_LABELS: Record<ActivityKit, string> = {
@@ -63,6 +63,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={isSimple} data-testid="simple-toggle" className={isSimple ? "on" : "ghost"} onClick={() => { const next = !isSimple; if (simple === undefined) setSimplePacking(next); onSimpleChange?.(next); }}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{isSimple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
   return <div className={`packing-workspace${isSimple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
+    <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} />
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
     {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
     {mountedDetailed && <div hidden={isSimple} className={isSimple ? "noprint" : undefined} data-testid="packing-detailed-pane">
@@ -110,18 +111,18 @@ const DetailedPane = memo(function DetailedPane({ plan, p, readOnly, travelMode,
 
     <div className="packing-overview">
       <div><span className="eyebrow">A little less to remember</span><h2>Your bags, in order.</h2><p>{tripDays(plan.input)} days · personal items are listed for each of {plan.input.travelers || members.length} traveler(s), with a separate shared list. Clothing quantities are for that traveler and include what they wear in transit.</p></div>
-      <div className="packing-score"><b>{progress.percent}%</b><span>{progress.packed} of {progress.total} active items packed</span><progress aria-label="Packing progress" value={progress.packed} max={Math.max(1, progress.total)} /></div>
+      <div className="packing-score"><b>{progress.percent}%</b><span>{progress.packed} of {progress.total} packed</span><progress aria-label="Packing progress" value={progress.packed} max={Math.max(1, progress.total)} /></div>
     </div>
-    <div className="packing-readiness" aria-live="polite">{!progress.total ? "Your list is empty or all items are not needed. Add an item or restore a skipped one." : progress.packed === progress.total ? "✓ Everything on your active list is packed. Check Before you leave separately." : `${progress.total - progress.packed} items to go · ${toBuy} to buy · ${readyN} ready · ${departure} for departure day · ${pending} unpacked essentials.`}</div>
+    <div className="packing-readiness" aria-live="polite" data-testid="packing-readiness">{packingEncouragement(p)}{progress.total && progress.packed !== progress.total ? <span className="muted"> {toBuy ? `${toBuy} to buy. ` : ""}{pending ? `${pending} essential items still open.` : ""}</span> : null}</div>
     <p className="muted small">Suggestions use available weather only ({plan.weather.source === "forecast" ? "forecast, not guaranteed" : plan.weather.source === "typical" ? "seasonal estimates, not a forecast" : "mixed / unknown basis"}). Weather-dependent items are marked Essential only when the forecast clearly supports them; otherwise they stay Optional because the weather is uncertain. Check the latest forecast for every stop. {plan.capped || tripDays(plan.input) > (plan.weather.days?.length || 0) ? "Weather may cover only part of this trip; quantities still use the full date range. Later legs may have no weather data." : ""}</p>
     <div className="packing-people noprint" role="tablist" aria-label="Packing lists">{owners.map(o => { const tabItems = o.id === "all" ? all : all.filter(i => (i.owner || SHARED) === o.id); const tab = packingProgress(tabItems); return <button key={o.id} type="button" role="tab" aria-selected={owner === o.id} className={owner === o.id ? "" : "ghost"} onClick={() => { setOwner(o.id); if (o.id !== "all") setNewOwner(o.id); }}>{o.name}<span className="muted"> {tab.packed}/{tab.total}</span></button>; })}</div>
-    {openSettings && <div className="packing-settings-link noprint"><button type="button" className="ghost" data-testid="packing-settings-open" onClick={openSettings}><Settings size={16} />Packing settings: laundry, rewear, travelers & activities</button></div>}
+    {openSettings && <div className="packing-settings-link noprint"><button type="button" className="ghost" data-testid="packing-settings-open" onClick={openSettings}><Settings size={16} />Packing settings</button></div>}
     <div className="packing-filters noprint" role="search" aria-label="Filter packing list">
       <label>Find an item<input type="search" placeholder="Search items or reasons…" value={search} onChange={e => setSearch(e.target.value)} /></label>
       <label>Category<select value={category} onChange={e => setCategory(e.target.value)}><option value="all">All categories</option>{p.groups.map(g => <option key={g.group}>{g.group}</option>)}</select></label>
       <label>Show<select value={status} onChange={e => setStatus(e.target.value)}>{[["all", "All items"], ["unpacked", "Still to pack"], ["need-to-buy", "Need to buy"], ["ready", "Ready"], ["packed", "Packed"], ["essential", "Essentials"], ["departure-day", "Departure day"], ["skipped", "Not needed"]].map(([v, s]) => <option key={v} value={v}>{s}</option>)}</select></label>
       <label>Bag<select value={bag} onChange={e => setBag(e.target.value)}><option value="all">All bags</option>{bagsFor(travelMode).map(b => <option key={b} value={b}>{bagLabel(b, travelMode)}</option>)}</select></label>
-      {members.length > 1 && <label>Show only<select aria-label="Show only" data-testid="packing-show-only" value={owner} onChange={e => { setOwner(e.target.value); if (e.target.value !== "all") setNewOwner(e.target.value); }}><option value="all">Everyone</option><option value={members[0].id}>My list · {members[0].name}</option><option value="shared">Shared</option>{members.slice(1).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>}
+      {members.length > 1 && <label>My stuff<select aria-label="My stuff" data-testid="packing-show-only" value={owner} onChange={e => { setOwner(e.target.value); if (e.target.value !== "all") setNewOwner(e.target.value); }}><option value="all">Everyone</option><option value={members[0].id}>My stuff · {members[0].name}</option><option value="shared">Shared</option>{members.slice(1).map(m => <option key={m.id} value={m.id}>My stuff · {m.name}</option>)}</select></label>}
     </div>
     {message && <p className="packing-message noprint" role="status">{message}</p>}
     {!readOnly && p.lastRemoved && <div className="packing-undo noprint"><span>Last removed: {p.lastRemoved.item.item}</span><button className="ghost" onClick={() => { change(undoPackingRemoval(p)); setMessage("Item restored with its quantity, bag and packed status."); }}>Undo removal</button></div>}
@@ -142,29 +143,67 @@ const DetailedPane = memo(function DetailedPane({ plan, p, readOnly, travelMode,
 export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, travelMode = "flying", onTravelMode, onActivities, onRefreshPlan }: { plan: any; p: PackingList; readOnly: boolean; change: (next: PackingList) => void; setMessage: (m: string) => void; travelMode?: TravelMode; onTravelMode?: (m: TravelMode) => void; onActivities?: (ids: ActivityId[]) => void; onRefreshPlan?: () => void }) {
   const members = p.settings.members?.length ? p.settings.members : [{ id: "traveler-1", name: "Traveler 1" }];
   const kits = p.settings.activityKits ?? inferActivityKits(plan);
+  const days = tripDays(plan.input);
+  const mid = midTripLaundryDay(days);
+  const choice = laundryChoice(days, p.settings.laundryEvery);
   const changeSettings = (patch: Partial<PackingList["settings"]>) => change({ ...p, settings: { ...p.settings, ...patch } });
-  return <section className="packing-settings" aria-labelledby="packing-settings-title" data-testid="packing-settings"><h3 id="packing-settings-title">Packing list settings & personal essentials</h3>
+  const setLaundry = (c: LaundryChoice, custom?: number | null) => changeSettings({ laundryEvery: laundryEveryFromChoice(c, days, custom ?? p.settings.laundryEvery) });
+  const refresh = () => { if (onRefreshPlan) onRefreshPlan(); else change(mergeSuggestions(p, suggestPacking(plan, p.settings))); setMessage("Adds new suggestions and keeps everything you changed."); };
+  return <section className="packing-settings" aria-labelledby="packing-settings-title" data-testid="packing-settings">
     {readOnly && <p className="muted small">Shared plan: settings are view-only.</p>}
-      <fieldset disabled={readOnly} className="packing-edit">
-        <div className="packing-settings-grid"><label>Laundry plan<select value={p.settings.laundryEvery ?? "none"} onChange={e => changeSettings({ laundryEvery: e.target.value === "none" ? null : Number(e.target.value) })}><option value="none">No laundry arranged</option>{Array.from({ length: 30 }, (_, n) => n + 1).map(n => <option key={n} value={n}>Wash every {n} day{n > 1 ? "s" : ""}</option>)}</select></label>
-        <TravelModeField value={travelMode} onChange={onTravelMode} disabled={readOnly} hint="Changing this updates travel labels and packing suggestions. Your edits, checks and removals stay." />
-        <label>Luggage preference<select value={p.settings.luggage} onChange={e => changeSettings({ luggage: e.target.value as "all" | "carry-on" })}><option value="all">Any luggage · assign bags myself</option><option value="carry-on">{travelMode === "driving" ? "Day bags only · keep bags with you" : "Carry-on only · cabin bags"}</option></select></label>
-        <label>Rewear tops<select value={p.settings.rewearTopsEvery ?? 1} onChange={e => changeSettings({ rewearTopsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label>
-        <label>Rewear bottoms<select value={p.settings.rewearBottomsEvery ?? 3} onChange={e => changeSettings({ rewearBottomsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label></div>
+    <fieldset disabled={readOnly} className="packing-edit">
+      <div className="settings-block" data-testid="settings-travelers">
+        <h3 id="packing-settings-title">Travelers</h3>
+        <TravelerFields idPrefix="settings-traveler" members={members} disabled={readOnly} onEdit={(id, patch) => { changeSettings({ members: editTraveler(members, members.length, id, patch) }); if (patch.type !== undefined) setMessage("Type saved. Press Refresh to add items for it — your ticks and edits stay."); }} onEditAll={type => { changeSettings({ members: setAllTypes(members, members.length, type) }); setMessage("Type saved. Press Refresh to add items for it — your ticks and edits stay."); }} />
+        <p className="muted small">Girl, Boy and Infant lists show up under Kids in Simple mode.</p>
+      </div>
+      <div className="settings-block" data-testid="settings-packing">
+        <h3>Packing details</h3>
+        <fieldset className="laundry-choices" data-testid="laundry-choices"><legend>Laundry</legend>
+          {([["none", "No laundry"], ["mid", `Once mid-trip${days ? ` (day ${mid})` : ""}`], ["few", "Every few days"], ["custom", "Custom"]] as const).map(([v, label]) =>
+            <label key={v} className="packing-flag"><input type="radio" name="laundry-choice" checked={choice === v} onChange={() => setLaundry(v)} />{label}</label>)}
+          {choice === "custom" && <label>Wash every <select aria-label="Wash every how many days" value={p.settings.laundryEvery ?? 7} onChange={e => setLaundry("custom", Number(e.target.value))}>{Array.from({ length: 30 }, (_, n) => n + 1).map(n => <option key={n} value={n}>{n} day{n > 1 ? "s" : ""}</option>)}</select></label>}
+        </fieldset>
+        <button type="button" onClick={refresh}>Refresh suggestions</button>
+        <p className="muted small">Adds new suggestions and keeps everything you changed.</p>
+      </div>
+      <details className="settings-advanced" data-testid="settings-advanced">
+        <summary>Advanced (for grown-ups)</summary>
+        <div className="packing-settings-grid">
+          <TravelModeField value={travelMode} onChange={onTravelMode} disabled={readOnly} hint="Updates travel labels and packing ideas. Your ticks and edits stay." />
+          <label>Luggage preference<select value={p.settings.luggage} onChange={e => changeSettings({ luggage: e.target.value as "all" | "carry-on" })}><option value="all">Any luggage · assign bags myself</option><option value="carry-on">{travelMode === "driving" ? "Day bags only · keep bags with you" : "Carry-on only · cabin bags"}</option></select></label>
+          <label>Rewear tops<select value={p.settings.rewearTopsEvery ?? 1} onChange={e => changeSettings({ rewearTopsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label>
+          <label>Rewear bottoms<select value={p.settings.rewearBottomsEvery ?? 3} onChange={e => changeSettings({ rewearBottomsEvery: Number(e.target.value) })}>{[1, 2, 3, 4, 5, 6, 7].map(n => <option key={n} value={n}>{n === 1 ? "Change daily" : `About every ${n} days`}</option>)}</select></label>
+        </div>
         <label className="packing-flag"><input type="checkbox" checked={p.settings.includeSpares !== false} onChange={e => changeSettings({ includeSpares: e.target.checked })} />Add a spare pair of underwear and socks</label>
-        <TravelerFields idPrefix="settings-traveler" members={members} disabled={readOnly} onEdit={(id, patch) => { changeSettings({ members: editTraveler(members, members.length, id, patch) }); if (patch.type !== undefined) setMessage("Traveler type saved. Press Refresh suggestions to add items for it; existing items, checks and edits are kept — remove any that no longer apply."); }} onEditAll={type => { changeSettings({ members: setAllTypes(members, members.length, type) }); setMessage("Traveler type saved. Press Refresh suggestions to add items for it; existing items, checks and edits are kept — remove any that no longer apply."); }} />
-        <p className="muted small">Traveler type picks sensible defaults (Girl, Boy and Infant appear under Kids in Simple mode). Type changes apply when you press Refresh suggestions.</p>
-        <ActivityPicker idPrefix="settings-activity" value={resolveActivities(plan.input)} disabled={readOnly} onChange={(ids: ActivityId[]) => { onActivities?.(ids); setMessage("Activities saved. Press Refresh suggestions to add packing and prep; existing items, checks and edits are kept — remove any that no longer apply."); }} />
-        <fieldset className="packing-kits"><legend>Also pack for</legend><p className="muted small">Business and celebration outfits aren’t in the activity list (they come from Purpose). Other kits stay for older trips. Existing items stay unless you remove them.</p><div className="chips">{ACTIVITY_KITS.filter(k => k === "business" || k === "celebration" || kits.includes(k)).map(k => <label key={k} className="packing-flag"><input type="checkbox" checked={kits.includes(k)} onChange={e => changeSettings({ activityKits: e.target.checked ? [...kits, k] : kits.filter(x => x !== k) })} />{KIT_LABELS[k]}</label>)}</div></fieldset>
-        <p className="muted small">Settings are saved with this trip. Nothing changes automatically: refresh suggestions when ready. Refresh updates only untouched suggestions and adds missing ones; it keeps your edits, checks, not-needed items and removals, and never deletes old items. Review any older suggestions yourself. Changing activities does not refetch weather.</p>
-        <button onClick={() => { if (onRefreshPlan) onRefreshPlan(); else change(mergeSuggestions(p, suggestPacking(plan, p.settings))); setMessage("Suggestions refreshed. Your edits, packed status and removals were kept. Review older items; nothing was deleted."); }}>Refresh suggestions</button>
-        {tripDays(plan.input) > 14 && <p className="warn small">Long trip: tops are capped at 14, underwear/socks at 31 and bottoms at 7. With no laundry arranged you must plan rewear, washing, resupply or edit these quantities. We do not assume facilities.</p>}
-        <p className="muted small">{travelMode === "driving" ? "Bag labels are organization only, not size or weight checks. Check your vehicle's load, local driving, parking and toll rules, and battery or liquid rules if you take a ferry or cross a border. Check plug/voltage and entry requirements with official sources." : "Bag labels are organization only, not size/weight checks or approval to fly. Verify current airline, airport security, battery/liquid and destination rules yourself, including connecting flights. Check plug/voltage and entry requirements with official sources."}</p>
-        {!readOnly && <div className="packing-personal"><h3>Your personal essentials</h3><p className="muted small">Mark items Essential, then save that selection as a reusable template on this browser only. Saving replaces the previous template; checks, trip reasons and removed items are not saved. Avoid sensitive or medical details. The template is not shared; applied items become part of the trip snapshot.</p>
+        <ActivityPicker idPrefix="settings-activity" value={resolveActivities(plan.input)} disabled={readOnly} onChange={(ids: ActivityId[]) => { onActivities?.(ids); setMessage("Activities saved. Press Refresh to add packing items; your ticks and edits stay."); }} />
+        <fieldset className="packing-kits"><legend>Also pack for</legend><p className="muted small">Business and celebration outfits come from Purpose. Other kits stay for older trips.</p><div className="chips">{ACTIVITY_KITS.filter(k => k === "business" || k === "celebration" || kits.includes(k)).map(k => <label key={k} className="packing-flag"><input type="checkbox" checked={kits.includes(k)} onChange={e => changeSettings({ activityKits: e.target.checked ? [...kits, k] : kits.filter(x => x !== k) })} />{KIT_LABELS[k]}</label>)}</div></fieldset>
+        {tripDays(plan.input) > 14 && <p className="warn small">Long trip: clothing quantities are capped. Plan a wash, rewear or a top-up if you have no laundry.</p>}
+        <p className="muted small">{travelMode === "driving" ? "Bag labels are just for organising. Check your vehicle, parking, tolls and any official rules yourself." : "Bag labels are just for organising, not airline approval to fly. Check official size, battery and entry rules yourself."}</p>
+        {!readOnly && <div className="packing-personal"><h3>Your personal essentials</h3><p className="muted small">Mark items Essential, then save that list on this browser only. Avoid sensitive details. The template is not shared.</p>
           <div className="chips"><button className="ghost" onClick={() => { try { const template = makeEssentials(p); if (!template.items.length) throw new Error("Mark at least one active item Essential first."); if (localStorage.getItem(TEMPLATE_KEY) && !confirm("Replace your browser's personal essentials template with this trip's Essential items?")) return; localStorage.setItem(TEMPLATE_KEY, JSON.stringify(parseEssentials(JSON.stringify(template)))); setMessage(`Saved ${template.items.length} personal essentials in this browser.`); } catch (e: any) { setMessage(e.message || "Could not save personal essentials."); } }}>Save essentials</button>
-          <button className="ghost" onClick={() => { try { const text = localStorage.getItem(TEMPLATE_KEY); if (!text) throw new Error("No essentials template yet. Mark items Essential and save one first."); change(applyEssentials(p, parseEssentials(text))); setMessage("Personal essentials applied. Matching items were kept without duplicates or reset checks; missing items were added unpacked."); } catch (e: any) { setMessage(e.message); } }}>Apply essentials</button>
+          <button className="ghost" onClick={() => { try { const text = localStorage.getItem(TEMPLATE_KEY); if (!text) throw new Error("No essentials template yet. Mark items Essential and save one first."); change(applyEssentials(p, parseEssentials(text))); setMessage("Personal essentials applied. Matching items were kept; missing ones were added unpacked."); } catch (e: any) { setMessage(e.message); } }}>Apply essentials</button>
           <button className="ghost" onClick={() => { try { if (confirm("Forget the personal essentials template in this browser? Applied trip items will stay.")) { localStorage.removeItem(TEMPLATE_KEY); setMessage("Personal essentials template forgotten; trip items unchanged."); } } catch { setMessage("Browser storage unavailable."); } }}>Forget template</button></div></div>}
-      </fieldset>
+      </details>
+    </fieldset>
+  </section>;
+}
+
+
+
+function shortItemName(name: string) { return name.replace(/\s*\(~[^)]*\)\s*$/, "").trim(); }
+
+function StartHere({ p, readOnly, onCheck }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void }) {
+  const items = startHereItems(p);
+  if (!items.length) return <p className="packing-encouragement noprint" data-testid="packing-encouragement">{packingEncouragement(p, items)}</p>;
+  return <section className="start-here noprint" data-testid="start-here">
+    <header><h3>Start here</h3><p className="packing-encouragement" data-testid="packing-encouragement">{packingEncouragement(p, items)}</p></header>
+    <ul>{items.map(i => <li key={i.id} className={i.checked ? "packed" : ""}>
+      <input type="checkbox" aria-label={`Pack ${shortItemName(i.item)}`} checked={!!i.checked} disabled={readOnly} onChange={e => onCheck(i.id, e.target.checked)} />
+      <span className="simple-name">{shortItemName(i.item)}</span>
+      {i.quantity > 1 && <span className="simple-qty">{i.quantity} ×</span>}
+      <GrownUpBadge name={i.item} flagged={i.grownUp} />
+    </li>)}</ul>
   </section>;
 }
 
@@ -172,6 +211,13 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
 export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onCheckMany }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany?: (ids: string[], checked: boolean) => void }) {
   const checkMany = onCheckMany || ((ids: string[], checked: boolean) => ids.forEach(id => onCheck(id, checked)));
   const lists = useMemo(() => simpleLists(p), [p]);
+  const members = p.settings.members?.length ? p.settings.members : [];
+  const [stuffOf, setStuffOf] = useState("all");
+  const mine = useMemo(() => {
+    if (stuffOf === "all") return null;
+    const rows = [...lists.adults, ...(lists.kids || [])].filter(r => (r.item.owner || SHARED) === stuffOf);
+    return { rows, grouped: groupSimpleRows(rows) };
+  }, [lists, stuffOf]);
   const adultEntries = useMemo(() => groupSimpleRows(lists.adults), [lists.adults]);
   const kidEntries = useMemo(() => lists.kids ? groupSimpleRows(lists.kids) : null, [lists.kids]);
   const multi = (p.settings.members?.length || 1) > 1;
@@ -195,8 +241,29 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
         : <p className="muted small">No items yet.</p>}
     </section>;
   };
+  const picker = members.length > 1 && <div className="my-stuff-picker noprint" data-testid="my-stuff">
+    <span>Whose bag?</span>
+    <div className="chips" role="tablist" aria-label="My stuff">
+      <button type="button" role="tab" aria-selected={stuffOf === "all"} className={stuffOf === "all" ? "on" : "ghost"} onClick={() => setStuffOf("all")}>Everyone</button>
+      {members.map(m => <button key={m.id} type="button" role="tab" aria-selected={stuffOf === m.id} className={stuffOf === m.id ? "on" : "ghost"} onClick={() => setStuffOf(m.id)}>My stuff · {m.name}</button>)}
+      <button type="button" role="tab" aria-selected={stuffOf === SHARED} className={stuffOf === SHARED ? "on" : "ghost"} onClick={() => setStuffOf(SHARED)}>Shared</button>
+    </div>
+  </div>;
   return <>
-    <div className="simple-screen noprint">{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</div>
+    <div className="simple-screen noprint">
+      {picker}
+      {mine
+        ? <section className="simple-list my-stuff" aria-label="My stuff" data-testid="my-stuff-list">
+            <header><h3>My stuff{stuffOf !== SHARED && members.find(m => m.id === stuffOf) ? ` · ${members.find(m => m.id === stuffOf)!.name}` : stuffOf === SHARED ? " · Shared" : ""}</h3>
+              <span className="muted small">{mine.rows.filter(r => !r.item.skipped && r.item.checked).length}/{mine.rows.filter(r => !r.item.skipped).length} packed</span></header>
+            <p className="muted small">Tick each thing as you put it in the bag.</p>
+            {mine.rows.length ? <ul>{mine.grouped.entries.map(e => e.kind === "shared"
+              ? <SimpleSharedRow key={e.row.item.id} row={{ ...e.row, item: { ...e.row.item, item: shortItemName(e.row.item.item) } }} readOnly={readOnly} print={false} onCheck={onCheck} />
+              : <SimpleGroupRow key={e.group.key} g={e.group} multi={false} title="My stuff" readOnly={readOnly} print={false} onCheck={onCheck} onCheckMany={checkMany} />)}</ul>
+              : <p className="muted small">No items on this list yet.</p>}
+          </section>
+        : <>{list("Adults", adultEntries, lists.adults, false)}{kidEntries && list("Kids", kidEntries, lists.kids!, false)}</>}
+    </div>
     {forPrint && <div className="packing-print simple-print">{list("Adults", adultEntries, lists.adults, true)}{kidEntries && list("Kids", kidEntries, lists.kids!, true)}</div>}
   </>;
 });
@@ -231,7 +298,7 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
       : <input type="checkbox" aria-label={`Pack ${label} for everyone`} checked={allPacked} ref={el => { if (el) el.indeterminate = some; }} disabled={readOnly || !g.total} onChange={() => onCheckMany(ids, !allPacked)} />}
     <span className="simple-name">{label}</span>
     <small className="simple-progress">{g.packed}/{g.total} packed</small>
-    {!print && !readOnly && g.total > 0 && <button type="button" className="ghost simple-mark-all" onClick={() => onCheckMany(ids, !allPacked)}>{allPacked ? "Unpack all" : "Mark all packed"}</button>}
+    {!print && !readOnly && g.total > 0 && <button type="button" className="ghost simple-mark-all" onClick={() => { if (!allPacked && shouldConfirmMarkAll(g) && typeof confirm === "function" && !confirm(`Mark packed for ${g.rows.map(r => r.ownerName).join(", ")}?`)) return; onCheckMany(ids, !allPacked); }}>{allPacked ? "Unpack all" : "Mark all packed"}</button>}
     {!print && <button type="button" className="ghost simple-expand" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Hide people" : "Show people"}</button>}
     {print && <small className="simple-owner">{g.rows.map(r => r.ownerName).join(", ")}</small>}
     {open && !print && <ul className="simple-people">{g.rows.map(({ item: i, ownerName }) => <li key={i.id} className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={i.id}>
