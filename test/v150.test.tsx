@@ -80,8 +80,10 @@ test("v1.15: drive card uses a road route, plain language, and borders only when
 
 test("v1.15: long-drive Day 1 is a rest day and suggests a midpoint overnight over 10 hours", () => {
   const days = itinerary(familyInput(), wx(), parks as any, [], [], { domestic: true, travelMode: "driving", driveMin: 17 * 60, overnightStop: "Knoxville", countryCode: "US" });
-  assert.equal(days[0].morning, KIDS_DRIVE_DAY);
-  assert.match(days[0].afternoon, /overnight stop in Knoxville/);
+  assert.match(days[0].morning, /Drive day — about 8 h to Knoxville; overnight there/);
+  assert.match(days[0].afternoon, /Overnight in Knoxville/);
+  assert.match(days[1].morning, /Finish the drive \(~9 h\) and check in/);
+  assert.ok(!isMajorAttraction(days[1].morning) && !isMajorAttraction(days[1].afternoon), days[1].morning + days[1].afternoon);
   assert.ok(!/neighbourhood walk|local currency|SIM/i.test(`${days[0].morning} ${days[0].afternoon}`));
   const mid = itinerary(familyInput(), wx(), parks as any, [], [], { domestic: true, travelMode: "driving", driveMin: 7 * 60, countryCode: "US" });
   assert.equal(mid[0].morning, KIDS_DRIVE_DAY);

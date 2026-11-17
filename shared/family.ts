@@ -83,6 +83,32 @@ export function farDayTrip(h: { dayTrip?: boolean; driveMin?: number; distanceKm
 }
 
 export const KIDS_DRIVE_DAY = "Drive day: break every 2 hours; check in & rest";
+
+/** Split a long overnight drive into two legs, rounding so the first is the shorter whole hour. */
+export function overnightDriveHours(driveMin: number): { firstH: number; secondH: number } {
+  const total = Math.max(1, Number(driveMin) / 60);
+  const firstH = Math.max(1, Math.floor(total / 2));
+  const secondH = Math.max(1, Math.round(total - firstH));
+  return { firstH, secondH };
+}
+export function overnightStopName(stop?: string | null): string {
+  const s = (stop || "").trim();
+  return s && s !== "a town around the midpoint" ? s : "a midpoint town";
+}
+export function overnightDay1Morning(stop: string | null | undefined, driveMin: number): string {
+  const { firstH } = overnightDriveHours(driveMin);
+  return `Drive day — about ${firstH} h to ${overnightStopName(stop)}; overnight there`;
+}
+export function overnightDay2Morning(driveMin: number): string {
+  const { secondH } = overnightDriveHours(driveMin);
+  return `Finish the drive (~${secondH} h) and check in`;
+}
+/** Arrive/depart days, long drive days, and the morning after an overnight midpoint. */
+export function isTravelOrLeaveDay(d: { label?: string; morning?: string } | string): boolean {
+  const text = typeof d === "string" ? d : `${d.label || ""} ${d.morning || ""}`;
+  return /Arrive|Depart|Finish the drive|Drive day/i.test(text);
+}
+
 export const KIDS_POOL_REST = "🏊 Hotel pool or a quiet rest at the hotel";
 
 function stripAlsoNearbyMajor(text: string): string {
@@ -93,7 +119,7 @@ function stripAlsoNearbyMajor(text: string): string {
 export function paceItineraryForKids<T extends { morning: string; afternoon: string; evening?: string; notes?: string; label?: string }>(days: T[], input: any): T[] {
   if (!tripHasKids(input) || !days?.length) return days;
   for (const d of days) {
-    if (/Arrive|Depart/i.test(d.label || "")) continue;
+    if (isTravelOrLeaveDay(d)) continue;
     d.afternoon = stripAlsoNearbyMajor(d.afternoon || "");
     const morningMajor = isMajorAttraction(d.morning || "");
     const afternoonMajor = isMajorAttraction(d.afternoon || "");
@@ -104,7 +130,7 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
       d.notes = d.notes ? `${d.notes} · with kids — one main attraction per day` : "with kids — one main attraction per day";
     }
   }
-  const parkDay = days.find(d => isMajorAttraction(`${d.morning} ${d.afternoon}`) && !/Arrive|Depart/i.test(d.label || ""));
+  const parkDay = days.find(d => isMajorAttraction(`${d.morning} ${d.afternoon}`) && !isTravelOrLeaveDay(d));
   if (parkDay && !/height limits/i.test(days.map(d => d.notes || "").join(" "))) {
     parkDay.notes = parkDay.notes ? `${parkDay.notes} · Some rides have height limits — check with a grown-up` : "Some rides have height limits — check with a grown-up";
   }
@@ -130,7 +156,7 @@ export function fillPreferredParks<T extends { morning: string; afternoon: strin
   for (const d of days) for (const h of highlights) if (h?.name && mentioned(d).includes(h.name)) used.add(h.name);
   const leftover = highlights.filter(h => h?.name && brands.some(b => matchesBrand(h.name, b)) && !used.has(h.name));
   for (const d of days) {
-    if (/Arrive|Depart/i.test(d.label || "") || !leftover.length) continue;
+    if (isTravelOrLeaveDay(d) || !leftover.length) continue;
     if (brands.some(b => matchesBrand(d.morning || "", b) || matchesBrand(d.afternoon || "", b))) continue;
     const next = leftover.shift()!;
     used.add(next.name);

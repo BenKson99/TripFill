@@ -10,7 +10,7 @@ import {
 import { driveLabel } from "./plan.js";
 import { dedupeItineraryPlaces, releasePlaceFromOtherSlots } from "./itineraryPlaces.js";
 import { presetItinerary, type Preset } from "./presets.js";
-import { farDayTrip, paceItineraryForKids, fillPreferredParks } from "../shared/family.js";
+import { farDayTrip, paceItineraryForKids, fillPreferredParks, isTravelOrLeaveDay } from "../shared/family.js";
 
 export function fitContext(w: WeatherResult, placeName?: string): FitCtx {
   return fitContextFromWeather(w, placeName);
@@ -141,7 +141,7 @@ function pickPlace(id: ActivityId, hl: Highlight[], used: Set<string>, inp: Trip
 /** Place every suitable activity at least once when mid-days allow, in its preferred slot, using real places. */
 export function scheduleActivities(days: ItinDay[], inp: TripInput, w: WeatherResult, hl: Highlight[] = [], placeName?: string) {
   if (days.length < 2) return;
-  const mid = days.slice(1, days.length - 1);
+  const mid = days.slice(1, days.length - 1).filter(d => !isTravelOrLeaveDay(d));
   if (!mid.length) return;
   const ctx = fitContext(w, placeName);
   const raw = resolveActivities(inp);

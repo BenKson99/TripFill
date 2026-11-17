@@ -1,7 +1,5 @@
 import { safeUrl } from "../shared/portable";
 import { useEffect, useRef } from "react";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
 type Any = any;
 const plainTooltip = (text: string) => { const span = document.createElement("span"); span.textContent = text; return span; };
 
@@ -21,9 +19,16 @@ export function pinsFor(highlights: Any[], itinerary: Any[]): Pin[] {
 }
 
 export function MapView({ pins, center, legend, route }: { pins: Pin[]; center: { lat: number; lon: number; name?: string }[]; route?: boolean; legend: { label: string; color: string }[] }) {
-  const el = useRef<HTMLDivElement>(null); const map = useRef<L.Map | null>(null);
+  const el = useRef<HTMLDivElement>(null); const map = useRef<{ remove: () => void } | null>(null);
   useEffect(() => {
     if (!el.current) return;
+    let dead = false, ro: ResizeObserver | undefined;
+    const node = el.current;
+    (async () => {
+    const mod = await import("leaflet");
+    await import("leaflet/dist/leaflet.css");
+    const L = (mod as any).default || mod;
+    if (dead || !el.current) return;
     const m = L.map(el.current, { scrollWheelZoom: false });
     map.current = m;
     // OSM tile usage policy: visible attribution, standard tile URL, no bulk/prefetch; the browser sends its own UA + Referer.
@@ -42,8 +47,9 @@ export function MapView({ pins, center, legend, route }: { pins: Pin[]; center: 
       pts.push([p.lat, p.lon]);
     }
     if (pts.length > 1) m.fitBounds(L.latLngBounds(pts), { padding: [30, 30], maxZoom: 15 }); else if (pts.length) m.setView(pts[0], 12);
-    const ro = new ResizeObserver(() => m.invalidateSize()); ro.observe(el.current);
-    return () => { ro.disconnect(); m.remove(); map.current = null; };
+    ro = new ResizeObserver(() => m.invalidateSize()); ro.observe(node);
+    })().catch(() => {});
+    return () => { dead = true; ro?.disconnect(); map.current?.remove(); map.current = null; };
   }, [JSON.stringify(pins), JSON.stringify(center), route]);
   return (
     <div>

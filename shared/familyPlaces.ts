@@ -35,7 +35,7 @@ export function familyPlaceScore(h: { name?: string; type?: string; description?
   if (/playground|kids[_\s-]?area/i.test(blob(h))) s += 3;
   if (/zoo|aquarium/i.test(blob(h))) s += 3;
   if (/museum|gallery/i.test(blob(h)) && /child|kids|family/i.test(blob(h))) s += 2;
-  if (h.indoor || h.setting === "indoor") s += 1;
+  if ((h.indoor || h.setting === "indoor") && !isOutdoorFamilyPlace(h)) s += 1;
   if (isBarStyleVenue(h)) s -= 6;
   return s;
 }
@@ -43,6 +43,15 @@ export function familyPlaceScore(h: { name?: string; type?: string; description?
 export function sortForFamily<T>(list: T[], kids: boolean): T[] {
   if (!kids || !list?.length) return list;
   return [...list].sort((a, b) => familyPlaceScore(b as any) - familyPlaceScore(a as any));
+}
+
+/** Gardens, parks, zoos and theme parks are outdoor even if a data source marked them indoor or mixed. */
+export function isOutdoorFamilyPlace(h: { name?: string; type?: string; description?: string; tag?: string; setting?: string }): boolean {
+  const t = blob(h);
+  if (/\bindoor\s+(park|playground|garden|soft\s*play)\b/i.test(t)) return false;
+  if (/\b(theme park|amusement park|water park|zoo|botanical garden|nature reserve|arboretum|playground|play\s*area)\b/i.test(t)) return true;
+  if (/\b(garden|park|trail|beach)\b/i.test(t) && !/\b(car park|parking|business park|industrial park|trailer park|theme park building)\b/i.test(t)) return true;
+  return false;
 }
 
 /** Plain reason for a highlight. Never returns raw OSM/Wikidata class lists. */
@@ -54,6 +63,7 @@ export function highlightReason(h: { name?: string; type?: string; description?:
   if (/children'?s?\s*museum|family\s*museum|science (centre|center)/i.test(t)) return "Good for kids: museum";
   if (/theme park|amusement park|water park/i.test(t)) return "A full park day — go early and rest after";
   if (isBarStyleVenue(h)) return kids ? "Evening spot — better for grown-ups" : "Nightlife";
+  if (isOutdoorFamilyPlace(h)) return "Outdoor — check the weather";
   if (h.indoor || h.setting === "indoor" || h.setting === "mixed") return "Indoor — good if it rains";
   if (h.setting === "outdoor" || /outdoor|park|garden|trail|beach/i.test(t)) return "Outdoor — check the weather";
   return "";

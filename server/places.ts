@@ -91,6 +91,11 @@ const INDOOR_C = /museum|gallery|theatre|theater|opera house|concert hall|aquari
 const MIXED_C = /winery|vineyard|wine estate|palace|castle|monastery|abbey|temple|shrine|fortress|fort\b|citadel|zoo|botanical garden|tower|observation|complex|market|historic site|world heritage|ruins|mausoleum|imperial|royal residence|lift|elevator/i;
 const OUTDOOR_C = /park|garden|square|plaza|bridge|monument|statue|memorial|viewpoint|street|avenue|beach|lake|river|mountain|hill|fountain|gate|arch|cemetery|neighbo|promenade|pier|waterfront|landmark/i;
 function setting(text: string): Setting {
+  // Gardens, parks, zoos and theme parks are outdoor, even if another class looks indoor or mixed.
+  if (/\b(theme park|amusement park|water park|zoo|botanical garden|nature reserve|arboretum|playground)\b/i.test(text)
+    || (/\b(garden|park|trail|beach)\b/i.test(text) && !/\b(car park|parking|business park|industrial park|museum|gallery|theatre|theater)\b/i.test(text))) {
+    return "outdoor";
+  }
   if (MIXED_C.test(text)) return "mixed";
   if (INDOOR_C.test(text)) return "indoor";
   if (OUTDOOR_C.test(text)) return "outdoor";
@@ -250,7 +255,7 @@ function haversine(a: { lat: number; lon: number }, b: { lat: number; lon: numbe
 type PlacesOut = { highlights: Highlight[]; indoorExtra: Highlight[]; eats: Eats; sources: string[]; guideUrl?: string };
 /** Whole-place result cached in memory + on disk for 24 h (repeat or shared trips are instant). */
 export function getPlaces(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
-  return cached(`places|v16|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
+  return cached(`places|v17|${p.name}|${p.lat.toFixed(3)},${p.lon.toFixed(3)}|${!!opts.ski}|${opts.want || 14}`, async () => { const r = await getPlaces0(p, opts); return r.highlights.length >= 8 && r.eats.restaurants.length >= 4 ? r : (null as any); /* never cache a throttled/partial result */ }).then(async r => structuredClone(r ?? await getPlaces0(p, opts)));
 }
 async function getPlaces0(p: Place, opts: { ski?: boolean; want?: number } = {}): Promise<PlacesOut> {
   const sources: string[] = [];

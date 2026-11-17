@@ -63,7 +63,7 @@ export function PackingWorkspace({ plan, readOnly, onChange, T, settingsSlot = n
   const toggle = <div className="packing-mode noprint"><button type="button" role="switch" aria-checked={isSimple} data-testid="simple-toggle" className={isSimple ? "on" : "ghost"} onClick={() => { const next = !isSimple; if (simple === undefined) setSimplePacking(next); onSimpleChange?.(next); }}><span className="switch-dot" aria-hidden />Simple mode</button><span className="muted small">{isSimple ? "Just the lists. Switch off for categories, bags, status and filters." : "Show just an Adults list (and Kids, if any)."}</span></div>
   return <div className={`packing-workspace${isSimple ? " packing-simple" : ""}`} data-testid="packing-workspace">
     {toggle}
-    <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} />
+    <StartHere p={p} readOnly={readOnly} onCheck={onCheckItem} T={T} />
     {settingsSlot && createPortal(<PackingSettingsPanel plan={plan} p={p} readOnly={readOnly} change={change} setMessage={setMessage} travelMode={travelMode} onTravelMode={onTravelMode} onActivities={onActivities} onRefreshPlan={onRefreshPlan} />, settingsSlot)}
     {mountedSimple && <div hidden={isSimple ? false : undefined} className={isSimple ? undefined : "noprint packing-simple-preload"} aria-hidden={!isSimple} data-testid="packing-simple-pane"><SimpleLists p={p} readOnly={readOnly} onCheckMany={checkMany} onCheck={onCheckItem} /></div>}
     {mountedDetailed && <div hidden={isSimple} className={isSimple ? "noprint" : undefined} data-testid="packing-detailed-pane">
@@ -90,7 +90,7 @@ const DetailedPane = memo(function DetailedPane({ plan, p, readOnly, travelMode,
       {printing ? <><span>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span><div><b>{i.quantity} × {i.item}</b> <GrownUpBadge name={i.item} flagged={i.grownUp} /><div className="small">{bagLabel(i.bag, travelMode)} · {stageLabel(i)}{i.essential ? " · Essential" : " · Optional"}{i.lastMinute ? " · Departure day" : ""} · {ownerLabel(p, i.owner || SHARED)}</div><small>{T(i.reason)}</small></div></> : <>
         <div className="packing-check"><ChecklistCheckbox aria-label={`Pack ${i.item}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => edit(i.id, { checked: e.target.checked })} /></div>
         <div className="packing-content">
-          <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={i.item} onChange={item => edit(i.id, { item: item.slice(0, 300) })} /><GrownUpBadge name={i.item} flagged={i.grownUp} />
+          <fieldset disabled={readOnly} className="packing-edit"><ChecklistText value={T(i.item)} onChange={item => edit(i.id, { item: item.slice(0, 300) })} /><GrownUpBadge name={i.item} flagged={i.grownUp} />
             <div className="packing-meta"><label>Qty<input aria-label={`Quantity for ${i.item}`} type="number" min={1} max={999} value={i.quantity} onChange={e => edit(i.id, { quantity: quantity(Number(e.target.value)) })} /></label>
               <LazySelect label="Bag" aria-label={`Bag for ${i.item}`} value={i.bag} options={bagsFor(travelMode, i.bag).map(b => ({ value: b, label: bagLabel(b, travelMode) }))} onChange={v => edit(i.id, { bag: v as PackingItem["bag"] })} />
               <LazySelect label="List" aria-label={`List for ${i.item}`} value={i.owner || SHARED} options={[{ value: SHARED, label: "Shared" }, ...members.map(m => ({ value: m.id, label: m.name }))]} onChange={v => edit(i.id, { owner: v })} />
@@ -193,14 +193,14 @@ export function PackingSettingsPanel({ plan, p, readOnly, change, setMessage, tr
 
 function shortItemName(name: string) { return name.replace(/\s*\(~[^)]*\)\s*$/, "").trim(); }
 
-function StartHere({ p, readOnly, onCheck }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void }) {
+function StartHere({ p, readOnly, onCheck, T = (s: string) => s }: { p: PackingList; readOnly: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string }) {
   const items = startHereItems(p);
-  if (!items.length) return <p className="packing-encouragement noprint" data-testid="packing-encouragement">{packingEncouragement(p, items)}</p>;
+  if (!items.length) return <p className="packing-encouragement noprint" data-testid="packing-encouragement">{T(packingEncouragement(p, items))}</p>;
   return <section className="start-here noprint" data-testid="start-here">
-    <header><h3>Start here</h3><p className="packing-encouragement" data-testid="packing-encouragement">{packingEncouragement(p, items)}</p></header>
+    <header><h3>Start here</h3><p className="packing-encouragement" data-testid="packing-encouragement">{T(packingEncouragement(p, items))}</p></header>
     <ul>{items.map(i => <li key={i.id} className={i.checked ? "packed" : ""}>
-      <input type="checkbox" aria-label={`Pack ${shortItemName(i.item)}`} checked={!!i.checked} disabled={readOnly} onChange={e => onCheck(i.id, e.target.checked)} />
-      <span className="simple-name">{shortItemName(i.item)}</span>
+      <input type="checkbox" aria-label={`Pack ${T(shortItemName(i.item))}`} checked={!!i.checked} disabled={readOnly} onChange={e => onCheck(i.id, e.target.checked)} />
+      <span className="simple-name">{T(shortItemName(i.item))}</span>
       {i.quantity > 1 && <span className="simple-qty">{i.quantity} ×</span>}
       <GrownUpBadge name={i.item} flagged={i.grownUp} />
     </li>)}</ul>

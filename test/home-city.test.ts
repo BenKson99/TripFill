@@ -33,7 +33,7 @@ test("v1.12.1: the server geocodes typed homeCity like destination, and errors i
   assert.equal(reused, detroit);
   const switched = await resolveHomeCity({ homeCity: "Chicago", home: detroit }, async q => { assert.equal(q, "Chicago"); return [chicago]; });
   assert.equal(switched, chicago);
-  await assert.rejects(() => resolveHomeCity({ homeCity: "NotAPlace" }, async () => []), { message: 'Couldn\'t find home city "NotAPlace"', status: 404 });
+  await assert.rejects(() => resolveHomeCity({ homeCity: "NotAPlace" }, async () => []), { message: "We couldn't find that home town. Check the spelling or try a bigger city nearby.", status: 404 });
   assert.equal(await resolveHomeCity({ home: detroit }, async () => { throw new Error("must not geocode"); }), detroit, "older clients that only send home still work");
   assert.equal(await resolveHomeCity({}, async () => { throw new Error("no"); }), undefined);
 });

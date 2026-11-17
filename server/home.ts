@@ -1,3 +1,4 @@
+import { friendlyError } from "../shared/friendlyError.js";
 import { geocode, type Place } from "./weather.js";
 import { homeLookupQuery } from "../shared/homeCity.js";
 
@@ -10,6 +11,6 @@ export async function resolveHomeCity(inp: any, lookup: (q: string) => Promise<P
   const look = homeLookupQuery(typed, given);
   if (look.reuse) return look.reuse as unknown as Place;
   const matches = await lookup(look.query!);
-  if (!matches.length) throw Object.assign(new Error(`Couldn't find home city "${typed.trim()}"`), { status: 404 });
+  if (!matches.length) throw Object.assign(new Error(friendlyError(`Couldn't find home city "${typed.trim()}"`)), { status: 404 });
   return matches[0];
 }

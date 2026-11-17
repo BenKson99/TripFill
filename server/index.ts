@@ -1,3 +1,4 @@
+import { friendlyError } from "../shared/friendlyError.js";
 import { validDate } from "../shared/portable.js";
 import { dietaryEats, normalizePreferences, preferredHighlights, walkingNotes } from "./preferences.js";
 import { readFileSync as __rf } from "node:fs";
@@ -70,7 +71,7 @@ app.post("/api/generate", async (req, res) => {
     let place = inp.place;
     if (!place) {
       const matches = await geocode(inp.destination);
-      if (!matches.length) return res.status(404).json({ error: `Couldn't find "${inp.destination}"` });
+      if (!matches.length) return res.status(404).json({ error: friendlyError(`Couldn't find "${inp.destination}"`) });
       // Prefer real towns/cities over islands, glaciers and other natural features (Tromsø)
       const towns = matches.filter(isPopulated);
       const distinct = (towns.length ? towns : matches).filter(m => (m.population ?? 0) > 0 || matches.length === 1 || towns.length === 1);
@@ -119,7 +120,7 @@ app.post("/api/generate", async (req, res) => {
       activityNotes: activityNotes(inp, weather, place.name),
       budget: await budget(place.countryCode, nights, travelers, inp.style || "Mix", process.env.NODE_ENV === "production" ? undefined : (req.body as any).fxForce, facts ? { km: facts.distanceKm, roundTrip: true, from: facts.home.name } : undefined),
     });
-  } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: e.message || "Generation failed" }); }
+  } catch (e: any) { console.error(e); res.status(e.status || 502).json({ error: friendlyError(e) }); }
 });
 
 app.get("/healthz", (_q, r) => r.json({ ok: true, version: APP_VERSION, uptime: Math.round(process.uptime()), shareStore: shareStore() }));

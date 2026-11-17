@@ -8,7 +8,7 @@ import { isRealisticDayTrip } from "../shared/activities.js";
 import type { Highlight } from "./places.js";
 import { preferredHighlights } from "./preferences.js";
 import type { Eat } from "./eats.js";
-import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY } from "../shared/family.js";
+import { tripHasKids, isMajorAttraction, isCompetitorPark, interestBrands, matchesBrand, farDayTrip, holidayNote, paceItineraryForKids, applyHolidayNotes, KIDS_DRIVE_DAY, overnightDay1Morning, overnightDay2Morning, overnightStopName } from "../shared/family.js";
 import { formatShortDuration } from "../shared/distance.js";
 
 export interface TripInput { destination: string; start: string; end: string; travelers?: number; purpose?: string; style?: "Slow" | "Packed" | "Mix"; interests?: string; dietaryNeeds?: string; walkingTolerance?: string; home?: Place; travelMode?: "flying" | "driving"; presets?: string[]; activities?: import("../shared/activities.js").ActivityId[] }
@@ -57,18 +57,23 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
   return days.map((d, i) => {
     const kind = precipKind(d); const rain = kind === "rain"; const ski = ((inp as any).presets || []).includes("ski") || ((inp as any).activities || []).includes("ski") || /ski|snowboard/i.test(`${inp.purpose || ""} ${inp.interests || ""}`);
     const wx = `${d.typical ? "Seasonal estimate (not forecast)" : "Open-Meteo forecast"} · ${d.summary || ""} {t:${d.tmin}}–{t:${d.tmax}}${d.precipProb != null ? `, ${d.precipProb}%${precipProbLabel(d, kind)}`.replace("sampled years", "past years") : ""}`.trim();
+    const driveMin = opts.driveMin ?? 0;
+    const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
+    const overnight = drivingLong && driveMin >= 10 * 60;
+    const stop = (opts.overnightStop || "").trim();
     if (i === 0) {
-      const driveMin = opts.driveMin ?? 0;
-      const drivingLong = (opts.travelMode || resolveTravelMode(inp)) === "driving" && driveMin >= 6 * 60;
-      const overnight = drivingLong && driveMin >= 10 * 60;
-      const stop = (opts.overnightStop || "").trim();
-      const morning = drivingLong ? KIDS_DRIVE_DAY : "Travel & check in";
-      const afternoon = drivingLong
-        ? (overnight ? (stop && stop !== "a town around the midpoint" ? `Consider an overnight stop in ${stop} around the midpoint, then check in & rest` : "Consider an overnight stop around the midpoint, then check in & rest")
-          : "Check in & rest — skip the neighbourhood walk today")
-        : (opts.domestic === true ? "Easy walk around your neighbourhood" : "Easy walk around your neighbourhood; get local currency/SIM");
-      const notes = overnight && drivingLong && !stop ? "Consider an overnight stop around the midpoint" : (holidayNote(d.date, opts.countryCode) || "");
-      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · Arrive`, weather: wx, morning, afternoon, evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes };
+      const morning = overnight ? overnightDay1Morning(stop, driveMin) : drivingLong ? KIDS_DRIVE_DAY : "Travel & check in";
+      const afternoon = overnight
+        ? `Overnight in ${overnightStopName(stop)} — no need to reach ${inp.destination || "your destination"} today`
+        : drivingLong
+          ? "Check in & rest — skip the neighbourhood walk today"
+          : (opts.domestic === true ? "Easy walk around your neighbourhood" : "Easy walk around your neighbourhood; get local currency/SIM");
+      const notes = overnight && !stop ? "Consider an overnight stop around the midpoint" : (holidayNote(d.date, opts.countryCode) || "");
+      const tag = overnight ? "Drive" : "Arrive";
+      return { date: d.date, label: `Day 1 · ${fmt(d.date)} · ${tag}`, weather: wx, morning, afternoon, evening: overnight ? `Dinner and an early night in ${overnightStopName(stop)}` : (food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay"), notes };
+    }
+    if (overnight && i === 1 && days.length > 2) {
+      return { date: d.date, label: `Day 2 · ${fmt(d.date)} · Arrive`, weather: wx, morning: overnightDay2Morning(driveMin), afternoon: "Check in & rest — skip the neighbourhood walk today", evening: food[0] ? `Dinner nearby: ${food[0].name}` : "Relaxed dinner near your stay", notes: holidayNote(d.date, opts.countryCode) || "" };
     }
     if (i === days.length - 1 && days.length > 1) return { date: d.date, label: `Day ${i + 1} · ${fmt(d.date)} · Depart`, weather: wx, morning: "Pack & check out", afternoon: departAfternoon(resolveTravelMode(inp)), evening: "Travel home", notes: holidayNote(d.date, opts.countryCode) || "" };
     const unusedPreferred = () => queue.filter(x => interestBrands(inp.interests || "").some(b => matchesBrand(x.name, b)));

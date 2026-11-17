@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { placeLabel } from "../shared/homeCity";
+import { friendlyError } from "../shared/friendlyError";
 import { resolveTravelMode, formatTripTravel, type TravelMode } from "../shared/travel";
 import type { DistanceUnit } from "../shared/distance";
 import { TravelModeField } from "./TravelMode";
@@ -29,14 +30,14 @@ export function HomeCityField({ value, onChange, text, onText, error }: { value:
       if (!res.length) { setState(`Couldn't find "${t}"`); return; }
       const best = [...res].sort((a, b) => (b.population || 0) - (a.population || 0))[0];
       onChange(best); onText(placeLabel(best)); setOpts(res.filter(x => x.id !== best.id).slice(0, 4)); setState("");
-    } catch { setState("Geocoding failed"); }
+    } catch (e) { setState(friendlyError(e)); }
   }
   const msg = error || state;
   return (
     <label className="wide">Home city <small className="muted">(optional — for travel time, time difference, domestic/intl.)</small>
       <input data-testid="home-city" placeholder="e.g. Detroit" value={text} onChange={e => onText(e.target.value)} onBlur={resolve}
-        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); resolve(); } }} aria-invalid={!!error || (state.startsWith("Couldn't") || state === "Geocoding failed") || undefined} />
-      {msg && <small className={error || state.startsWith("Couldn't") || state === "Geocoding failed" ? "warn" : "muted"} data-testid="home-city-status" role={error || state.startsWith("Couldn't") ? "alert" : undefined}>{msg}</small>}
+        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); resolve(); } }} aria-invalid={!!error || (!!state && !state.startsWith("…")) || undefined} />
+      {msg && <small className={error || (state && !state.startsWith("…")) ? "warn" : "muted"} data-testid="home-city-status" role={error || (state && !state.startsWith("…")) ? "alert" : undefined}>{msg}</small>}
       {opts.length > 0 && <WrongPlace alts={opts} onPick={o => { onChange(o); setOpts([]); }} resolved={!!value} />}
     </label>
   );

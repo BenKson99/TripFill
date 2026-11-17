@@ -106,7 +106,21 @@ export function decodePlan(hash: string): any {
   const text = boundedDecompress(hash, MAX_PLAN_BYTES); if (!text) fail("Share link is damaged or truncated. Ask the sender for a fresh link or JSON export."); return parsePlan(text);
 }
 export const STORAGE_KEY = "tripfill:v1";
-export function readSaved(storage: Pick<Storage, "getItem">) { const text = storage.getItem(STORAGE_KEY); if (!text) return null; const v = JSON.parse(text); return { form: { ...v.form, ...normalizePreferences(v.form) }, plan: v.plan ? parsePlan(JSON.stringify(v.plan)) : null }; }
+function safeForm(form: any) {
+  try { return { ...(form && typeof form === "object" ? form : {}), ...normalizePreferences(form || {}) }; }
+  catch { return { ...normalizePreferences(), destination: "", start: "", end: "", travelers: 2 }; }
+}
+/** Load a saved trip, keeping the form even if the plan is malformed or from an older shape. */
+export function readSaved(storage: Pick<Storage, "getItem">): { form: any; plan: any; error?: string } | null {
+  const text = storage.getItem(STORAGE_KEY);
+  if (!text) return null;
+  let v: any;
+  try { v = JSON.parse(text); } catch { return { form: safeForm(null), plan: null, error: "We couldn't read your saved trip. Start a new one — a backup may still be in this browser." }; }
+  const form = safeForm(v?.form);
+  if (!v?.plan) return { form, plan: null };
+  try { return { form, plan: parsePlan(JSON.stringify(v.plan)) }; }
+  catch { return { form, plan: null, error: "We couldn't load every detail of your saved trip. Your form answers are still here — try generating again, or import a JSON backup." }; }
+}
 export function savePlan(storage: Pick<Storage, "setItem">, form: any, plan: any) { storage.setItem(STORAGE_KEY, JSON.stringify({ form, plan })); }
 
 /** Legacy mixed plans lacking per-day evidence do not acquire an invented forecast label. */

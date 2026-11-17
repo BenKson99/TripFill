@@ -55,7 +55,7 @@ function Section({ id, title, summary, collapsed, idx, count, onToggle, onMove, 
         <button ref={setActivatorNodeRef} className="handle noprint" aria-label={`Drag to reorder ${title}`} {...attributes} {...listeners}><GripVertical size={18} /></button>
         <button className="sec-toggle" aria-expanded={!collapsed} aria-controls={bodyId} onClick={onToggle}>
           <span className="chev" aria-hidden><ChevronRight size={18} /></span>{ICONS[id] && <span className="sec-icon" aria-hidden>{ICONS[id]}</span>}
-          <h2>{title}</h2>
+          <h2 id={id === "itinerary" ? "day-by-day" : undefined}>{title}</h2>
           {collapsed && <span className="sec-sum">{summary}</span>}
         </button>
         <div className="sec-tools noprint">

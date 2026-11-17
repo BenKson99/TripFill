@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.16.1 — Kid-friendliness batch 3
+
+- Reloading a saved trip no longer shows a blank page. A local `placeLabel` helper had been shadowing the import and crashed `useState` when a home city was already in this browser. Loading is also more tolerant of malformed or older saved plans.
+- A recovery screen appears if rendering still fails: “Something went wrong loading your trip”, with Try again and Start a new trip (keeps a backup).
+- “Day by day ↓” now scrolls to the Day by day heading (`#day-by-day`), with room for the sticky tab bar.
+- Locale-aware English: US and other non-UK homes see American wording (Driver’s license, diapers, sweater, neighborhood, tires) from a central dictionary. UK homes keep UK wording. “Travel home” is unchanged.
+- Gardens, parks, zoos and theme parks never get the reason “Indoor — good if it rains” (Harry P. Leu Gardens is “Outdoor — check the weather”).
+- When a long drive suggests an overnight midpoint, Day 1 is “Drive day — about 10 h to Knoxville; overnight there” and Day 2 morning is “Finish the drive (~11 h) and check in”, with no major park that day. Parks shift later.
+- “What to wear” still uses stored °C so a °F display does not change the advice; other new weather text goes through the unit converter. US wording such as “sweater” is applied with the locale dictionary.
+- The Plan form is numbered (1 Where, 2 When, 3 Who, 4 How you’ll get there, 5 What you like) with a short helper on each step, and the button says “Make my trip plan ✨”.
+- User-facing errors (unknown city, weather, network, map timeouts) are calm sentences with a next step — never raw HTTP or stack text.
+- End-before-start, trips longer than 30 days, and past dates show a friendly inline message.
+- Budget is unchanged.
+
 ## 1.16.0 — Kid-friendliness batch 2
 
 - Packing opens with a short “Start here” must-have list (IDs, medicines, chargers, baby essentials, a jacket, comfortable shoes) and a friendly progress message, instead of “0 of 92 active items packed”.

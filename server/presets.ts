@@ -5,7 +5,7 @@ import { driveLabel } from "./plan.js";
 import { isBroadRegion } from "../shared/region.js";
 import { cleanVenueName, isAdminOrReligiousOrg, isRestDayFriendly, isSeriousPeak, isSkiSector } from "../shared/activities.js";
 import { placesUsedInDays } from "./itineraryPlaces.js";
-import { farDayTrip, tripHasKids } from "../shared/family.js";
+import { farDayTrip, tripHasKids, isTravelOrLeaveDay } from "../shared/family.js";
 
 export const PRESETS = ["beach", "hiking", "ski", "city", "business", "kids", "roadtrip"] as const;
 export type Preset = typeof PRESETS[number];
@@ -16,7 +16,7 @@ export const presetsOf = (inp: TripInput): Preset[] => ((inp as any).presets || 
 /** Itinerary tweaks driven by presets. Mutates days. */
 export function presetItinerary(days: ItinDay[], ps: Preset[], w: WeatherResult, hl: { name: string; ski?: boolean; distanceKm?: number; driveMin?: number; driveSrc?: string; type?: string; description?: string; indoor?: boolean; setting?: string }[] = []) {
   if (!ps.length || days.length < 2) return;
-  const mid = days.slice(1, days.length - 1); // full days (not arrive/depart)
+  const mid = days.slice(1, days.length - 1).filter(d => !isTravelOrLeaveDay(d)); // full days (not arrive/depart/overnight legs)
   const wx = (d: ItinDay) => w.days.find(x => x.date === d.date);
   const dry = mid.filter(d => { const x = wx(d); return x && !isRainy(x); });
   const tag = (d: ItinDay, t: string) => { d.notes = d.notes ? `${d.notes} · ${t}` : t; };
