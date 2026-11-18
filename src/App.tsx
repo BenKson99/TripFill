@@ -1,7 +1,7 @@
 import { PackingWorkspace } from "./Packing";
 import { packingProgress } from "../shared/packing";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import { CalendarDays, Cloud, CloudFog, CloudLightning, CloudRain, CloudSnow, CloudSun, Droplets, MapPin, Link2, Printer, Download, CalendarPlus, Upload, Plane, Sun, Thermometer, Users, Wallet } from "lucide-react";
 import { SettingsMenu } from "./SettingsMenu";
 import { TravelerFields, travelerRows, editTraveler, setAllTypes, withMembers, syncFormMembers } from "./Travelers";
@@ -21,7 +21,8 @@ import { formatDayWeather, renderTempTokens, precipKind, backupSlotLabel, wetDay
 import { defaultDistanceUnit, isDistanceUnit, type DistanceUnit } from "../shared/distance";
 import { clearShareFromUrl, makeShareLink, readSharedPlan } from "./Share";
 import { HomeCityField, Snapshot, useHomeCity, placeLabel, WrongPlace } from "./Home";
-import { GenerateProgress, useGenerateProgress } from "./GenerateProgress";
+import { flushSync } from "react-dom";
+import { GenerateProgress, useGenerateProgress, yieldToPaint } from "./GenerateProgress";
 import { scheduledHighlightDay } from "../shared/highlightSchedule";
 import { homeGenerateFields } from "../shared/homeCity";
 import { isSettlementPlace } from "../shared/placeQuery";
@@ -96,6 +97,19 @@ function Editable({ value, onChange, multiline, wrap }: { value: string; onChang
 
 const defaultUnit = (): "C" | "F" => /-(US|LR|MM)$/i.test(navigator.language || "") || /^en$/i.test(navigator.language) && Intl.DateTimeFormat().resolvedOptions().timeZone?.startsWith("America/") ? "F" : "C";
 
+
+function DeferredMapView(props: any) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const ric = typeof requestIdleCallback === "function" ? requestIdleCallback : (cb: IdleRequestCallback) => window.setTimeout(() => cb({ didTimeout: false, timeRemaining: () => 0 }), 0) as unknown as number;
+    const cic = typeof cancelIdleCallback === "function" ? cancelIdleCallback : (id: number) => clearTimeout(id);
+    const id = ric(() => setReady(true));
+    return () => cic(id as number);
+  }, []);
+  if (!ready) return <p className="muted small noprint" data-testid="map-pending">Loading the map…</p>;
+  return <MapView {...props} />;
+}
+
 export default function App() {
   const [saved] = useState(() => { try { return readSaved(localStorage); } catch (e: Any) { return { form: null, plan: null, error: friendlyError(e.message) + " Your original browser data has not been overwritten." }; } });
   const recoveryPending = useRef(!!(saved && "error" in saved));
@@ -162,7 +176,7 @@ export default function App() {
     const load = () => readSharedPlan().then(r => { if (!r) return; if ("error" in r) setErr(r.error); else { setErr(""); setPlan(r.plan); setReadOnly(r.via); } });
     load(); addEventListener("hashchange", load); return () => removeEventListener("hashchange", load);
   }, []);
-  useEffect(() => { if (!readOnly && !(recoveryPending.current && !plan)) { try { savePlan(localStorage, form, plan); } catch { setErr("Browser storage is full or unavailable. Export JSON now to keep your edits."); } } }, [form, plan, readOnly]);
+  useEffect(() => { if (readOnly || (recoveryPending.current && !plan)) return; const id = setTimeout(() => { try { savePlan(localStorage, form, plan); } catch { setErr("Browser storage is full or unavailable. Export JSON now to keep your edits."); } }, 0); return () => clearTimeout(id); }, [form, plan, readOnly]);
   const closeShared = () => { try { const own = readSaved(localStorage); clearShareFromUrl(); setReadOnly(null); setPlan(own?.plan || null); if (own?.form) setForm(withMembers(own.form, own.plan)); } catch (e: Any) { setErr(e.message); } };
   const importShared = () => { if (localStorage.getItem(KEY) && !confirm("Replace your saved plan with this shared snapshot? To back up your own plan first, choose Cancel, close the shared view, and Export JSON.")) return; recoveryPending.current = false; clearShareFromUrl(); setForm({ ...plan.input, ...normalizePreferences(plan.input) }); setReadOnly(null); setTab("plan"); };
   async function share() {
@@ -180,7 +194,8 @@ export default function App() {
 
   async function generate(place?: Any, legsOverride?: Any[]) {
     const legs = (legsOverride || form.legs || []).filter((l: Any) => l.destination?.trim());
-    setErr(""); setHomeErr(""); setLoading(true); setMatches(null);
+    flushSync(() => { setErr(""); setHomeErr(""); setLoading(true); setMatches(null); });
+    await yieldToPaint();
     try {
       const homeFields = homeGenerateFields(homeText, homeCity);
       const r = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, tz: Intl.DateTimeFormat().resolvedOptions().timeZone, today: plus(0), allowPast: form.start < plus(0) || undefined, legs: legs.length ? legs : undefined, place, ...homeFields, fxForce: new URLSearchParams(location.search).get("fxForce") || undefined }) });
@@ -189,9 +204,15 @@ export default function App() {
         if (/home city/i.test(j.error || "")) setHomeErr(friendlyError(j.error));
         throw new Error(friendlyError(j.error || "Failed"));
       }
+      await yieldToPaint();
       setHomeErr("");
       if (j.trip?.home) { setHomeCity(j.trip.home); setHomeText(placeLabel(j.trip.home)); }
-      if (j.needsChoice) setMatches(j.matches); else { recoveryPending.current = false; setPlan(j); setShareMsg(""); setShareUrl(""); setEditTrip(false); scrollPlan.current = true; }
+      if (j.needsChoice) setMatches(j.matches); else {
+        recoveryPending.current = false;
+        scrollPlan.current = true;
+        startTransition(() => { setPlan(j); setShareMsg(""); setShareUrl(""); setEditTrip(false); });
+        await yieldToPaint();
+      }
     } catch (e: Any) { setErr(friendlyError(e)); } finally { setLoading(false); }
   }
   useEffect(() => {
@@ -289,7 +310,7 @@ export default function App() {
     timeline: <>
           {plan.timeline.map((t: Any, i: number) => <div key={t.id} className="pk"><ChecklistCheckbox aria-label={T(t.task)} checked={t.done} onChange={e => upd(p => { p.timeline[i].done = e.target.checked; })} /><input type="date" className="ed date" value={t.due} onChange={e => upd(p => { p.timeline[i].due = e.target.value; })} /><ChecklistText value={T(t.task)} onChange={v => upd(p => { p.timeline[i].task = v; })} /><GrownUpBadge name={t.task} /></div>)}
     </>,
-    map: <MapView pins={pins} center={(plan.legs?.length > 1 ? plan.legs.map((l: Any) => l.place) : [plan.place]).map((q: Any) => ({ lat: q.lat, lon: q.lon, name: q.name }))} route={plan.legs?.length > 1}
+    map: <DeferredMapView pins={pins} center={(plan.legs?.length > 1 ? plan.legs.map((l: Any) => l.place) : [plan.place]).map((q: Any) => ({ lat: q.lat, lon: q.lon, name: q.name }))} route={plan.legs?.length > 1}
       legend={[...plan.itinerary.map((d: Any, i: number) => ({ label: `Day ${i + 1}`, color: DAY_COLORS[i % DAY_COLORS.length] })).filter((_: Any, i: number) => pins.some(p => p.day === i)), ...(pins.some(p => p.day == null) ? [{ label: "Not scheduled", color: "#8a8f9c" }] : [])]} />,
     budget: plan.legs?.length > 1 ? <>
           {plan.legs.map((lg: Any, k: number) => <div key={k} className="legblock" data-testid={`leg${k}-budget`}><h3>📍 Leg {k + 1}: {lg.place.name} <small className="muted">{lg.start} → {lg.end} · {lg.nights} night(s)</small></h3>{budgetTable(lg.budget, (p: Any) => p.legs[k].budget, `leg${k}-`)}</div>)}
@@ -375,10 +396,10 @@ export default function App() {
 
       {plan && <>
         <section className="card trip-head" id="trip-summary">
-          <div className="kicker"><MapPin size={14} />{plan.legs?.length > 1 ? `${plan.legs.length}-city trip` : plan.trip?.domestic === false ? "International trip" : plan.trip?.domestic ? "Domestic trip" : "Your trip"}</div>
+          <div className="kicker"><MapPin size={14} />{plan.legs?.length > 1 ? `${plan.legs.length}-city trip` : plan.trip?.domestic === false ? "Trip to another country" : plan.trip?.domestic ? "Trip in your own country" : "Your trip"}</div>
           <h2>{plan.legs?.length > 1 ? plan.title : placeLabel(plan.place)}</h2>
           <p className="dates">{fmtRange(plan.input.start, plan.input.end)}</p>
-          <p className="muted">{plan.input.travelers} {Number(plan.input.travelers) === 1 ? "person" : "people"} · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {WALKING_LABEL[plan.input.walkingTolerance || "standard"] || "Some"} walking · {(plan.input.dietaryNeeds || "none").replace(/_/g, " ")} food{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
+          <p className="muted">{plan.input.travelers} {Number(plan.input.travelers) === 1 ? "person" : "people"} · {resolveTravelMode(plan.input, plan.trip?.distanceKm) === "driving" ? "Driving" : "Flying"} · {plan.input.purpose} · {plan.input.style} pace · {WALKING_LABEL[plan.input.walkingTolerance || "standard"] || "Some"} walking{plan.input.dietaryNeeds && plan.input.dietaryNeeds !== "none" ? ` · ${String(plan.input.dietaryNeeds).replace(/_/g, " ")} food` : ""}{plan.input.interests ? ` · ${plan.input.interests}` : ""}{resolveActivities(plan.input).length ? ` · ${formatActivities(resolveActivities(plan.input))}` : ""}</p>
           {plan.matches?.length > 1 && <WrongPlace alts={plan.matches.filter((m: Any) => m.id !== plan.place.id).slice(0, 4)} onPick={m => generate(m)} resolved={isSettlementPlace(plan.place)} />}
           <div className="stats" data-testid="stats">
             <div className="stat"><CalendarDays size={18} /><div><b>{plan.itinerary.length} days</b><small>{plan.input.start} → {plan.input.end}</small></div></div>

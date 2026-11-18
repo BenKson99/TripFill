@@ -90,11 +90,39 @@ export function itinerary(inp: TripInput, w: WeatherResult, hl: Highlight[], foo
     }
     return undefined;
   };
+  let genericDinnerUsed = false;
+  const dinnerHistory: string[] = [];
   const dinnerLine = (prefix: string, fallback: string) => {
+    const tagOf = (e: { name?: string; tag?: string }) => e.tag && e.tag !== "restaurant" ? ` (${e.tag})` : "";
     const e = dinnerPick();
-    if (!e?.name) return fallback;
-    const tag = e.tag && e.tag !== "restaurant" ? ` (${e.tag})` : "";
-    return `${prefix}${e.name}${tag}`;
+    if (e?.name) { dinnerHistory.push(e.name); return `${prefix}${e.name}${tagOf(e)}`; }
+    if (!genericDinnerUsed) {
+      genericDinnerUsed = true;
+      return fallback;
+    }
+    const counts = new Map<string, number>();
+    for (const n of dinnerHistory) counts.set(eatBrandKey(n), (counts.get(eatBrandKey(n)) || 0) + 1);
+    const lastBrand = dinnerHistory.length ? eatBrandKey(dinnerHistory[dinnerHistory.length - 1]) : "";
+    const seenName = new Map<string, string>();
+    for (const n of dinnerHistory) if (!seenName.has(eatBrandKey(n))) seenName.set(eatBrandKey(n), n);
+    const pool = food.filter(x => x.name);
+    const representatives = pool.filter((x, i) => {
+      const key = eatBrandKey(x);
+      return pool.findIndex(y => eatBrandKey(y) === key) === i;
+    }).map(x => {
+      const key = eatBrandKey(x);
+      const used = seenName.get(key);
+      return used ? { ...x, name: used } : x;
+    });
+    const ranked = [...representatives].sort((a, b) => {
+      const ac = counts.get(eatBrandKey(a)) || 0;
+      const bc = counts.get(eatBrandKey(b)) || 0;
+      if (ac !== bc) return ac - bc;
+      return (eatBrandKey(a) === lastBrand ? 1 : 0) - (eatBrandKey(b) === lastBrand ? 1 : 0);
+    });
+    const again = ranked.find(x => x.name && (ranked.length < 2 || eatBrandKey(x) !== lastBrand)) || ranked[0];
+    if (again?.name) { dinnerHistory.push(again.name); return `${prefix}${again.name}${tagOf(again)}`; }
+    return fallback;
   };
   const familyDinnerFallback = casualDinner || kids ? CASUAL_DINNER_FALLBACK : "Dinner somewhere local";
   const perDay = kids ? 1 : style === "Slow" ? 1 : style === "Packed" ? (inp.walkingTolerance === "high" ? 4 : 3) : 2;

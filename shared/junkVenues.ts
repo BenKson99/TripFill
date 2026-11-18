@@ -187,6 +187,8 @@ export function familySightScore(h: { name?: string; type?: string; description?
   let n = 0;
   if (/\b(beach|playa|park|aquarium|museum|gallery|zoo|planetarium|ruins?|pyramid|snorkel|reef)\b/i.test(blob)) n += 6;
   if (isFamousFamilyBeach(h)) n += 10;
+  if (/\b(science museum|natural history museum|london zoo|zsl london zoo|kew gardens|royal botanic gardens|thames (?:river )?(?:boat|cruise|clipper)|tower of london|british museum|london eye|madame tussauds|warner\s*bros|platform\s*9)\b/i.test(blob)) n += 12;
+  if (/\b(museum of richmond|pitzhanger(?: manor)?|orleans house|gunnersbury park museum|wandsworth museum)\b/i.test(blob)) n -= 10;
   if (/tourism=attraction|wikidata|qid/i.test(blob) || h.qid || h.wikidata || /wikidata/i.test(h.source || "") || h.url) n += 4;
   if ((h.views30d || 0) > 0) n += Math.min(8, Math.log10((h.views30d || 0) + 10));
   return n;

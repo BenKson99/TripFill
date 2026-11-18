@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.20.1 — Generate progress paints, Simple-mode leftovers, and itinerary contradictions
+
+- Generate progress flushes each timed step so “Checking the weather”, “Finding fun places”, and “Packing your bags” can actually paint. After the plan returns, the client yields a frame, defers map mount and localStorage save, and uses a transition so the main thread is not blocked on one giant commit.
+- Simple mode hides the per-row Shared badge, and moves “Mark all packed” and “Grown-up task” badges behind More options. Kids may see a small “ask a grown-up” hint. The header count matches what’s on screen (`0/25 packed`) with a “Show everything (N)” link, so the helper no longer talks about the full list while 25 items show.
+- Pearl Harbor keeps one Arizona-memorial morning. Optional USS Missouri or Bowfin is a note (“Optional: also tour the USS Missouri or USS Bowfin”), not a third afternoon “then”. Waikiki gets its own beach slot on another day, and a luau evening moves off a full Pearl Harbor day when a lighter day exists. Slots cap at two items; three “then” chains are removed.
+- “We couldn’t fit” now treats scheduled slot text, categories (castle, museum), and dictionary venues as placed, so London no longer lists Harry Potter, castles, or museums when the Studio Tour, Windsor Castle, Tower of London or Madame Tussauds are already in the days.
+- A double-decker (or other light add-on) is a short note, not glued onto a rest line. Days with kids under 8 get a rest or quiet afternoon and at most two named sights. Well-known kid-friendly London places (Science Museum, Natural History Museum, London Zoo, Kew, a Thames boat) outrank obscure leftovers such as the Museum of Richmond or Pitzhanger Manor, including as rain backups.
+- Interest chips auto-tick only on an explicit match. Typing “volcano” suggests Hiking for the kid to accept, and does not tick it automatically.
+- Summary wording: “Trip in your own country” / “Trip to another country” instead of “Domestic (United States)”. A diet of “none” no longer prints as “none food”. Named casual dinners are preferred; the generic “Casual family dinner near your stay…” line is used at most once per trip. Brand dedupe no longer collapses every “The …” restaurant into one key.
+- Cache key `places|v24` (family sight ranking). `eats|v11` is unchanged. Budget is unchanged.
+
 ## 1.20.0 — Kid-friendly generate, packing, wording, and Honolulu leftovers
 
 - After Generate, the questionnaire collapses to a one-line “Your trip: Honolulu · Jul 1–8 · 5 people — Edit” bar, and the page scrolls to the plan summary. While the plan is building, timed steps read “Checking the weather”, “Finding fun places”, then “Packing your bags,” instead of a bare “Building your plan…”.

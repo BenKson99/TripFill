@@ -1,5 +1,6 @@
 import { isLodgingOrStay, isVagueSight, campsiteSetupLine } from "./nationalParks.js";
 import { isFullOrHalfDayAttraction, isMajorAttraction, interestBrands, matchesBrand, kidsRestAfternoon, isRestSlot, splitAddOns, joinAddOns, registerDictionaryNotes } from "./family.js";
+import { preferFamilySights } from "./junkVenues.js";
 /** Curated, free, static interest → famous venue matches, plus keyword hits in place names. */
 
 export type DestRef = { name?: string; country?: string; countryCode?: string; admin1?: string };
@@ -353,7 +354,7 @@ export function applyInterestVenues<T extends { morning: string; afternoon: stri
 }
 
 /** Light interest extras (e.g. a double-decker bus) as a short afternoon add-on, spread across lighter days. */
-export function applyInterestAddOns<T extends { morning: string; afternoon: string; evening?: string }>(
+export function applyInterestAddOns<T extends { morning: string; afternoon: string; evening?: string; notes?: string }>(
   days: T[],
   interests: string,
   dest: DestRef | string | undefined,
@@ -371,16 +372,17 @@ export function applyInterestAddOns<T extends { morning: string; afternoon: stri
   for (const s of lights) {
     if (alreadyUsed(days, s.name)) continue;
     const isRest = (text?: string) => /hotel pool|quiet rest at the hotel/i.test(text || "");
-    const free = (d: typeof mid[number]) => isBareCategorySlot(d.afternoon) || isGenericSlot(d.afternoon) || !d.afternoon || /^Explore a market/i.test(d.afternoon || "") || isRest(d.afternoon);
-    const host = mid.find(d => !heavyMorning(d.morning) && free(d) && !/Hike continues|Day hike/i.test(d.afternoon || ""))
+    const genericAfternoon = (d: typeof mid[number]) => isBareCategorySlot(d.afternoon) || isGenericSlot(d.afternoon) || !d.afternoon || /^Explore a market/i.test(d.afternoon || "");
+    const host = mid.find(d => genericAfternoon(d) && !/Hike continues|Day hike/i.test(d.afternoon || ""))
+      || mid.find(d => !heavyMorning(d.morning) && isRest(d.afternoon) && !/Hike continues|Day hike/i.test(d.afternoon || ""))
       || mid.find(d => {
         if (/Hike continues|Day hike/i.test(d.afternoon || "")) return false;
-        if (heavyMorning(d.morning) && !isRest(d.afternoon)) return false;
+        if (isRest(d.afternoon)) return false;
         return addOnCount(d.afternoon) < maxAddOns;
-      })
-      || mid.find(d => addOnCount(d.afternoon) < maxAddOns && (isRest(d.afternoon) || !heavyMorning(d.morning)));
+      });
     if (!host) continue;
     if (!host.afternoon || isGenericSlot(host.afternoon) || /^Explore a market/i.test(host.afternoon)) host.afternoon = s.name;
+    else if (isRest(host.afternoon)) (host as T & { notes?: string }).notes = [(host as T & { notes?: string }).notes, `Short add-on: ${s.name}`].filter(Boolean).join(" · ");
     else host.afternoon = `${host.afternoon}; then ${s.name}`;
   }
   return days;
@@ -427,6 +429,7 @@ export function assignUniqueRainBackups<T extends { morning?: string; afternoon?
   alternatives: { name?: string; type?: string; description?: string; indoor?: boolean; setting?: string }[] = [],
   fallbackName?: string,
 ): T[] {
+  alternatives = preferFamilySights(alternatives);
   const sameDay = (d: T, name?: string) => !!(name && `${d.morning || ""} ${d.afternoon || ""}`.toLowerCase().includes(name.toLowerCase()));
   const seen = new Set<string>();
   const order: string[] = [];
@@ -592,7 +595,7 @@ export function fillNamedAfternoons<T extends { morning: string; afternoon: stri
   isTravel?: (d: T) => boolean,
 ): T[] {
   if (!days?.length) return days;
-  const pool = highlights.filter(h => h.name && isKidAfternoonSight(h) && !isLodgingOrStay(h) && !isVagueSight(h) && !alreadyUsed(days, h.name!, true));
+  const pool = preferFamilySights(highlights.filter(h => h.name && isKidAfternoonSight(h) && !isLodgingOrStay(h) && !isVagueSight(h) && !alreadyUsed(days, h.name!, true)));
   let i = 0;
   for (const d of days) {
     if (isTravel?.(d)) continue;
@@ -638,7 +641,7 @@ export function attachCuratedInterestNotes<T extends { morning?: string; afterno
 const PEARL_HARBOR = /uss arizona|uss missouri|uss bowfin|pacific aviation museum|pearl harbor national memorial|ford island|pearl harbor/i;
 
 export const PEARL_HARBOR_MORNING = "Pearl Harbor — USS Arizona Memorial boat ride (free timed tickets, book ahead)";
-export const PEARL_HARBOR_ALSO = "also: USS Missouri or Bowfin";
+export const PEARL_HARBOR_ALSO = "Optional: also tour the USS Missouri or USS Bowfin";
 
 function pearlPiece(text?: string): string | undefined {
   const t = (text || "").trim();
@@ -683,10 +686,41 @@ export function clusterPearlHarbor<T extends { morning?: string; afternoon?: str
 
   host.morning = PEARL_HARBOR_MORNING;
   const leftovers = splitAddOns(host.afternoon).filter(p => !PEARL_HARBOR.test(p) && !isRestSlot(p));
-  const rest = kidsRestAfternoon(dest);
-  host.afternoon = joinAddOns(offerAlso ? [rest, PEARL_HARBOR_ALSO, ...leftovers.slice(0, 1)] : [rest, ...leftovers.slice(0, 1)]);
+  host.afternoon = kidsRestAfternoon(dest);
+  if (offerAlso && !(host.notes || "").includes("USS Missouri")) {
+    host.notes = [host.notes, PEARL_HARBOR_ALSO].filter(Boolean).join(" · ");
+  }
+  for (const item of leftovers) {
+    const other = mid.filter(d => d !== host);
+    const beachy = /beach|playa|snorkel|waik[iī]k[iī]/i.test(item);
+    const slotHost = (beachy ? other.find(d => !d.morning || /free morning|wander a new/i.test(d.morning || "")) : undefined)
+      || other.find(d => isRestSlot(d.afternoon) || !d.afternoon || /explore a market|free morning/i.test(d.afternoon || ""))
+      || other.find(d => splitAddOns(d.afternoon).length < 2 && !/luau/i.test(d.evening || ""));
+    if (!slotHost) continue;
+    if (beachy && (!slotHost.morning || /free morning|wander a new/i.test(slotHost.morning || ""))) slotHost.morning = item;
+    else if (!slotHost.afternoon || isRestSlot(slotHost.afternoon) || /explore a market|free morning/i.test(slotHost.afternoon || "")) slotHost.afternoon = item;
+    else slotHost.afternoon = joinAddOns([...splitAddOns(slotHost.afternoon), item].slice(0, 2));
+  }
   return days;
 }
+
+/** Don't pair a luau evening with a full Pearl Harbor day when a lighter day exists. */
+export function avoidHeavyEveningOnPearlHarbor<T extends { morning?: string; afternoon?: string; evening?: string; label?: string }>(
+  days: T[],
+  isTravel?: (d: T) => boolean,
+): T[] {
+  const host = days.find(d => /Pearl Harbor — USS Arizona/i.test(d.morning || ""));
+  if (!host || !/luau|l[ūu]ʻ?au/i.test(host.evening || "")) return days;
+  const mid = days.filter(d => d !== host && !isTravel?.(d));
+  const lighter = mid.find(d => !/pearl harbor|uss arizona/i.test(d.morning || "") && !/luau|l[ūu]ʻ?au/i.test(d.evening || "") && (!d.evening || /dinner/i.test(d.evening || "")) && !/warner\s*bros|studio tour|day hike/i.test(d.morning || ""))
+    || mid.find(d => !/luau|l[ūu]ʻ?au/i.test(d.evening || "") && (!d.evening || /dinner/i.test(d.evening || "")));
+  if (!lighter) return days;
+  const swap = lighter.evening;
+  lighter.evening = host.evening;
+  host.evening = swap && !/luau|l[ūu]ʻ?au/i.test(swap) ? swap : "Early dinner near your stay";
+  return days;
+}
+
 
 /** Interests from the form that never landed in a slot or note, with a short try-this hint. */
 export function unplacedInterestNotes(interests: string, days: { morning?: string; afternoon?: string; evening?: string; notes?: string; rainyBackup?: string }[] = [], dest?: DestRef | string): string[] {
@@ -700,9 +734,17 @@ export function unplacedInterestNotes(interests: string, days: { morning?: strin
   const out: string[] = [];
   for (const phrase of phrases) {
     const key = phrase.toLowerCase();
-    const hint = curated.find(s => s.name.toLowerCase().includes(key) || new RegExp(key.replace(/[^a-z0-9\s]/gi, "").split(/\s+/).filter(w => w.length >= 4).join("|") || "a^", "i").test(s.name));
+    const stem = key.replace(/ies\b/, "y").replace(/ses\b/, "s").replace(/s\b/, "");
+    const stemRe = stem.length >= 4 ? new RegExp(`\\b${stem.replace(/[^a-z0-9]+/g, "\\b\\w*\\b")}s?\\b`, "i") : null;
+    const hint = curated.find(s => s.name.toLowerCase().includes(key) || (stem.length >= 4 && s.name.toLowerCase().includes(stem)) || new RegExp(key.replace(/[^a-z0-9\s]/gi, "").split(/\s+/).filter(w => w.length >= 4).join("|") || "a^", "i").test(s.name));
+    const hintPlaced = !!(hint && (blob.includes(hint.name.toLowerCase()) || blob.includes(hint.name.toLowerCase().slice(0, 18).toLowerCase())));
     const placed = blob.includes(key)
-      || (hint && blob.includes(hint.name.toLowerCase().slice(0, 18).toLowerCase()))
+      || !!(stemRe && stemRe.test(blob))
+      || hintPlaced
+      || /harry potter|wizarding|hogwarts/i.test(phrase) && /warner\s*bros|studio tour|platform\s*9|wizarding|harry potter/i.test(blob)
+      || /castles?/i.test(phrase) && /castle|tower of london|palace/i.test(blob)
+      || /museums?/i.test(phrase) && /museum|gallery|tussauds/i.test(blob)
+      || /double-?decker|bus tour/i.test(phrase) && /double-?decker|hop-?on|top deck/i.test(blob)
       || /volcano/i.test(phrase) && /diamond head|volcanoes national park/i.test(blob)
       || /turtles?/i.test(phrase) && /laniakea|turtle/i.test(blob)
       || /luau|l[ūu]ʻ?au/i.test(phrase) && /luau/i.test(blob)

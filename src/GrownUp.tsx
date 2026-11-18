@@ -13,6 +13,12 @@ export function GrownUpBadge({ name, flagged }: { name?: string; flagged?: boole
   return <span className="grownup-badge" data-testid="grownup-badge" title="A grown-up should handle this">{GROWN_UP_LABEL}</span>;
 }
 
+/** Small kid-facing hint instead of the full Grown-up task badge. */
+export function GrownUpHint({ name, flagged }: { name?: string; flagged?: boolean }) {
+  if (!isGrownUpMarked(name || "", flagged)) return null;
+  return <small className="simple-grownup-hint muted" data-testid="grownup-hint">ask a grown-up</small>;
+}
+
 export function GrownUpNote({ show }: { show: boolean }) {
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(KEY) === "1"; } catch { return false; } });
   if (!show || hidden) return null;

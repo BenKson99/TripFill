@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ACTIVITIES, POPULAR_IDS, detectActivities, type ActivityId } from "../shared/activities";
+import { ACTIVITIES, POPULAR_IDS, detectActivities, suggestActivities, type ActivityId } from "../shared/activities";
 
 /** Compact multi-select used on the Plan form and in Packing settings. */
 export function ActivityPicker({ value, onChange, interests, onInterests, destination, disabled, idPrefix = "activity" }: {
@@ -30,6 +30,7 @@ export function ActivityPicker({ value, onChange, interests, onInterests, destin
     if (next.length !== selected.length || next.some((id, i) => id !== selected[i])) onChange(next);
   }, [interests, destination]); // eslint-disable-line react-hooks/exhaustive-deps
   const hint = useMemo(() => selected.map(id => ACTIVITIES.find(a => a.id === id)?.label).filter(Boolean).join(", "), [selected]);
+  const suggestions = useMemo(() => suggestActivities(interests || "").filter(id => !selected.includes(id)), [interests, selected]);
   return <fieldset className="wide activity-picker" data-testid={`${idPrefix}-picker`}>
     <legend>What do you want to do? <small className="muted">(pick any)</small></legend>
     <p className="muted small">We’ll pack, add prep tasks and shape days around these. Interests below can tick obvious matches, like “beginner ski lessons” or “wine”.</p>
@@ -43,6 +44,7 @@ export function ActivityPicker({ value, onChange, interests, onInterests, destin
       {all ? "Show fewer" : "Show all 25"}
     </button>
     {hint && <p className="muted small" data-testid={`${idPrefix}-selected`}>{selected.length} selected · {hint}</p>}
+    {suggestions.length > 0 && <p className="muted small activity-suggest" data-testid={`${idPrefix}-suggestions`}>Did you also want {suggestions.map((id, i) => { const a = ACTIVITIES.find(x => x.id === id); return a ? <button key={id} type="button" className="ghost small" disabled={disabled} onClick={() => toggle(id, true)}>{i ? ", " : ""}{a.emoji} {a.label}?</button> : null; })}</p>}
     {onInterests && <label className="wide">Interests<input placeholder="food, museums, hiking, photography…" value={interests || ""} disabled={disabled} onChange={e => interestDetect(e.target.value)} /></label>}
   </fieldset>;
 }

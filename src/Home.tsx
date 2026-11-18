@@ -60,7 +60,7 @@ export function Snapshot({ trip, dest, mode, onMode, readOnly, distanceUnit = "k
   return (
     <div className="snap" data-testid="snapshot">
       <div><small>From</small><b>{placeLabel(trip.home)}</b></div>
-      <div><small>Trip type</small><b>{trip.domestic ? `Domestic (${dest.country})` : "International"}</b></div>
+      <div><small>Trip type</small><b>{trip.domestic ? "Trip in your own country" : "Trip to another country"}</b></div>
       <div><small>Travel time</small><b data-testid="travel-time">{formatTripTravel(trip, resolved, distanceUnit)}</b></div>
       <div><small>Time difference</small><b>{trip.tzLabel}</b>{trip.destTz && <small>{trip.destTz}</small>}</div>
       {onMode && <div className="snap-mode noprint"><TravelModeField value={resolved} onChange={onMode} disabled={readOnly} hint="Times are a typical road or flight estimate, not live traffic. Changing this updates labels and packing suggestions without a new weather fetch." /></div>}

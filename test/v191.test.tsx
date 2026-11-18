@@ -108,11 +108,12 @@ test("v1.19.1: USS Arizona uses a boat-ticket hint, and Pearl Harbor sites clust
     { label: "Day 5", morning: "Pearl Harbor National Memorial", afternoon: "rest", evening: "Dinner", notes: "" },
   ];
   clusterPearlHarbor(days, d => false, "Honolulu");
-  const pearlDays = days.filter(d => /pearl harbor —|uss arizona|uss missouri|uss bowfin|pearl harbor national/i.test(`${d.morning} ${d.afternoon}`));
-  assert.equal(pearlDays.length, 1, days.map(d => `${d.morning} / ${d.afternoon}`).join(" | "));
+  const pearlDays = days.filter(d => /pearl harbor —|uss arizona|uss missouri|uss bowfin|pearl harbor national/i.test(`${d.morning} ${d.afternoon} ${d.notes}`));
+  assert.equal(pearlDays.length, 1, days.map(d => `${d.morning} / ${d.afternoon} / ${d.notes}`).join(" | "));
   const host = pearlDays[0];
   assert.equal(host.morning, PEARL_HARBOR_MORNING);
-  assert.match(host.afternoon || "", /also: USS Missouri or Bowfin/);
+  assert.match(host.notes || "", /Optional: also tour the USS Missouri or USS Bowfin/);
+  assert.ok(!/USS Missouri or Bowfin/i.test(host.afternoon || ""), host.afternoon);
 });
 
 test("v1.19.1: a double-decker is a short add-on and is not wiped by a park-day rest", () => {
@@ -122,13 +123,14 @@ test("v1.19.1: a double-decker is a short add-on and is not wiped by a park-day 
   assert.ok(slots.some(s => s.name === name));
   assert.ok(!/route 11 or 15/i.test(slots.map(s => s.name).join(" ")));
   const days = [
-    { label: "Day 2", morning: "Warner Bros. Studio Tour London (book ahead)", afternoon: name, evening: "Dinner" },
-    { label: "Day 3", morning: "Natural History Museum", afternoon: "Explore a market or local street", evening: "Dinner" },
+    { label: "Day 2", morning: "Warner Bros. Studio Tour London (book ahead)", afternoon: name, evening: "Dinner", notes: "" },
+    { label: "Day 3", morning: "Natural History Museum", afternoon: "Explore a market or local street", evening: "Dinner", notes: "" },
   ];
   ensureParkDayRest(days as any, "London");
-  const blob = days.map(d => `${d.morning} / ${d.afternoon}`).join(" | ");
+  const blob = days.map(d => `${d.morning} / ${d.afternoon} / ${d.notes || ""}`).join(" | ");
   assert.match(blob, /double-decker bus past Big Ben/);
   assert.match(blob, /Quiet rest at the hotel or a nearby park\/playground/);
+  assert.ok(!/; then /.test(days.map(d => d.afternoon).join(" | ")), days.map(d => d.afternoon).join(" | "));
   const empty = [
     { label: "Day 2", morning: "Warner Bros. Studio Tour London (book ahead)", afternoon: "Explore a market or local street", evening: "Dinner" },
     { label: "Day 3", morning: "Natural History Museum", afternoon: KIDS_CITY_REST, evening: "Dinner" },

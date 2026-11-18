@@ -18,6 +18,8 @@ export interface ActivityPrep { task: string; why?: string; daysBefore: number }
 export interface ActivityDef {
   id: ActivityId; label: string; emoji: string; popular?: boolean;
   aliases: RegExp;
+  /** Inferred matches shown as suggestions, not auto-ticked (e.g. “volcano” → Hiking). */
+  inferred?: RegExp;
   legacyPresets?: string[];
   legacyKits?: string[];
   packing: ActivityPackItem[];
@@ -44,7 +46,8 @@ export const ACTIVITIES: ActivityDef[] = [
       { task: "Check if the resort is car-free and how you get there from the station or parking", why: "places like Zermatt are reached by train or taxi, not a private car in town", daysBefore: 10 },
     ] },
   { id: "hiking", label: "Hiking", emoji: "🥾", popular: true,
-    aliases: /\b(hik(?:e|ing)|trek(?:king)?|trail(?:s)?|day hike|backpacking|volcano(?:es)?|volcanic|crater)\b/i,
+    aliases: /\b(hik(?:e|ing)|trek(?:king)?|trail(?:s)?|day hike|backpacking)\b/i,
+    inferred: /\b(volcano(?:es)?|volcanic|crater)\b/i,
     legacyPresets: ["hiking"], legacyKits: ["hiking"], slot: "morning", weather: "not-rain", osm: "trail",
     packing: [
       { group: "Activities", item: "Hiking shoes / trail layers", reason: "Hiking activity — choose gear for the actual route and check conditions" },
@@ -288,6 +291,14 @@ export function detectActivities(text: string): ActivityId[] {
   const t = text || "";
   if (!t.trim()) return [];
   return ACTIVITIES.filter(a => a.aliases.test(t)).map(a => a.id);
+}
+
+/** Inferred activity chips a kid can accept, not auto-ticked from a related word. */
+export function suggestActivities(text: string): ActivityId[] {
+  const t = text || "";
+  if (!t.trim()) return [];
+  const already = new Set(detectActivities(t));
+  return ACTIVITIES.filter(a => a.inferred?.test(t) && !already.has(a.id)).map(a => a.id);
 }
 
 /** Legacy trip types (presets) and free-text interests become activity ids when `input.activities` is absent. */

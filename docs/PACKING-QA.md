@@ -200,3 +200,8 @@ Confirm `/healthz` says **1.14.1**. At most two Generates:
 
 1. Cape Town, Flying, ~6 days, eight activities including beach, snorkeling, tasting and nightlife. Beach days should name a real beach (Camps Bay or Clifton), not the V&A Waterfront. Snorkeling should appear in a morning, tasting in an afternoon, nightlife in an evening. In Packing & Prep, activity tasks (tickets, reservations, dive notes) should appear once on the timeline, not also in the checklist. Switch Simple mode: the first toggle should feel instant (well under a second).
 2. Zermatt in January, Flying, Skiing and Beach. The beach note should use your temperature unit and beach must not appear on any day, packing list or prep. Ski mornings should rotate between sectors (or vary the wording if only one is found). Rest-day options should be easy in-town or lift-accessible sights, or “views of” a peak, not a Matterhorn climb.
+
+## Kid-UX leftovers (1.20.1)
+
+Confirm `/healthz` says **1.20.1**. While Generate runs, the weather / fun places / packing labels should visibly change, not jump straight to the last step. Simple mode should show `N/25 packed` when capped, hide Shared / Mark all packed / Grown-up task badges until More options, and may show “ask a grown-up”. Honolulu: Pearl Harbor morning with the Missouri/Bowfin note (not a third afternoon), luau on a lighter day, Waikiki on its own slot, at most one generic casual dinner. London: no “We couldn’t fit: Harry Potter, castles, museums” when those are scheduled, a rest or quiet afternoon on under-8 full days, and well-known museums preferred over obscure ones. Budget is unchanged.
+

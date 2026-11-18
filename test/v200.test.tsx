@@ -71,10 +71,10 @@ test("v1.20.0: Simple mode shows My stuff by category, hides Whose bag behind Mo
 
 test("v1.20.0: Pearl Harbor becomes one Arizona-morning day even when only Missouri was scheduled", () => {
   const days = [
-    { label: "Day 1 · Arrive", morning: "Travel", afternoon: "Rest", evening: "Dinner" },
-    { label: "Day 2", morning: "Waikiki Beach", afternoon: "USS Missouri (battleship you can walk through)", evening: "Dinner" },
-    { label: "Day 3", morning: "Free morning — wander a new neighbourhood", afternoon: KIDS_POOL_REST, evening: "Dinner" },
-    { label: "Day 4 · Depart", morning: "Pack", afternoon: "Airport", evening: "Travel" },
+    { label: "Day 1 · Arrive", morning: "Travel", afternoon: "Rest", evening: "Dinner", notes: "" },
+    { label: "Day 2", morning: "Waikiki Beach", afternoon: "USS Missouri (battleship you can walk through)", evening: "Dinner", notes: "" },
+    { label: "Day 3", morning: "Free morning — wander a new neighbourhood", afternoon: KIDS_POOL_REST, evening: "Dinner", notes: "" },
+    { label: "Day 4 · Depart", morning: "Pack", afternoon: "Airport", evening: "Travel", notes: "" },
   ];
   const highlights = [
     { name: "USS Arizona Memorial" }, { name: "USS Missouri" }, { name: "USS Bowfin" },
@@ -85,7 +85,9 @@ test("v1.20.0: Pearl Harbor becomes one Arizona-morning day even when only Misso
   const pearl = mid.filter(d => /pearl harbor —|uss arizona|uss missouri|uss bowfin|ford island/i.test(`${d.morning} ${d.afternoon}`));
   assert.equal(pearl.length, 1, mid.map(d => `${d.morning} / ${d.afternoon}`).join(" | "));
   assert.equal(pearl[0].morning, PEARL_HARBOR_MORNING);
-  assert.match(pearl[0].afternoon || "", /also: USS Missouri or Bowfin/);
+  assert.match(pearl[0].notes || "", /Optional: also tour the USS Missouri or USS Bowfin/);
+  assert.ok(!/Missouri or Bowfin/i.test(pearl[0].afternoon || ""), pearl[0].afternoon);
+  assert.ok(splitAddOns(pearl[0].afternoon || "").length <= 2, pearl[0].afternoon);
   assert.match(days[1].morning, /Waikiki Beach/);
 });
 
@@ -182,10 +184,11 @@ test("v1.20.0: cold-cache Honolulu generate keeps one Pearl Harbor day, no coffe
   assert.ok(!/Kalaeloa/i.test(hl), hl);
   const pearlSites = (plan.highlights || []).filter((h: any) => /uss arizona|uss missouri|uss bowfin|pearl harbor|ford island/i.test(h.name || ""));
   if (pearlSites.length) {
-    const pearlDays = mid.filter((d: any) => /pearl harbor —|uss arizona|uss missouri|uss bowfin/i.test(`${d.morning} ${d.afternoon}`));
+    const pearlDays = mid.filter((d: any) => /pearl harbor —|uss arizona|uss missouri|uss bowfin/i.test(`${d.morning} ${d.afternoon} ${d.notes || ""}`));
     assert.equal(pearlDays.length, 1, text);
     assert.equal(pearlDays[0].morning, PEARL_HARBOR_MORNING, text);
-    assert.match(pearlDays[0].afternoon || "", /also: USS Missouri or Bowfin/);
+    assert.match(pearlDays[0].notes || "", /Optional: also tour the USS Missouri or USS Bowfin/);
+    assert.ok(!/Missouri or Bowfin/i.test(pearlDays[0].afternoon || ""), pearlDays[0].afternoon);
   }
   const evenings = mid.map((d: any) => d.evening || "").join(" | ");
   assert.ok(!/Coffee House|Algerian Coffee Stores|Hindoostane|Lloyd's Coffee/i.test(evenings), evenings);

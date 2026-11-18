@@ -46,6 +46,15 @@ export function isRestSlot(text?: string): boolean {
   return REST_SLOT.test(slotText(text));
 }
 
+const NAMED_SIGHT = /\b(museum|manor|gallery|castle|palace|cathedral|zoo|aquarium|studio tour|tower of london)\b/i;
+
+/** A named attraction that counts toward the under-8 daily cap, including lesser-known museums. */
+export function isNamedSight(text?: string): boolean {
+  const t = slotText(text);
+  if (!t || isRestSlot(t) || isLightActivity(t)) return false;
+  return isBigSight(t) || isFullOrHalfDayAttraction(t) || NAMED_SIGHT.test(t);
+}
+
 export function splitAddOns(text?: string): string[] {
   return (text || "").split(/\s*;\s*then\s+|\s*→\s*/i).map(s => s.trim()).filter(Boolean);
 }
@@ -365,7 +374,8 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
         const lights = parts.filter(p => isLightActivity(p) && !isBigSight(p) && !filler(p));
         const keep = lights.slice(0, 1);
         leftover.push(...parts.filter(p => !isRestSlot(p) && !keep.includes(p) && !filler(p)));
-        d.afternoon = joinAddOns([rest, ...keep]);
+        d.afternoon = rest;
+        if (keep[0]) attachShortAddOn(d, keep[0]);
       } else {
         const lights = parts.filter(p => isLightActivity(p) && !isBigSight(p) && !filler(p));
         const keep = lights.slice(0, 1);
@@ -400,7 +410,7 @@ export function paceItineraryForKids<T extends { morning: string; afternoon: str
     });
     if (!host) break;
     if (!host.afternoon || /Explore a market|Long lunch|Free morning|Easy walk/i.test(host.afternoon || "")) host.afternoon = item;
-    else if (isRestSlot(host.afternoon)) host.afternoon = joinAddOns([host.afternoon, item]);
+    else if (isRestSlot(host.afternoon)) host.notes = [host.notes, `Short add-on: ${item}`].filter(Boolean).join(" · ");
     else host.afternoon = joinAddOns([...splitAddOns(host.afternoon), item].slice(0, maxAddOns));
     used.add(slotText(item).toLowerCase());
   }
@@ -484,22 +494,26 @@ export function dedupeRestAfternoon<T extends { afternoon?: string }>(days: T[],
   return days;
 }
 
-export function ensureParkDayRest<T extends { morning: string; afternoon: string; label?: string }>(days: T[], dest = ""): T[] {
+
+function attachShortAddOn<T extends { notes?: string }>(d: T, item: string) {
+  const note = `Short add-on: ${item}`;
+  if ((d.notes || "").includes(item)) return;
+  d.notes = [d.notes, note].filter(Boolean).join(" · ");
+}
+
+export function ensureParkDayRest<T extends { morning: string; afternoon: string; notes?: string; label?: string }>(days: T[], dest = ""): T[] {
   const rest = kidsRestAfternoon(dest);
   for (const d of days) {
     if (isTravelOrLeaveDay(d)) continue;
     if (!isMajorAttraction(d.morning) && !isFullOrHalfDayAttraction(d.morning)) continue;
     const lights = splitAddOns(d.afternoon).filter(p => isLightActivity(p) && !isRestSlot(p) && !isBigSight(p) && !/Explore a market|local street|Rest in the shade/i.test(p));
-    if (isRestSlot(d.afternoon) && lights.length) {
-      d.afternoon = joinAddOns([rest, ...lights.slice(0, 1)]);
-      continue;
-    }
     if (isRestSlot(d.afternoon) && !lights.length) {
       // Keep a city rest in cool destinations; in resort/unknown dests, use the standard pool line even if a shade rest was left behind.
       if (isWarmResortDestination(dest) || !(dest || "").trim()) d.afternoon = rest;
       continue;
     }
-    d.afternoon = joinAddOns([rest, ...lights.slice(0, 1)]);
+    d.afternoon = rest;
+    if (lights[0]) attachShortAddOn(d, lights[0]);
   }
   return days;
 }
@@ -545,3 +559,75 @@ export function capItineraryNotes<T extends { notes?: string }>(days: T[], max =
   for (const d of days) d.notes = capDayNotes(d.notes, max);
   return days;
 }
+
+/** If a rest line was chained with another add-on, keep the rest in the slot and move the add-on to a note. */
+export function unglueRestAddOns<T extends { afternoon?: string; notes?: string }>(days: T[]): T[] {
+  for (const d of days) {
+    const parts = splitAddOns(d.afternoon);
+    const rests = parts.filter(p => isRestSlot(p));
+    const other = parts.filter(p => !isRestSlot(p));
+    if (!rests.length || !other.length) continue;
+    d.afternoon = rests[0];
+    for (const item of other) attachShortAddOn(d, item);
+  }
+  return days;
+}
+
+/** Keep at most `max` items in a morning/afternoon/evening slot; never chain three with "then". */
+export function capItinerarySlots<T extends { morning?: string; afternoon?: string; evening?: string }>(days: T[], max = 2): T[] {
+  for (const d of days) {
+    for (const slot of ["morning", "afternoon", "evening"] as const) {
+      const parts = splitAddOns(d[slot]);
+      if (parts.length > max) d[slot] = joinAddOns(parts.slice(0, max));
+    }
+  }
+  return days;
+}
+
+/** Under-8s: each full day gets a rest or quiet afternoon, and at most two named sights in the whole day. */
+export function ensureYoungChildRest<T extends { morning?: string; afternoon?: string; evening?: string; notes?: string; label?: string }>(
+  days: T[],
+  input: any,
+  highlights: { name?: string; type?: string; description?: string; setting?: string }[] = [],
+): T[] {
+  if (!hasChildUnder(8, input) || !days?.length) return days;
+  const rest = kidsRestAfternoon(input?.destination || input?.destName || "");
+  const used = new Set<string>();
+  for (const d of days) for (const p of [...splitAddOns(d.morning), ...splitAddOns(d.afternoon)]) if (p) used.add(slotText(p).toLowerCase());
+  const leftover: string[] = [];
+  for (const d of days) {
+    if (isTravelOrLeaveDay(d)) continue;
+    const parts = splitAddOns(d.afternoon);
+    const extraSights = parts.filter(p => isNamedSight(p));
+    if (isNamedSight(d.morning) && extraSights.length) {
+      leftover.push(...extraSights);
+      const light = parts.find(p => isLightActivity(p) && !isNamedSight(p) && !isRestSlot(p));
+      d.afternoon = light || rest;
+      continue;
+    }
+    if (extraSights.length > 1) {
+      leftover.push(...extraSights.slice(1));
+      d.afternoon = rest;
+      continue;
+    }
+    if (!parts.some(p => isRestSlot(p)) && !parts.some(p => isLightActivity(p))) {
+      if (isNamedSight(d.afternoon) && isNamedSight(d.morning)) {
+        leftover.push(d.afternoon || "");
+        d.afternoon = rest;
+      } else if (!d.afternoon || isNamedSight(d.afternoon)) {
+        if (isNamedSight(d.afternoon)) leftover.push(d.afternoon || "");
+        d.afternoon = rest;
+      }
+    }
+  }
+  // Leave extra sights off stacked days; they can surface as a single note if a day is only rest.
+  const unique = leftover.filter((p, i, arr) => p && arr.findIndex(x => x.toLowerCase() === p.toLowerCase()) === i && !used.has(slotText(p).toLowerCase()));
+  for (const item of unique) {
+    const host = days.find(d => !isTravelOrLeaveDay(d) && isRestSlot(d.afternoon) && !isNamedSight(d.morning) && !/Short add-on:/i.test(d.notes || ""));
+    if (!host) break;
+    host.notes = [host.notes, `If you have energy: ${item}`].filter(Boolean).join(" · ");
+  }
+  void highlights;
+  return days;
+}
+

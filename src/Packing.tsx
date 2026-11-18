@@ -10,7 +10,7 @@ import { ActivityPicker } from "./Activities";
 import { Settings } from "lucide-react";
 import { ChecklistCheckbox, ChecklistText } from "./Checklist";
 import { ACTIVITY_KITS, SHARED, TEMPLATE_KEY, addPackingItem, applyEssentials, filterPacking, inferActivityKits, makeEssentials, mergeSuggestions, movePackingItem, ownerLabel, packingItems, simpleLists, groupSimpleRows, simpleGroupLabel, updatePackingItems, bagLabel, bagsFor, type SimpleRow, type SimpleGroup, packingProgress, packingEncouragement, startHereItems, simpleMustPackGroups, SIMPLE_MUST_PACK_LIMIT, laundryChoice, laundryEveryFromChoice, midTripLaundryDay, shouldConfirmMarkAll, parseEssentials, quantity, removePackingItem, suggestPacking, tripDays, undoPackingRemoval, updatePackingItem, type ActivityKit, type PackingItem, type PackingList, type Stage, type LaundryChoice } from "../shared/packing";
-import { GrownUpBadge } from "./GrownUp";
+import { GrownUpBadge, GrownUpHint } from "./GrownUp";
 
 const KIT_LABELS: Record<ActivityKit, string> = {
   beach: "Beach & swim", hiking: "Hiking", ski: "Ski", business: "Business",
@@ -202,7 +202,7 @@ const StartHere = memo(function StartHere({ p, readOnly, onCheck, T = (s: string
       <input type="checkbox" aria-label={`Pack ${T(shortItemName(i.item))}`} checked={!!i.checked} disabled={readOnly} onChange={e => onCheck(i.id, e.target.checked)} />
       <span className="simple-name">{T(shortItemName(i.item))}</span>
       {i.quantity > 1 && <span className="simple-qty">{i.quantity} ×</span>}
-      <GrownUpBadge name={i.item} flagged={i.grownUp} />
+      <GrownUpHint name={i.item} flagged={i.grownUp} />
     </li>)}</ul>
   </section>;
 });
@@ -260,17 +260,25 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
     else acc.push({ group: row.cat, entries: [row.e] });
     return acc;
   }, [] as { group: string; entries: ReturnType<typeof groupSimpleRows>["entries"] }[]);
+  const cappedMust = !showAllMust && mustEntries.length > SIMPLE_MUST_PACK_LIMIT;
+  const visibleCount = cappedMust ? visibleMust.length : mustTotal;
+  const visiblePacked = cappedMust
+    ? visibleMust.reduce((n, { e }) => {
+      if (e.kind === "shared") return n + (!e.row.item.skipped && e.row.item.checked ? 1 : 0);
+      return n + (e.group.total > 0 && e.group.packed === e.group.total ? 1 : 0);
+    }, 0)
+    : packingProgress(packingItems(p)).packed;
   return <>
     <div className="simple-screen noprint">
       <section className="simple-list my-stuff" aria-label="My stuff" data-testid="my-stuff-list">
         <header><h3>My stuff</h3>
-          <span className="muted small">{mustTotal ? packingProgress(packingItems(p)).packed : 0}/{mustTotal} packed</span></header>
-        <p className="muted small">Tick each thing as you put it in the bag. Essentials are first.</p>
+          <span className="muted small" data-testid="simple-visible-count">{visiblePacked}/{visibleCount} packed</span></header>
+        <p className="muted small">Tick each thing as you put it in the bag. Essentials are first.{cappedMust ? ` Showing ${visibleCount} must-pack items first.` : ""}</p>
         {mustEntries.length ? mustByCat.map(g => <div key={g.group} className="simple-cat" data-testid={`simple-cat-${g.group}`}>
           <h4 className="simple-cat-title">{g.group}</h4>
           <ul>{g.entries.map(e => e.kind === "shared"
-            ? <SimpleSharedRow key={e.row.item.id} row={{ ...e.row, item: { ...e.row.item, item: shortItemName(e.row.item.item) } }} readOnly={readOnly} print={false} onCheck={onCheck} T={T} />
-            : <SimpleGroupRow key={e.group.key} g={e.group} multi={false} title="My stuff" readOnly={readOnly} print={false} onCheck={onCheck} onCheckMany={checkMany} T={T} showPeople={false} />)}</ul>
+            ? <SimpleSharedRow key={e.row.item.id} row={{ ...e.row, item: { ...e.row.item, item: shortItemName(e.row.item.item) } }} readOnly={readOnly} print={false} onCheck={onCheck} T={T} showShared={false} grownUp="hint" />
+            : <SimpleGroupRow key={e.group.key} g={e.group} multi={false} title="My stuff" readOnly={readOnly} print={false} onCheck={onCheck} onCheckMany={checkMany} T={T} showPeople={false} showMarkAll={false} grownUp="hint" />)}</ul>
         </div>) : <p className="muted small">No items on this list yet.</p>}
         {mustEntries.length > SIMPLE_MUST_PACK_LIMIT && <button type="button" className="ghost simple-show-all" data-testid="simple-show-all" onClick={() => setShowAllMust(v => !v)}>{showAllMust ? "Show the must-pack items first" : `Show everything (${mustTotal})`}</button>}
       </section>
@@ -293,17 +301,17 @@ export const SimpleLists = memo(function SimpleLists({ p, readOnly, onCheck, onC
   </>;
 });
 
-const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck, T = (s: string) => s }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string }) {
+const SimpleSharedRow = memo(function SimpleSharedRow({ row, readOnly, print, onCheck, T = (s: string) => s, showShared = true, grownUp = "badge" }: { row: SimpleRow; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; T?: (s: string) => string; showShared?: boolean; grownUp?: "badge" | "hint" | "none" }) {
   const i = row.item, name = T(i.item), label = `${i.quantity} × ${name} (Shared)${i.skipped ? " — not needed" : ""}`;
   return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id} data-shared="true">
     {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
       : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
-    <small className="simple-owner">Shared</small>{i.skipped && <small className="simple-owner">Not needed</small>}
+    <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> {grownUp === "badge" ? <GrownUpBadge name={i.item} flagged={i.grownUp} /> : grownUp === "hint" ? <GrownUpHint name={i.item} flagged={i.grownUp} /> : null}
+    {showShared && <small className="simple-owner">Shared</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
   </li>;
 });
 
-const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly, print, onCheck, onCheckMany, T = (s: string) => s, showPeople = true }: { g: SimpleGroup; multi: boolean; title: string; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany: (ids: string[], checked: boolean) => void; T?: (s: string) => string; showPeople?: boolean }) {
+const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly, print, onCheck, onCheckMany, T = (s: string) => s, showPeople = true, showMarkAll = true, grownUp = "badge" }: { g: SimpleGroup; multi: boolean; title: string; readOnly: boolean; print: boolean; onCheck: (id: string, checked: boolean) => void; onCheckMany: (ids: string[], checked: boolean) => void; T?: (s: string) => string; showPeople?: boolean; showMarkAll?: boolean; grownUp?: "badge" | "hint" | "none" }) {
   const [open, setOpen] = useState(false);
   if (g.rows.length === 1) {
     const { item: i, ownerName } = g.rows[0];
@@ -313,7 +321,7 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
     return <li className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={print ? undefined : i.id}>
       {print ? <span aria-hidden>{i.skipped ? "[–]" : i.checked ? "[x]" : "[ ]"}</span>
         : <input type="checkbox" aria-label={`Pack ${label}`} checked={i.checked} disabled={readOnly || i.skipped} onChange={e => onCheck(i.id, e.target.checked)} />}
-      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> <GrownUpBadge name={i.item} flagged={i.grownUp} />
+      <span className="simple-qty">{i.quantity} ×</span><span className="simple-name">{name}</span> {grownUp === "badge" ? <GrownUpBadge name={i.item} flagged={i.grownUp} /> : grownUp === "hint" ? <GrownUpHint name={i.item} flagged={i.grownUp} /> : null}
       {tag && <small className="simple-owner">{tag}</small>}{i.skipped && <small className="simple-owner">Not needed</small>}
     </li>;
   }
@@ -324,7 +332,7 @@ const SimpleGroupRow = memo(function SimpleGroupRow({ g, multi, title, readOnly,
       : <input type="checkbox" aria-label={`Pack ${label} for everyone`} checked={allPacked} ref={el => { if (el) el.indeterminate = some; }} disabled={readOnly || !g.total} onChange={() => onCheckMany(ids, !allPacked)} />}
     <span className="simple-name">{label}</span>
     <small className="simple-progress">{g.packed}/{g.total} packed</small>
-    {!print && !readOnly && g.total > 0 && <button type="button" className="ghost simple-mark-all" onClick={() => { if (!allPacked && shouldConfirmMarkAll(g) && typeof confirm === "function" && !confirm(`Mark packed for ${g.rows.map(r => r.ownerName).join(", ")}?`)) return; onCheckMany(ids, !allPacked); }}>{allPacked ? "Unpack all" : "Mark all packed"}</button>}
+    {!print && !readOnly && showMarkAll && g.total > 0 && <button type="button" className="ghost simple-mark-all" onClick={() => { if (!allPacked && shouldConfirmMarkAll(g) && typeof confirm === "function" && !confirm(`Mark packed for ${g.rows.map(r => r.ownerName).join(", ")}?`)) return; onCheckMany(ids, !allPacked); }}>{allPacked ? "Unpack all" : "Mark all packed"}</button>}
     {!print && showPeople && <button type="button" className="ghost simple-expand" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? "Hide people" : "Show people"}</button>}
     {print && <small className="simple-owner">{g.rows.map(r => r.ownerName).join(", ")}</small>}
     {open && !print && <ul className="simple-people">{g.rows.map(({ item: i, ownerName }) => <li key={i.id} className={`${i.checked ? "packed" : ""}${i.skipped ? " skipped" : ""}`} data-item-id={i.id}>

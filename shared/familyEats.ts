@@ -43,6 +43,9 @@ export function eatBrandKey(e: { name?: string; brand?: string } | string): stri
   const stem = name.split(/\s+[-–—]\s+|\s+\(/)[0] || name;
   const tokens = stem.split(/\s+/).filter(Boolean);
   if (tokens.length >= 2 && /^(at|in|on)$/i.test(tokens[1])) return norm(tokens[0]);
+  // Don't collapse "The Pig and the Lady" and "The Surfjack" to "the".
+  const PREFIX = /^(the|a|an|le|la|el|il|lo|los|las|les|de|da|du|des|cafe|café|restaurant|bar|diner|bistro)$/i;
+  if (tokens.length >= 2 && PREFIX.test(tokens[0])) return norm(tokens.join(" "));
   return norm(tokens[0] || name);
 }
 

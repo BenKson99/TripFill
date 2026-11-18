@@ -430,6 +430,7 @@ footer.foot{margin-top:var(--s6);text-align:center}
 .wxd.typical{opacity:.88;filter:grayscale(.35);background:color-mix(in srgb, var(--bg, #f6f1ea) 70%, transparent)}
 .wxd .wx-typical{display:block;font-size:.72rem;letter-spacing:.02em;text-transform:uppercase;color:var(--muted, #6b6258);margin-bottom:2px}
 .wxi-muted{opacity:.7;filter:grayscale(.45)}
+.simple-grownup-hint{margin-left:.4rem;font-size:.75rem;font-style:italic;white-space:nowrap}
 .grownup-badge{display:inline-block;margin-left:.4rem;padding:.05rem .45rem;border-radius:999px;background:color-mix(in srgb, var(--accent, #b98a63) 18%, transparent);color:var(--ink, #3b2f2a);font-size:.75rem;font-weight:600;white-space:nowrap;vertical-align:middle}
 .grownup-note{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin:.6rem 0;padding:.55rem .8rem;border-radius:12px;background:color-mix(in srgb, var(--sun, #e8c87a) 22%, var(--bg, #f6f1ea));color:var(--ink, #3b2f2a)}
 .jump-itin{display:inline-block;margin:.6rem 0 0;font-weight:700;color:var(--accent, #8a5a3b);text-decoration:none}
